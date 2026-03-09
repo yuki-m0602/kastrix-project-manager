@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kastrix - Project Manager</title>
+  <script src="vendor/tailwind.js"></script>
+  <script src="vendor/lucide.js"></script>
+  <link rel="stylesheet" href="vendor/inter.css">
+  <style>
+      
+      * {
+        font-family: 'Inter', sans-serif;
+      }
+      
+      .custom-scrollbar::-webkit-scrollbar { 
+        width: 4px; 
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb { 
+        background: #30363d; 
+        border-radius: 10px; 
+      }
+      .no-scrollbar::-webkit-scrollbar { 
+        display: none; 
+      }
+      .animate-in { 
+        animation: fadeIn 0.2s ease-out; 
+      }
+      @keyframes fadeIn { 
+        from { opacity: 0; transform: scale(0.98); } 
+        to { opacity: 1; transform: scale(1); } 
+      }
+      
+      /* Fix: sidebar takes no flex space on mobile (it's fixed positioned) */
+      @media (max-width: 1023px) {
+        #sidebar {
+          width: 224px !important;
+          position: fixed !important;
+          flex-shrink: 1 !important;
+          min-width: 0 !important;
+        }
+        #sidebar + * {
+          margin-left: 0 !important;
+        }
+      }
+      
+      /* Thinner lucide icons */
+      [data-lucide] {
+        stroke-width: 1.5;
+      }
+      /* Filter/sort button icons forced small */
+      #task-filter [data-lucide],
+      #project-filter [data-lucide] {
+        width: 16px !important;
+        height: 16px !important;
+      }
+
+      /* Glass effect */
+      .glass {
+        background: rgba(1, 4, 9, 0.6);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+      }
+      
+      /* Glow effects */
+      .glow-indigo {
+        box-shadow: 0 0 15px rgba(99, 102, 241, 0.1);
+      }
+      
+      /* Mobile viewport fix */
+      @supports (height: 100dvh) {
+        .h-screen {
+          height: 100dvh;
+        }
+      }
+      
+      /* Prevent iOS zoom on input focus */
+      @media (max-width: 767px) {
+        select,
+        input,
+        button {
+          font-size: 16px;
+        }
+      }
+      
+      /* Fix for iOS Safari background-attachment */
+      .ios-fix {
+        background-attachment: scroll !important;
+      }
+      
+      /* Touch scroll optimization */
+      .touch-scroll {
+        -webkit-overflow-scrolling: touch;
+      }
+      
+      /* Prevent text zoom on iOS */
+      body {
+        -webkit-text-size-adjust: 100%;
+        -moz-text-size-adjust: 100%;
+        -ms-text-size-adjust: 100%;
+      }
+      
+      /* Improved contrast */
+      .text-muted {
+        color: #8b949e;
+      }
+      .text-secondary {
+        color: #484f58;
+      }
+      .text-primary {
+        color: #c9d1d9;
+      }
+      .bg-primary {
+        background-color: #0d1117;
+      }
+      .bg-secondary {
+        background-color: #010409;
+      }
+      .bg-tertiary {
+        background-color: #161b22;
+      }
+      .border-primary {
+        border-color: #30363d;
+      }
+      .border-secondary {
+        border-color: #484f58;
+      }
+      .hover-bg {
+        background-color: #161b22;
+      }
+      .hover-text {
+        color: #c9d1d9;
+      }
+      
+      /* Enhanced focus states */
+      .focus-ring {
+        box-shadow: 0 0 0 2px rgba(139, 148, 158, 0.3);
+      }
+      .focus-indigo {
+        box-shadow: 0 0 0 2px rgba(139, 148, 158, 0.3), 0 0 0 4px rgba(99, 102, 241, 0.2);
+      }
+      
+      /* Improved button states */
+      .btn-hover {
+        transition: all 0.2s ease;
+      }
+      .btn-hover:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      
+      /* Enhanced readability */
+      .text-xs-sm {
+        font-size: 0.75rem;
+      }
+      .text-sm {
+        font-size: 0.875rem;
+      }
+      .text-base {
+        font-size: 1rem;
+      }
+      
+      /* Font size consistency */
+      .text-[13px] {
+        font-size: 13px;
+      }
+      .text-[10px] {
+        font-size: 10px;
+      }
+      .text-[9px] {
+        font-size: 9px;
+      }
+      .text-[8px] {
+        font-size: 8px;
+      }
+      
+      /* Subtle animations */
+      .smooth-transition {
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      /* Ensure the small view controls don't exceed header height */
+      #tasks-view-controls {
+        display: flex;
+        align-items: center;
+        height: 32px; /* keep compact inside header */
+      }
+      #tasks-view-controls .view-btn {
+        height: 28px;
+        min-width: 28px;
+        padding: 0.25rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #tasks-view-controls [data-lucide] {
+        width: 14px !important;
+        height: 14px !important;
+      }
+      
+      /* Improved spacing */
+      .p-2-sm {
+        padding: 0.5rem;
+      }
+      .p-3-sm {
+        padding: 0.75rem;
+      }
+      .p-4-sm {
+        padding: 1rem;
+      }
+      
+      /* Enhanced focus for accessibility */
+      :focus-visible {
+        outline: 2px solid rgba(139, 148, 158, 0.6);
+        outline-offset: 2px;
+      }
+    </style>
+    
+    <!-- Fix for Tailwind CSS responsive issues -->
+    <script>
+      // Fix for mobile viewport issues
+      if (window.innerWidth <= 768) {
+        document.documentElement.style.setProperty('--tw-min-w-0', '0');
+        // Additional mobile fixes
+        document.body.classList.add('touch-scroll');
+      }
+    </script>
+  </head>
+<body class="bg-primary text-primary text-[13px] h-screen overflow-hidden">
+  <!-- Mobile Overlay -->
+  <div id="mobile-overlay" class="fixed inset-0 bg-black/50 z-20 hidden" onclick="closeMobileSidebar()"></div>
+
+  <!-- Sidebar (fixed, completely outside layout flow) -->
+  <aside id="sidebar" class="glass border border-[#30363d] flex flex-col transition-all duration-300 z-30 rounded-2xl fixed top-2 bottom-2 left-2 overflow-hidden -translate-x-[calc(100%+8px)] lg:translate-x-0" style="width:224px">
+    <div class="h-12 flex items-center justify-between px-3 shrink-0 border-b border-[#30363d]">
+      <span id="logo-text" class="font-black text-[8px] tracking-[0.25em] text-[#484f58] ml-2 uppercase">Kastrix</span>
+      <button onclick="toggleSidebar()" class="hidden lg:block p-2 hover:bg-[#161b22] rounded-xl text-[#484f58] hover:text-white transition-all">
+        <i data-lucide="chevron-left" size="14"></i>
+      </button>
+    </div>
+    <div class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-3">
+      <div class="space-y-0.5">
+        <button onclick="setActiveMenu('overview')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="overview">
+          <i data-lucide="layout-grid" size="16"></i>
+          <span class="nav-label font-bold tracking-wide">Overview</span>
+        </button>
+        <button onclick="setActiveMenu('projects')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="projects">
+          <i data-lucide="folder-git-2" size="16"></i>
+          <span class="nav-label font-bold tracking-wide">Projects</span>
+        </button>
+        <button onclick="setActiveMenu('logs')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="logs">
+          <i data-lucide="activity" size="16"></i>
+          <span class="nav-label font-bold tracking-wide">Activity Logs</span>
+        </button>
+        <button onclick="setActiveMenu('inbox')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="inbox">
+          <i data-lucide="inbox" size="16"></i>
+          <span class="nav-label font-bold tracking-wide">Inbox</span>
+        </button>
+      </div>
+      <div class="pt-3 border-t border-[#30363d]/50 space-y-0.5">
+        <button onclick="setActiveMenu('analytics')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="analytics">
+          <i data-lucide="bar-chart-3" size="16"></i>
+          <span class="nav-label font-bold tracking-wide">Analytics</span>
+        </button>
+        <button onclick="setActiveMenu('settings')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="settings">
+          <i data-lucide="settings" size="16"></i>
+          <span class="nav-label font-bold tracking-wide">Settings</span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main area: full width on mobile, offset on PC to make room for sidebar -->
+  <div id="main-area" class="h-full p-2 lg:pl-[240px] overflow-hidden">
+    <div class="h-full flex flex-col min-w-0 bg-[#0d1117] rounded-2xl border border-[#30363d] overflow-hidden shadow-inner relative">
+      
+      <!-- Mobile Header -->
+      <div class="lg:hidden h-10 bg-[#010409] border-b border-[#30363d] flex items-center justify-between px-2 sm:px-3 shrink-0">
+        <button onclick="openMobileSidebar()" class="p-2 hover:bg-[#161b22] rounded-xl text-[#8b949e] hover:text-white transition-all">
+          <i data-lucide="menu" size="16"></i>
+        </button>
+        <span id="mobile-page-title" class="font-black text-[10px] tracking-[0.15em] text-[#c9d1d9] uppercase">Overview</span>
+        <div class="w-8"></div>
+      </div>
+      
+      <!-- Overview View -->
+        <div id="view-overview" class="view-section flex-1 flex flex-col overflow-y-auto touch-scroll">
+          <!-- Tabs -->
+          <div class="h-9 sm:h-10 bg-[#010409] border-b border-[#30363d] flex items-center px-2 sm:px-3 gap-1 sm:gap-2 overflow-x-auto no-scrollbar shrink-0">
+            <div class="tab-item flex items-center h-6 sm:h-7 px-2.5 sm:px-3 min-w-[70px] sm:min-w-[90px] cursor-pointer text-[9px] sm:text-xs transition-all rounded-lg sm:rounded-xl relative border bg-transparent border-transparent text-[#8b949e] hover:bg-[#161b22] hover:text-[#c9d1d9]" data-tab="projects" onclick="switchMainTab('projects')">
+              <div class="flex items-center gap-1 sm:gap-1.5">
+                <i data-lucide="folder-git-2" size="10" class="sm:w-3 sm:h-3"></i>
+                <span class="font-bold tracking-tight">Projects</span>
+              </div>
+            </div>
+            <div class="tab-item flex items-center h-6 sm:h-7 px-2.5 sm:px-3 min-w-[70px] sm:min-w-[90px] cursor-pointer text-[9px] sm:text-xs transition-all rounded-lg sm:rounded-xl relative border bg-[#21262d] text-white border-[#484f58] shadow-sm" data-tab="tasks" onclick="switchMainTab('tasks')">
+              <div class="flex items-center gap-1 sm:gap-1.5">
+                <i data-lucide="check-square" size="10" class="sm:w-3 sm:h-3"></i>
+                <span class="font-bold tracking-tight">Tasks</span>
+              </div>
+            </div>
+            <div class="border-l border-[#30363d] h-4 mx-1"></div>
+            <div id="tabs-list" class="flex items-center gap-1"></div>
+          </div>
+        
+        <!-- Header -->
+        <header class="h-14 shrink-0 border-b border-[#30363d] flex items-center justify-between px-3 sm:px-6">
+          <div class="flex items-center gap-2 min-w-0">
+            <!-- Tasks View Toggle (List/Board) -->
+            <div id="tasks-view-controls" class="flex bg-[#010409] border border-[#30363d] rounded-xl p-0.5">
+              <button onclick="setTaskView('list')" id="btn-task-list" class="view-btn p-1.5 rounded-lg bg-[#30363d] text-white transition-all" title="List">
+                <i data-lucide="list" size="14" class="w-3.5 h-3.5"></i>
+              </button>
+              <button onclick="setTaskView('kanban')" id="btn-task-kanban" class="view-btn p-1.5 rounded-lg text-[#8b949e] hover:text-white transition-all" title="Board">
+                <i data-lucide="columns" size="14" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+
+            <!-- Task Filter Buttons -->
+            <div id="task-filter" class="hidden sm:flex items-center gap-1.5">
+
+              <!-- Status filter -->
+              <div class="relative">
+                <button onclick="toggleDropdown('dd-status')" class="flex items-center gap-1.5 h-7 px-2.5 bg-[#010409] border border-[#30363d] rounded-xl text-[9px] font-bold text-[#8b949e] hover:text-white hover:border-[#484f58] transition-all">
+                  <i data-lucide="filter" size="7"></i>
+                  <span id="label-status">All Status</span>
+                  <i data-lucide="chevron-down" size="7" class="text-[#484f58]"></i>
+                </button>
+                <div id="dd-status" class="hidden absolute top-9 left-0 bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl z-50 min-w-[130px] py-1 animate-in">
+                  <button onclick="setTaskStatus('all','All Status')"      class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">All Status</button>
+                  <button onclick="setTaskStatus('todo','Todo')"           class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Todo</button>
+                  <button onclick="setTaskStatus('in-progress','In Progress')" class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">In Progress</button>
+                  <button onclick="setTaskStatus('done','Done')"           class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Done</button>
+                </div>
+              </div>
+
+              <!-- Sort -->
+              <div class="relative">
+                <button onclick="toggleDropdown('dd-sort')" class="flex items-center gap-1.5 h-7 px-2.5 bg-[#010409] border border-[#30363d] rounded-xl text-[9px] font-bold text-[#8b949e] hover:text-white hover:border-[#484f58] transition-all">
+                  <i data-lucide="arrow-up-down" size="7"></i>
+                  <span id="label-sort">Date</span>
+                  <i data-lucide="chevron-down" size="7" class="text-[#484f58]"></i>
+                </button>
+                <div id="dd-sort" class="hidden absolute top-9 left-0 bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl z-50 min-w-[130px] py-1 animate-in">
+                  <button onclick="setTaskSort('date','Date')"         class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Date</button>
+                  <button onclick="setTaskSort('priority','Priority')" class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Priority</button>
+                  <button onclick="setTaskSort('title','Title')"       class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Title</button>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Project Filter Buttons -->
+            <div id="project-filter" class="hidden sm:flex items-center gap-1.5">
+
+              <!-- Language filter -->
+              <div class="relative">
+                <button onclick="toggleDropdown('dd-lang')" class="flex items-center gap-1.5 h-7 px-2.5 bg-[#010409] border border-[#30363d] rounded-xl text-[9px] font-bold text-[#8b949e] hover:text-white hover:border-[#484f58] transition-all">
+                  <i data-lucide="filter" size="7"></i>
+                  <span id="label-lang">All Languages</span>
+                  <i data-lucide="chevron-down" size="7" class="text-[#484f58]"></i>
+                </button>
+                <div id="dd-lang" class="hidden absolute top-9 left-0 bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl z-50 min-w-[140px] py-1 animate-in">
+                  <button onclick="setProjLang('all','All Languages')"    class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">All Languages</button>
+                  <button onclick="setProjLang('javascript','JavaScript')" class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">JavaScript</button>
+                  <button onclick="setProjLang('typescript','TypeScript')" class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">TypeScript</button>
+                  <button onclick="setProjLang('python','Python')"         class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Python</button>
+                  <button onclick="setProjLang('rust','Rust')"             class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Rust</button>
+                  <button onclick="setProjLang('go','Go')"                 class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Go</button>
+                </div>
+              </div>
+
+              <!-- Project Sort -->
+              <div class="relative">
+                <button onclick="toggleDropdown('dd-proj-sort')" class="flex items-center gap-1.5 h-7 px-2.5 bg-[#010409] border border-[#30363d] rounded-xl text-[9px] font-bold text-[#8b949e] hover:text-white hover:border-[#484f58] transition-all">
+                  <i data-lucide="arrow-up-down" size="7"></i>
+                  <span id="label-proj-sort">Modified</span>
+                  <i data-lucide="chevron-down" size="7" class="text-[#484f58]"></i>
+                </button>
+                <div id="dd-proj-sort" class="hidden absolute top-9 left-0 bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl z-50 min-w-[130px] py-1 animate-in">
+                  <button onclick="setProjSort('modified','Modified')" class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Modified</button>
+                  <button onclick="setProjSort('name','Name')"         class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Name</button>
+                  <button onclick="setProjSort('git','Git')"           class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Git</button>
+                  <button onclick="setProjSort('language','Language')" class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Language</button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <!-- Search -->
+            <div class="relative hidden sm:block">
+              <input id="global-search" type="text" placeholder="Search..."
+                class="w-40 bg-[#010409] border border-[#30363d] rounded-xl py-1.5 px-3 pl-8 text-xs text-white outline-none focus:border-indigo-500 focus:w-56 transition-all"
+                oninput="handleSearch(this.value)">
+              <i data-lucide="search" size="14" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#484f58] pointer-events-none"></i>
+              <div id="search-results" class="hidden absolute top-9 right-0 w-72 bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl z-50 max-h-80 overflow-y-auto py-1"></div>
+            </div>
+            <!-- New Task -->
+            <button onclick="openCreateTaskModal()" class="h-7 px-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-[10px] font-bold text-white transition-all whitespace-nowrap hidden sm:block">+ New Task</button>
+            <!-- Projects View Toggle (Grid/List) -->
+            <div id="projects-view-controls" class="hidden bg-[#010409] border border-[#30363d] rounded-xl p-0.5">
+              <button onclick="setProjectViewMode('grid')" id="btn-project-grid" class="view-btn p-1.5 rounded-lg bg-[#30363d] text-white transition-all" title="Grid">
+                <i data-lucide="layout-grid" size="14"></i>
+              </button>
+              <button onclick="setProjectViewMode('list')" id="btn-project-list" class="view-btn p-1.5 rounded-lg text-[#8b949e] hover:text-white transition-all" title="List">
+                <i data-lucide="list" size="14"></i>
+              </button>
+            </div>
+            <button id="btn-add-folder" onclick="addProjectFolder()" class="hidden h-7 px-3 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-[10px] font-bold text-white transition-all whitespace-nowrap items-center gap-1.5">
+              <i data-lucide="folder-plus" size="14"></i> Add Folder
+            </button>
+          </div>
+        </header>
+
+<!-- List View -->
+        <div id="list-view" class="view-mode overflow-hidden custom-scrollbar">
+          <table class="w-full text-left border-separate border-spacing-y-2">
+            <thead>
+              <tr class="text-[#484f58] text-[9px] uppercase font-black tracking-widest">
+                <th class="px-4">Name</th>
+                <th class="px-4 hidden sm:table-cell">Assignee</th>
+                <th class="px-4 text-right">Status</th>
+              </tr>
+            </thead>
+            <tbody id="list-view-body"></tbody>
+          </table>
+        </div>
+
+        <!-- Kanban View -->
+        <div id="kanban-view" class="view-mode flex-1 overflow-auto custom-scrollbar hidden">
+          <div class="flex flex-col lg:flex-row gap-4 lg:gap-6 h-full">
+            <!-- Todo Column -->
+            <div class="flex-1 min-w-0 lg:min-w-[280px] flex flex-col">
+              <div class="flex items-center gap-2 mb-3 lg:mb-4">
+                <div class="w-2 h-2 rounded-full bg-slate-400"></div>
+                <span class="text-[10px] font-black uppercase tracking-widest text-[#8b949e]">Todo</span>
+                <span class="text-[10px] text-[#484f58] font-bold" id="count-todo">0</span>
+              </div>
+              <div class="space-y-2 lg:space-y-3" id="kanban-todo"></div>
+            </div>
+
+            <!-- In Progress Column -->
+            <div class="flex-1 min-w-0 lg:min-w-[280px] flex flex-col">
+              <div class="flex items-center gap-2 mb-3 lg:mb-4">
+                <div class="w-2 h-2 rounded-full bg-blue-400"></div>
+                <span class="text-[10px] font-black uppercase tracking-widest text-[#8b949e]">In Progress</span>
+                <span class="text-[10px] text-[#484f58] font-bold" id="count-inprogress">0</span>
+              </div>
+              <div class="space-y-2 lg:space-y-3" id="kanban-inprogress"></div>
+            </div>
+
+            <!-- Done Column -->
+            <div class="flex-1 min-w-0 lg:min-w-[280px] flex flex-col">
+              <div class="flex items-center gap-2 mb-3 lg:mb-4">
+                <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
+                <span class="text-[10px] font-black uppercase tracking-widest text-[#8b949e]">Done</span>
+                <span class="text-[10px] text-[#484f58] font-bold" id="count-done">0</span>
+              </div>
+              <div class="space-y-3" id="kanban-done"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Projects View -->
+        <div id="view-projects" class="view-section overflow-auto custom-scrollbar hidden p-3">
+          <!-- Grid View -->
+          <div id="projects-grid-view" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <!-- Project cards will be rendered here -->
+          </div>
+<!-- List View -->
+          <div id="projects-list-view" class="hidden">
+            <table class="w-full text-left border-separate border-spacing-y-1 sm:border-spacing-y-2">
+              <thead>
+                <tr class="text-[#484f58] text-[8px] sm:text-[9px] uppercase font-black tracking-widest px-4">
+                  <th class="px-2 sm:px-4 w-1/2">Name</th>
+                  <th class="px-4 w-1/2 text-right">Updated</th>
+                </tr>
+              </thead>
+              <tbody id="projects-list-body">
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Task Detail Modal -->
+      <div id="task-modal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeTaskModal()"></div>
+        <div class="absolute right-0 top-0 h-full w-full sm:w-[480px] bg-[#0d1117] border-l border-[#30363d] shadow-2xl transform transition-transform duration-300 translate-x-full flex flex-col" id="task-modal-content">
+            <div class="flex-1 overflow-y-auto custom-scrollbar p-6">
+              <div class="space-y-6">
+                <div>
+                  <h2 id="modal-task-title" class="text-xl font-bold text-white leading-tight">タスクタイトル</h2>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span id="modal-task-status" class="px-3 py-1 rounded-lg text-[10px] font-black border">STATUS</span>
+                  <span id="modal-task-priority" class="px-3 py-1 rounded-lg text-[10px] font-black">PRIORITY</span>
+                </div>
+                <div class="flex items-center gap-3 p-4 bg-[#161b22] border border-[#30363d] rounded-2xl">
+                  <div id="modal-project-icon" class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-sm font-black">M</div>
+                  <div>
+                    <p class="text-[10px] text-[#484f58] font-bold uppercase tracking-wider">Project</p>
+                    <p id="modal-project-name" class="text-sm font-bold text-white">Marketing Web</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-xl bg-[#161b22] border border-[#30363d] flex items-center justify-center">
+                    <i data-lucide="user" size="18" class="text-[#8b949e]"></i>
+                  </div>
+                  <div>
+                    <p class="text-[10px] text-[#484f58] font-bold uppercase tracking-wider">Assignee</p>
+                    <p id="modal-assignee" class="text-sm font-bold text-white">Tanaka</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-xl bg-[#161b22] border border-[#30363d] flex items-center justify-center">
+                    <i data-lucide="calendar" size="18" class="text-[#8b949e]"></i>
+                  </div>
+                  <div>
+                    <p class="text-[10px] text-[#484f58] font-bold uppercase tracking-wider">Due Date</p>
+                    <p id="modal-date" class="text-sm font-bold text-white">2023-10-27 11:00</p>
+                  </div>
+                </div>
+                <div class="pt-4 border-t border-[#30363d]">
+                  <p class="text-[10px] text-[#484f58] font-black uppercase tracking-widest mb-3">Description</p>
+                  <p class="text-[#c9d1d9] text-sm leading-relaxed">タスクの詳細説明がここに表示されます。必要に応じて編集できます。</p>
+                </div>
+              </div>
+            </div>
+            <div class="h-16 border-t border-[#30363d] flex items-center gap-3 px-6 bg-[#010409]">
+              <button onclick="deleteCurrentTask()" class="px-4 py-2 rounded-xl text-xs font-bold text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all">Delete</button>
+              <span class="flex-1"></span>
+              <button onclick="closeTaskModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-[#8b949e] hover:text-white transition-all">Close</button>
+              <button onclick="openEditTaskModal(_currentTaskId)" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white transition-all">Edit Task</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Project Picker Dropdown -->
+      <div id="project-picker" class="absolute top-12 left-[200px] w-56 bg-[#161b22] border border-[#30363d] rounded-2xl shadow-2xl hidden z-50">
+        <div class="p-3 border-b border-[#30363d]">
+          <p class="text-[10px] font-black text-[#484f58] uppercase tracking-widest">Select Project</p>
+        </div>
+        <div id="project-picker-list" class="p-2 space-y-1">
+          <!-- Dynamically rendered by renderProjectPicker() -->
+        </div>
+      </div>
+
+<!-- Project Detail Modal -->
+      <div id="project-detail-modal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeProjectDetailModal()"></div>
+        <div class="absolute right-0 top-0 h-full w-full sm:w-[480px] bg-[#0d1117] border-l border-[#30363d] shadow-2xl transform transition-transform duration-300 translate-x-full" id="project-detail-modal-content">
+          <div class="h-full flex flex-col">
+            <!-- Modal Header -->
+            <div class="h-12 border-b border-[#30363d] flex items-center justify-between px-4 bg-[#161b22]">
+              <div class="flex items-center gap-3">
+                <span id="project-modal-lang-badge" class="px-2 py-0.5 rounded text-[9px] font-black bg-[#2b748920] text-[#2b7489]">TS</span>
+                <h2 id="project-modal-name" class="font-bold text-sm text-white">Project Name</h2>
+              </div>
+              <button onclick="closeProjectDetailModal()" class="p-2 hover:bg-[#21262d] rounded-lg text-[#8b949e] hover:text-white transition-colors">
+                <i data-lucide="x" size="16"></i>
+              </button>
+            </div>
+            <!-- Modal Body -->
+            <div class="flex-1 overflow-y-auto custom-scrollbar p-4">
+              <div class="space-y-4">
+                <!-- Date Info -->
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="bg-[#161b22] rounded-xl p-3 border border-[#30363d]">
+                    <p class="text-[9px] text-[#484f58] uppercase font-bold mb-1">Local Modified</p>
+                    <p id="project-modal-local" class="text-xs text-white font-medium">2024-01-15 14:30</p>
+                  </div>
+                  <div class="bg-[#161b22] rounded-xl p-3 border border-[#30363d]">
+                    <p class="text-[9px] text-[#484f58] uppercase font-bold mb-1">Git Last Commit</p>
+                    <p id="project-modal-git" class="text-xs text-white font-medium">2024-01-14 09:15</p>
+                  </div>
+                </div>
+                
+                <!-- Path -->
+                <div class="bg-[#161b22] rounded-xl p-3 border border-[#30363d]">
+                  <p class="text-[9px] text-[#484f58] uppercase font-bold mb-1">Path</p>
+                  <p id="project-modal-path" class="text-xs text-[#8b949e] font-mono">C:\Projects\project</p>
+                </div>
+                
+                <!-- IDE Launch Buttons -->
+                <div>
+                  <p class="text-[9px] text-[#484f58] uppercase font-bold mb-2">Open in IDE</p>
+                  <div class="flex flex-col sm:flex-row gap-2">
+                    <button onclick="launchIDE('vscode')" class="flex-1 flex items-center justify-center gap-2 px-3 py-2 sm:py-2.5 bg-[#007acc] hover:bg-[#0066aa] rounded-xl text-xs font-bold text-white transition-colors">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M17.583.063a1.5 1.5 0 0 1 1.342 1.2l4.5 18a1.5 1.5 0 0 1-1.2 1.842l-6 1.5a1.5 1.5 0 0 1-1.842-1.2l-1.5-6 3.6-3.6-3.6-3.6 1.5-6A1.5 1.5 0 0 1 17.583.063zm-9 6l-6 6 6 6 3-3-3-3 3-3-3-3z"/>
+                      </svg>
+                      VSCode
+                    </button>
+                    <button onclick="launchIDE('cursor')" class="flex-1 flex items-center justify-center gap-2 px-3 py-2 sm:py-2.5 bg-[#6366f1] hover:bg-[#5558e0] rounded-xl text-xs font-bold text-white transition-colors">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                      </svg>
+                      Cursor
+                    </button>
+                    <button onclick="launchIDE('opencodes')" class="flex-1 flex items-center justify-center gap-2 px-3 py-2 sm:py-2.5 bg-[#10b981] hover:bg-[#059669] rounded-xl text-xs font-bold text-white transition-colors">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                      </svg>
+                      OpenCode
+                    </button>
+                  </div>
+                </div>
+                
+                <!-- README -->
+                <div>
+                  <div class="flex items-center gap-2 mb-2">
+                    <i data-lucide="file-text" size="12" class="text-[#8b949e]"></i>
+                    <h3 class="font-bold text-[9px] uppercase tracking-wider text-[#8b949e]">README.md</h3>
+                  </div>
+                  <div id="project-modal-readme" class="bg-[#161b22] rounded-xl p-3 sm:p-4 border border-[#30363d] text-sm text-[#c9d1d9]">
+                    <p>Project description would appear here...</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="h-12 border-t border-[#30363d] flex items-center justify-end gap-2 sm:gap-3 px-4 sm:px-6 bg-[#161b22]">
+              <button onclick="closeProjectDetailModal()" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-bold text-[#8b949e] hover:text-white transition-colors">Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Task Edit/Create Modal -->
+      <div id="task-edit-modal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeTaskEditModal()"></div>
+        <div class="absolute right-0 top-0 h-full w-full sm:w-[480px] bg-[#0d1117] border-l border-[#30363d] shadow-2xl transform transition-transform duration-300 translate-x-full flex flex-col" id="task-edit-modal-content">
+          <div class="h-12 border-b border-[#30363d] flex items-center justify-between px-4 bg-[#161b22]">
+            <h2 id="task-edit-modal-title" class="font-bold text-sm text-white">New Task</h2>
+            <button onclick="closeTaskEditModal()" class="p-2 hover:bg-[#21262d] rounded-lg text-[#8b949e] hover:text-white">
+              <i data-lucide="x" size="16"></i>
+            </button>
+          </div>
+          <div class="flex-1 overflow-y-auto custom-scrollbar p-6">
+            <form id="task-edit-form" class="space-y-4" onsubmit="event.preventDefault(); submitTaskForm();">
+              <input type="hidden" id="task-edit-id" value="">
+              <div>
+                <label class="text-[10px] text-[#484f58] font-bold uppercase tracking-wider block mb-1">Title *</label>
+                <input id="task-edit-title" required class="w-full bg-[#161b22] border border-[#30363d] rounded-xl py-2 px-3 text-sm text-white outline-none focus:border-indigo-500" placeholder="Task title">
+              </div>
+              <div>
+                <label class="text-[10px] text-[#484f58] font-bold uppercase tracking-wider block mb-1">Project</label>
+                <select id="task-edit-project" class="w-full bg-[#161b22] border border-[#30363d] rounded-xl py-2 px-3 text-sm text-white outline-none focus:border-indigo-500">
+                  <option value="">None</option>
+                </select>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="text-[10px] text-[#484f58] font-bold uppercase tracking-wider block mb-1">Priority</label>
+                  <select id="task-edit-priority" class="w-full bg-[#161b22] border border-[#30363d] rounded-xl py-2 px-3 text-sm text-white outline-none focus:border-indigo-500">
+                    <option value="low">Low</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-[10px] text-[#484f58] font-bold uppercase tracking-wider block mb-1">Due Date</label>
+                  <input type="date" id="task-edit-due" class="w-full bg-[#161b22] border border-[#30363d] rounded-xl py-2 px-3 text-sm text-white outline-none focus:border-indigo-500">
+                </div>
+              </div>
+              <div>
+                <label class="text-[10px] text-[#484f58] font-bold uppercase tracking-wider block mb-1">Assignee</label>
+                <input id="task-edit-assignee" class="w-full bg-[#161b22] border border-[#30363d] rounded-xl py-2 px-3 text-sm text-white outline-none focus:border-indigo-500" placeholder="Assignee name">
+              </div>
+              <div>
+                <label class="text-[10px] text-[#484f58] font-bold uppercase tracking-wider block mb-1">Description</label>
+                <textarea id="task-edit-desc" rows="4" class="w-full bg-[#161b22] border border-[#30363d] rounded-xl py-2 px-3 text-sm text-white outline-none focus:border-indigo-500 resize-none" placeholder="Task description"></textarea>
+              </div>
+            </form>
+          </div>
+          <div class="h-16 border-t border-[#30363d] flex items-center justify-end gap-3 px-6 bg-[#010409]">
+            <button onclick="closeTaskEditModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-[#8b949e] hover:text-white transition-all">Cancel</button>
+            <button onclick="submitTaskForm()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white transition-all">Save</button>
+          </div>
+        </div>
+      </div>
+
+        <!-- Logs View -->
+        <div id="view-logs" class="view-section flex-1 flex flex-col overflow-hidden hidden">
+          <div class="h-14 shrink-0 border-b border-[#30363d] hidden lg:flex items-center justify-between px-6">
+            <h1 class="font-black text-sm tracking-wide text-white">Activity Logs</h1>
+            <button onclick="exportLogs()" class="h-7 px-3 bg-[#010409] border border-[#30363d] hover:border-[#484f58] rounded-xl text-[10px] font-bold text-[#8b949e] hover:text-white transition-all flex items-center gap-1.5">
+              <i data-lucide="download" size="12"></i>
+              Export CSV
+            </button>
+          </div>
+          <div class="flex-1 overflow-auto custom-scrollbar p-4 sm:p-6">
+            <div id="logs-list" class="space-y-3"></div>
+          </div>
+        </div>
+
+        <!-- Inbox View -->
+        <div id="view-inbox" class="view-section flex-1 flex flex-col overflow-hidden hidden">
+          <div class="h-14 shrink-0 border-b border-[#30363d] hidden lg:flex items-center px-6">
+            <h1 class="font-black text-sm tracking-wide text-white">Inbox</h1>
+          </div>
+          <div id="inbox-content" class="flex-1 overflow-auto custom-scrollbar p-4 sm:p-6 space-y-2"></div>
+        </div>
+
+        <!-- Analytics View -->
+        <div id="view-analytics" class="view-section flex-1 flex flex-col overflow-hidden hidden">
+          <div class="h-14 shrink-0 border-b border-[#30363d] hidden lg:flex items-center px-6">
+            <h1 class="font-black text-sm tracking-wide text-white">Analytics</h1>
+          </div>
+          <div id="analytics-content" class="flex-1 overflow-auto custom-scrollbar p-4 sm:p-6 space-y-4"></div>
+        </div>
+
+        <!-- Settings View -->
+        <div id="view-settings" class="view-section flex-1 flex flex-col overflow-hidden hidden">
+          <div class="h-14 shrink-0 border-b border-[#30363d] hidden lg:flex items-center px-6">
+            <h1 class="font-black text-sm tracking-wide text-white">Settings</h1>
+          </div>
+          <div id="settings-content" class="flex-1 overflow-auto custom-scrollbar p-4 sm:p-6 space-y-4"></div>
+        </div>
+
+        <!-- AI Chat -->
+      <button onclick="toggleAiChat()" class="absolute right-6 bottom-6 w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center shadow-lg hover:bg-indigo-500 transition-all z-40">
+        <i data-lucide="sparkles" size="20" class="text-white"></i>
+      </button>
+
+      <div id="ai-chat" class="absolute right-6 bottom-20 w-80 h-[480px] bg-[#161b22] border border-[#30363d] shadow-2xl rounded-[32px] flex flex-col overflow-hidden hidden z-50">
+        <div class="p-4 bg-[#010409] border-b border-[#30363d] flex justify-between items-center">
+          <span class="text-[10px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-2">
+            <i data-lucide="sparkles" size="14"></i> Log Analyzer
+          </span>
+          <div class="flex items-center gap-2">
+            <select id="ai-provider-select" class="bg-[#0d1117] border border-[#30363d] rounded text-[9px] text-[#8b949e] py-0.5 px-1 outline-none">
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+            </select>
+            <i data-lucide="x" size="18" class="cursor-pointer text-[#484f58] hover:text-white" onclick="toggleAiChat()"></i>
+          </div>
+        </div>
+        <div id="ai-chat-messages" class="flex-1 p-4 overflow-y-auto space-y-3 custom-scrollbar text-[12px]"></div>
+        <form id="ai-chat-form" class="p-4 border-t border-[#30363d] flex gap-2" onsubmit="handleAiSend(event)">
+          <input id="ai-chat-input" placeholder="Ask about activity logs..." class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-4 text-xs text-white outline-none focus:ring-1 ring-amber-500/50" />
+          <button type="submit" class="px-3 py-2 bg-amber-600 hover:bg-amber-500 rounded-xl text-[10px] font-bold text-white">
+            <i data-lucide="send" size="14"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+<!-- Hidden selects for state (used by filterTasks / renderProjects) -->
+<select id="task-status-filter" class="hidden"><option value="all" selected>all</option><option value="todo">todo</option><option value="in-progress">in-progress</option><option value="done">done</option></select>
+<select id="task-sort" class="hidden"><option value="date" selected>date</option><option value="priority">priority</option><option value="title">title</option></select>
+<select id="project-lang-filter" class="hidden"><option value="all" selected>all</option><option value="javascript">javascript</option><option value="typescript">typescript</option><option value="python">python</option><option value="rust">rust</option><option value="go">go</option></select>
+<select id="project-sort" class="hidden"><option value="modified" selected>modified</option><option value="name">name</option><option value="git">git</option><option value="language">language</option></select>
+
+<script src="data/dummy.js"></script>
+<script src="js/state.js"></script>
+<script src="js/api.js"></script>
+<script src="js/markdown.js"></script>
+<script src="js/sidebar.js"></script>
+<script src="js/tabs.js"></script>
+<script src="js/tasks.js"></script>
+<script src="js/projects.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/analytics.js"></script>
+<script src="js/inbox.js"></script>
+<script src="js/ai-chat.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html> 

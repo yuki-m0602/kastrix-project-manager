@@ -1,0 +1,264 @@
+// ── Task View ─────────────────────────────────────────────
+function setTaskView(view) {
+  currentTaskView = view;
+  const listView  = document.getElementById('list-view');
+  const kanbanView = document.getElementById('kanban-view');
+  const btnList   = document.getElementById('btn-task-list');
+  const btnKanban = document.getElementById('btn-task-kanban');
+  if (view === 'list') {
+    listView?.classList.remove('hidden');
+    kanbanView?.classList.add('hidden');
+    btnList?.classList.add('bg-[#30363d]', 'text-white');
+    btnList?.classList.remove('text-[#8b949e]');
+    btnKanban?.classList.remove('bg-[#30363d]', 'text-white');
+    btnKanban?.classList.add('text-[#8b949e]');
+  } else {
+    listView?.classList.add('hidden');
+    kanbanView?.classList.remove('hidden');
+    btnKanban?.classList.add('bg-[#30363d]', 'text-white');
+    btnKanban?.classList.remove('text-[#8b949e]');
+    btnList?.classList.remove('bg-[#30363d]', 'text-white');
+    btnList?.classList.add('text-[#8b949e]');
+  }
+  filterTasks();
+}
+
+function filterTasks() {
+  const statusFilter = document.getElementById('task-status-filter')?.value || 'all';
+  const sortBy       = document.getElementById('task-sort')?.value || 'date';
+  let filtered = statusFilter === 'all' ? [...tasks] : tasks.filter(t => t.status === statusFilter);
+  if (sortBy === 'priority') {
+    const order = { high: 0, medium: 1, low: 2 };
+    filtered.sort((a, b) => order[a.priority] - order[b.priority]);
+  } else if (sortBy === 'title') {
+    filtered.sort((a, b) => a.title.localeCompare(b.title));
+  } else {
+    filtered.sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate));
+  }
+  renderTaskList(filtered);
+  renderKanban(filtered);
+}
+
+function filterTasksByStatus(v) { filterTasks(); }
+function sortTasks(v)           { filterTasks(); }
+
+function renderTaskList(filteredTasks) {
+  const tbody = document.getElementById('list-view-body');
+  if (!tbody) return;
+  const statusMap = {
+    'todo':        { border: 'border-slate-400/20', color: 'text-slate-400'   },
+    'in-progress': { border: 'border-blue-400/20',  color: 'text-blue-400'    },
+    'done':        { border: 'border-emerald-400/20',color: 'text-emerald-400' }
+  };
+  tbody.innerHTML = filteredTasks.map(t => `
+    <tr onclick="openTaskModal('${t.id}')" class="hover:bg-[#161b22] group cursor-pointer transition-all">
+      <td class="px-4 py-4 font-bold text-[#f0f6fc]">${t.title}</td>
+      <td class="px-4 py-4 text-[#8b949e] hidden sm:table-cell">${t.assignee}</td>
+      <td class="px-4 py-4">
+        <span class="px-2 py-0.5 rounded-md text-[9px] font-black border whitespace-nowrap ${statusMap[t.status].border} ${statusMap[t.status].color}">${t.status.toUpperCase()}</span>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function renderKanban(filteredTasks) {
+  const priorityColors = {
+    high:   'bg-red-500/10 text-red-500',
+    medium: 'bg-yellow-500/10 text-yellow-500',
+    low:    'bg-green-500/10 text-green-500'
+  };
+  ['todo', 'in-progress', 'done'].forEach(status => {
+    const key       = status === 'in-progress' ? 'inprogress' : status;
+    const container = document.getElementById('kanban-' + key);
+    if (!container) return;
+    const statusTasks = filteredTasks.filter(t => t.status === status);
+    const countEl = document.getElementById('count-' + key);
+    if (countEl) countEl.textContent = statusTasks.length;
+    const borderColor = status === 'todo' ? 'slate' : status === 'in-progress' ? 'blue' : 'emerald';
+
+    // Set drop zone attributes
+    container.dataset.status = status;
+    container.ondragover = _kanbanDragOver;
+    container.ondragleave = _kanbanDragLeave;
+    container.ondrop = _kanbanDrop;
+
+    container.innerHTML = statusTasks.map(t => `
+      <div draggable="true" ondragstart="_kanbanDragStart(event, '${t.id}')" onclick="openTaskModal('${t.id}')" class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 hover:border-${borderColor}-400/30 transition-all cursor-pointer ${status === 'done' ? 'opacity-60' : ''}">
+        <p class="text-white font-bold text-sm leading-tight mb-3 ${status === 'done' ? 'line-through' : ''}">${t.title}</p>
+        <div class="flex items-center justify-between">
+          <div class="w-5 h-5 rounded bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-[9px] font-black">${t.assignee ? t.assignee[0] : '?'}</div>
+          <span class="text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-tighter ${priorityColors[t.priority]}">${t.priority.toUpperCase()}</span>
+        </div>
+      </div>
+    `).join('');
+  });
+}
+
+// ── Kanban Drag & Drop ───────────────────────────────────
+function _kanbanDragStart(e, taskId) {
+  e.dataTransfer.setData('text/plain', taskId);
+  e.dataTransfer.effectAllowed = 'move';
+  e.currentTarget.style.opacity = '0.4';
+  setTimeout(() => { e.currentTarget.style.opacity = ''; }, 0);
+}
+
+function _kanbanDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('bg-[#21262d]', 'rounded-xl');
+}
+
+function _kanbanDragLeave(e) {
+  e.currentTarget.classList.remove('bg-[#21262d]', 'rounded-xl');
+}
+
+async function _kanbanDrop(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('bg-[#21262d]', 'rounded-xl');
+  const taskId = e.dataTransfer.getData('text/plain');
+  const newStatus = e.currentTarget.dataset.status;
+  if (!taskId || !newStatus) return;
+  const task = tasks.find(t => String(t.id) === taskId);
+  if (!task || task.status === newStatus) return;
+  await apiUpdateTaskStatus(taskId, newStatus);
+  filterTasks();
+}
+
+// Task filter setters
+function setTaskStatus(value, label) {
+  document.getElementById('label-status').textContent = label;
+  document.getElementById('dd-status').classList.add('hidden');
+  const sel = document.getElementById('task-status-filter');
+  if (sel) sel.value = value;
+  filterTasks();
+}
+
+function setTaskSort(value, label) {
+  document.getElementById('label-sort').textContent = label;
+  document.getElementById('dd-sort').classList.add('hidden');
+  const sel = document.getElementById('task-sort');
+  if (sel) sel.value = value;
+  filterTasks();
+}
+
+function openTaskModal(taskId) {
+  const task = tasks.find(t => t.id === taskId);
+  if (!task) return;
+  document.getElementById('modal-task-title').textContent    = task.title;
+  document.getElementById('modal-task-status').textContent   = task.status.toUpperCase();
+  document.getElementById('modal-task-priority').textContent = task.priority.toUpperCase();
+  document.getElementById('modal-assignee').textContent      = task.assignee || '-';
+  document.getElementById('modal-date').textContent          = task.dueDate || '-';
+  _currentTaskId = task.id;
+  const modal   = document.getElementById('task-modal');
+  const content = document.getElementById('task-modal-content');
+  modal.classList.remove('hidden');
+  setTimeout(() => content.classList.remove('translate-x-full'), 10);
+  _pushModalHistory('task');
+}
+
+function closeTaskModal() {
+  if (_modalHistory === 'task') {
+    _modalHistory = null;
+    history.back();
+    return;
+  }
+  const content = document.getElementById('task-modal-content');
+  content.classList.add('translate-x-full');
+  setTimeout(() => document.getElementById('task-modal').classList.add('hidden'), 300);
+}
+
+// ── Task CRUD ────────────────────────────────────────────────
+function openCreateTaskModal() {
+  document.getElementById('task-edit-id').value = '';
+  document.getElementById('task-edit-title').value = '';
+  document.getElementById('task-edit-project').value = '';
+  document.getElementById('task-edit-priority').value = 'medium';
+  document.getElementById('task-edit-due').value = '';
+  document.getElementById('task-edit-assignee').value = '';
+  document.getElementById('task-edit-desc').value = '';
+  document.getElementById('task-edit-modal-title').textContent = 'New Task';
+  _populateProjectDropdown();
+  const modal = document.getElementById('task-edit-modal');
+  const content = document.getElementById('task-edit-modal-content');
+  modal.classList.remove('hidden');
+  setTimeout(() => content.classList.remove('translate-x-full'), 10);
+  _pushModalHistory('task-edit');
+}
+
+function openEditTaskModal(taskId) {
+  const task = tasks.find(t => String(t.id) === String(taskId));
+  if (!task) return;
+  document.getElementById('task-edit-id').value = task.id;
+  document.getElementById('task-edit-title').value = task.title;
+  document.getElementById('task-edit-priority').value = task.priority;
+  document.getElementById('task-edit-due').value = task.dueDate ? task.dueDate.split(' ')[0] : '';
+  document.getElementById('task-edit-assignee').value = task.assignee || '';
+  document.getElementById('task-edit-desc').value = task.description || '';
+  document.getElementById('task-edit-modal-title').textContent = 'Edit Task';
+  _populateProjectDropdown();
+  document.getElementById('task-edit-project').value = task.projectId || '';
+  const modal = document.getElementById('task-edit-modal');
+  const content = document.getElementById('task-edit-modal-content');
+  modal.classList.remove('hidden');
+  setTimeout(() => content.classList.remove('translate-x-full'), 10);
+  _pushModalHistory('task-edit');
+}
+
+function _populateProjectDropdown() {
+  const sel = document.getElementById('task-edit-project');
+  sel.innerHTML = '<option value="">None</option>';
+  projects.forEach(p => {
+    sel.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+  });
+}
+
+function closeTaskEditModal() {
+  if (_modalHistory === 'task-edit') {
+    _modalHistory = null;
+    history.back();
+    return;
+  }
+  const content = document.getElementById('task-edit-modal-content');
+  if (content) {
+    content.classList.add('translate-x-full');
+    setTimeout(() => document.getElementById('task-edit-modal')?.classList.add('hidden'), 300);
+  }
+}
+
+async function submitTaskForm() {
+  const id = document.getElementById('task-edit-id').value;
+  const input = {
+    title: document.getElementById('task-edit-title').value.trim(),
+    projectId: document.getElementById('task-edit-project').value || null,
+    priority: document.getElementById('task-edit-priority').value,
+    dueDate: document.getElementById('task-edit-due').value || null,
+    assignee: document.getElementById('task-edit-assignee').value.trim() || null,
+    description: document.getElementById('task-edit-desc').value.trim() || null,
+  };
+  if (!input.title) return;
+  try {
+    if (id) {
+      await apiUpdateTask(id, input);
+    } else {
+      await apiCreateTask(input);
+    }
+    closeTaskEditModal();
+    filterTasks();
+  } catch (e) {
+    console.error('Failed to save task:', e);
+  }
+}
+
+async function deleteCurrentTask() {
+  if (!_currentTaskId) return;
+  if (!confirm('このタスクを削除しますか？')) return;
+  try {
+    await apiDeleteTask(_currentTaskId);
+    _currentTaskId = null;
+    closeTaskModal();
+    filterTasks();
+  } catch (e) {
+    console.error('Failed to delete task:', e);
+  }
+}

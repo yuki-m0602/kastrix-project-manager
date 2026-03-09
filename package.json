@@ -1,0 +1,17 @@
+{
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "npx live-server ui --port=1420 --no-browser",
+    "start": "npm run dev & npx tauri dev"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.27",
+    "http-server": "^14.1.1",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^4.2.1"
+  },
+  "dependencies": {
+    "@tauri-apps/cli": "^2.10.1",
+    "live-server": "^1.2.2"
+  }
+}

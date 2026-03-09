@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Project Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+    
+    * {
+      font-family: 'Inter', sans-serif;
+    }
+    
+      /* Mobile viewport fix */
+      @supports (height: 100dvh) {
+        .h-screen {
+          height: 100dvh;
+        }
+      }
+      
+      /* Prevent iOS zoom on input focus */
+      @media (max-width: 767px) {
+        select,
+        input,
+        button {
+          font-size: 16px;
+        }
+      }
+      
+      /* Fix for iOS Safari background-attachment */
+      .ios-fix {
+        background-attachment: scroll !important;
+      }
+    .custom-scrollbar::-webkit-scrollbar-thumb { 
+      background: #30363d; 
+      border-radius: 10px; 
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #0d1117;
+    }
+    
+    .glass {
+      background: rgba(22, 27, 34, 0.8);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+    }
+    
+    .language-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 12px;
+      text-transform: uppercase;
+    }
+    
+    .lang-javascript { background: #f1e05a20; color: #f1e05a; }
+    .lang-typescript { background: #2b748920; color: #2b7489; }
+    .lang-python { background: #3572A520; color: #3572A5; }
+    .lang-rust { background: #dea58420; color: #dea584; }
+    .lang-go { background: #00ADD820; color: #00ADD8; }
+    .lang-html { background: #e34c2620; color: #e34c26; }
+    .lang-css { background: #563d7c20; color: #563d7c; }
+    .lang-java { background: #b0721920; color: #b07219; }
+    .lang-shell { background: #89e05120; color: #89e051; }
+    
+    .project-card {
+      transition: all 0.2s ease;
+    }
+    .project-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+    }
+  </style>
+</head>
+<body class="bg-[#0d1117] text-[#c9d1d9] text-[13px] h-screen overflow-hidden">
+  <div class="flex h-full">
+    
+    <!-- Sidebar -->
+    <aside class="w-64 bg-[#161b22] border-r border-[#30363d] flex flex-col">
+      <div class="h-14 flex items-center px-4 border-b border-[#30363d]">
+        <i data-lucide="folder-open" size="20" class="text-indigo-400 mr-3"></i>
+        <span class="font-black text-sm tracking-wide">Project Hub</span>
+      </div>
+      
+      <div class="flex-1 overflow-y-auto custom-scrollbar p-3">
+        <div class="mb-4">
+          <p class="text-[10px] font-black text-[#484f58] uppercase tracking-wider mb-2 px-2">Monitored Directories</p>
+          <div class="space-y-1">
+            <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-[#21262d] text-white cursor-pointer">
+              <i data-lucide="hard-drive" size="14" class="text-[#8b949e]"></i>
+              <span class="text-xs truncate">C:\Projects</span>
+            </div>
+            <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[#21262d] text-[#8b949e] cursor-pointer transition-colors">
+              <i data-lucide="hard-drive" size="14"></i>
+              <span class="text-xs truncate">D:\Workspace</span>
+            </div>
+            <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[#21262d] text-[#8b949e] cursor-pointer transition-colors">
+              <i data-lucide="hard-drive" size="14"></i>
+              <span class="text-xs truncate">~/dev</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="mb-4">
+          <p class="text-[10px] font-black text-[#484f58] uppercase tracking-wider mb-2 px-2">Quick Filters</p>
+          <div class="space-y-1">
+            <button onclick="filterByLanguage('all')" class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[#21262d] text-[#8b949e] cursor-pointer transition-colors text-left">
+              <i data-lucide="layers" size="14"></i>
+              <span class="text-xs">All Projects</span>
+              <span class="ml-auto text-[10px] text-[#484f58]">12</span>
+            </button>
+            <button onclick="filterByLanguage('javascript')" class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[#21262d] text-[#8b949e] cursor-pointer transition-colors text-left">
+              <span class="w-2 h-2 rounded-full bg-[#f1e05a]"></span>
+              <span class="text-xs">JavaScript</span>
+              <span class="ml-auto text-[10px] text-[#484f58]">4</span>
+            </button>
+            <button onclick="filterByLanguage('typescript')" class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[#21262d] text-[#8b949e] cursor-pointer transition-colors text-left">
+              <span class="w-2 h-2 rounded-full bg-[#2b7489]"></span>
+              <span class="text-xs">TypeScript</span>
+              <span class="ml-auto text-[10px] text-[#484f58]">3</span>
+            </button>
+            <button onclick="filterByLanguage('python')" class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[#21262d] text-[#8b949e] cursor-pointer transition-colors text-left">
+              <span class="w-2 h-2 rounded-full bg-[#3572A5]"></span>
+              <span class="text-xs">Python</span>
+              <span class="ml-auto text-[10px] text-[#484f58]">2</span>
+            </button>
+            <button onclick="filterByLanguage('rust')" class="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[#21262d] text-[#8b949e] cursor-pointer transition-colors text-left">
+              <span class="w-2 h-2 rounded-full bg-[#dea584]"></span>
+              <span class="text-xs">Rust</span>
+              <span class="ml-auto text-[10px] text-[#484f58]">1</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <div class="p-3 border-t border-[#30363d]">
+        <button onclick="showAddDirectoryModal()" class="w-full flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-xs font-bold text-white transition-colors">
+          <i data-lucide="plus" size="14"></i>
+          Add Directory
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col min-w-0">
+      <!-- Header -->
+      <header class="h-14 bg-[#161b22] border-b border-[#30363d] flex items-center justify-between px-4">
+        <div class="flex items-center gap-4">
+          <h1 class="font-bold text-sm">All Projects</h1>
+          <span class="text-[10px] text-[#484f58]">12 projects found</span>
+        </div>
+        
+        <div class="flex items-center gap-3">
+          <!-- Search -->
+          <div class="relative">
+            <i data-lucide="search" size="14" class="absolute left-3 top-1/2 -translate-y-1/2 text-[#484f58]"></i>
+            <input type="text" placeholder="Search projects..." class="w-64 bg-[#0d1117] border border-[#30363d] rounded-lg py-1.5 pl-9 pr-3 text-xs focus:outline-none focus:border-indigo-500 transition-colors">
+          </div>
+          
+          <!-- Sort Dropdown -->
+          <div class="relative">
+            <select onchange="sortProjects(this.value)" class="bg-[#0d1117] border border-[#30363d] rounded-lg py-1.5 px-3 text-xs focus:outline-none focus:border-indigo-500 cursor-pointer appearance-none pr-8">
+              <option value="name">Sort by Name</option>
+              <option value="local-modified">Sort by Local Modified</option>
+              <option value="git-modified">Sort by Git Modified</option>
+              <option value="language">Sort by Language</option>
+            </select>
+            <i data-lucide="chevron-down" size="14" class="absolute right-2 top-1/2 -translate-y-1/2 text-[#484f58] pointer-events-none"></i>
+          </div>
+          
+          <!-- View Toggle -->
+          <div class="flex bg-[#0d1117] border border-[#30363d] rounded-lg p-0.5">
+            <button onclick="setView('grid')" id="view-grid-btn" class="p-1.5 rounded bg-[#30363d] text-white">
+              <i data-lucide="layout-grid" size="14"></i>
+            </button>
+            <button onclick="setView('list')" id="view-list-btn" class="p-1.5 rounded text-[#8b949e] hover:text-white">
+              <i data-lucide="list" size="14"></i>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Project Grid -->
+      <div id="projects-container" class="flex-1 overflow-y-auto custom-scrollbar p-4">
+        <div id="projects-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <!-- Projects will be rendered here -->
+        </div>
+      </div>
+    </main>
+
+    <!-- Project Detail Modal -->
+    <div id="project-modal" class="fixed inset-0 z-50 hidden">
+      <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeProjectModal()"></div>
+      <div class="absolute right-0 top-0 h-full w-[600px] bg-[#0d1117] border-l border-[#30363d] shadow-2xl transform transition-transform duration-300 translate-x-full flex flex-col" id="project-modal-content">
+        
+        <!-- Modal Header -->
+        <div class="h-14 border-b border-[#30363d] flex items-center justify-between px-4 bg-[#161b22]">
+          <div class="flex items-center gap-3">
+            <span id="modal-language-badge" class="language-badge">JS</span>
+            <h2 id="modal-project-name" class="font-bold text-sm text-white">Project Name</h2>
+          </div>
+          <button onclick="closeProjectModal()" class="p-2 hover:bg-[#21262d] rounded-lg text-[#8b949e] hover:text-white transition-colors">
+            <i data-lucide="x" size="18"></i>
+          </button>
+        </div>
+        
+        <!-- Modal Body -->
+        <div class="flex-1 overflow-y-auto custom-scrollbar">
+          <!-- Project Info -->
+          <div class="p-4 border-b border-[#30363d]">
+            <div class="grid grid-cols-2 gap-4 mb-4">
+              <div class="bg-[#161b22] rounded-lg p-3">
+                <p class="text-[10px] text-[#484f58] uppercase font-bold mb-1">Local Modified</p>
+                <p id="modal-local-date" class="text-xs text-white font-medium">2024-01-15 14:30</p>
+              </div>
+              <div class="bg-[#161b22] rounded-lg p-3">
+                <p class="text-[10px] text-[#484f58] uppercase font-bold mb-1">Git Last Commit</p>
+                <p id="modal-git-date" class="text-xs text-white font-medium">2024-01-14 09:15</p>
+              </div>
+            </div>
+            
+            <!-- IDE Launch Buttons -->
+            <div class="flex gap-2">
+              <button onclick="launchIDE('vscode')" class="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-[#007acc] hover:bg-[#0066aa] rounded-lg text-xs font-bold text-white transition-colors">
+                <i data-lucide="code-2" size="14"></i>
+                VSCode
+              </button>
+              <button onclick="launchIDE('cursor')" class="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-[#6366f1] hover:bg-[#5558e0] rounded-lg text-xs font-bold text-white transition-colors">
+                <i data-lucide="mouse-pointer-2" size="14"></i>
+                Cursor
+              </button>
+              <button onclick="launchIDE('opencodes')" class="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-[#10b981] hover:bg-[#059669] rounded-lg text-xs font-bold text-white transition-colors">
+                <i data-lucide="external-link" size="14"></i>
+                OpenCode
+              </button>
+            </div>
+          </div>
+          
+          <!-- README -->
+          <div class="p-4">
+            <div class="flex items-center gap-2 mb-3">
+              <i data-lucide="file-text" size="16" class="text-[#8b949e]"></i>
+              <h3 class="font-bold text-xs uppercase tracking-wider text-[#8b949e]">README.md</h3>
+            </div>
+            <div id="modal-readme" class="bg-[#161b22] rounded-lg p-4 prose prose-invert prose-sm max-w-none">
+              <!-- README content will be rendered here -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Directory Modal -->
+    <div id="add-directory-modal" class="fixed inset-0 z-50 hidden">
+      <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeAddDirectoryModal()"></div>
+      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[480px] bg-[#161b22] border border-[#30363d] rounded-2xl shadow-2xl p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="font-bold text-sm text-white">Add Directory</h2>
+          <button onclick="closeAddDirectoryModal()" class="p-1.5 hover:bg-[#21262d] rounded-lg text-[#8b949e] hover:text-white transition-colors">
+            <i data-lucide="x" size="16"></i>
+          </button>
+        </div>
+        
+        <p class="text-xs text-[#8b949e] mb-4">Add a directory to scan for projects. All subdirectories containing Git repositories will be automatically detected.</p>
+        
+        <div class="space-y-3">
+          <div>
+            <label class="block text-[10px] font-bold text-[#484f58] uppercase mb-1.5">Directory Path</label>
+            <div class="flex gap-2">
+              <input type="text" id="directory-path-input" placeholder="C:\Projects or ~/projects" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg py-2 px-3 text-xs focus:outline-none focus:border-indigo-500 transition-colors">
+              <button onclick="browseDirectory()" class="px-3 py-2 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-lg text-xs font-medium text-white transition-colors">
+                Browse
+              </button>
+            </div>
+          </div>
+          
+          <div class="flex items-center gap-2 p-3 bg-[#0d1117] rounded-lg border border-[#30363d]">
+            <i data-lucide="info" size="14" class="text-[#8b949e]"></i>
+            <span class="text-[10px] text-[#8b949e]">The directory will be scanned recursively for Git projects</span>
+          </div>
+        </div>
+        
+        <div class="flex justify-end gap-2 mt-6">
+          <button onclick="closeAddDirectoryModal()" class="px-4 py-2 text-xs font-medium text-[#8b949e] hover:text-white transition-colors">Cancel</button>
+          <button onclick="addDirectory()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-xs font-bold text-white transition-colors">Add Directory</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Initialize Lucide icons
+    lucide.createIcons();
+    
+    // Project data
+    const projects = [
+      {
+        id: 1,
+        name: 'lumina-dashboard',
+        path: 'C:\\Projects\\lumina-dashboard',
+        language: 'typescript',
+        localModified: '2024-01-15 14:30',
+        gitModified: '2024-01-14 09:15',
+        lastCommit: 'feat: add project filtering',
+        hasReadme: true,
+        readme: `<h1>Lumina Dashboard</h1>
+<p>A modern project management dashboard built with React and TypeScript.</p>
+<h2>Features</h2>
+<ul>
+<li>Real-time project tracking</li>
+<li>Git integration</li>
+<li>IDE launcher support</li>
+</ul>
+<h2>Getting Started</h2>
+<pre><code>npm install
+npm run dev</code></pre>`
+      },
+      {
+        id: 2,
+        name: 'api-gateway',
+        path: 'C:\\Projects\\api-gateway',
+        language: 'rust',
+        localModified: '2024-01-14 18:45',
+        gitModified: '2024-01-14 16:20',
+        lastCommit: 'fix: handle cors headers',
+        hasReadme: true,
+        readme: `<h1>API Gateway</h1>
+<p>High-performance API gateway built with Rust.</p>`
+      },
+      {
+        id: 3,
+        name: 'data-processor',
+        path: 'D:\\Workspace\\data-processor',
+        language: 'python',
+        localModified: '2024-01-13 11:20',
+        gitModified: '2024-01-12 15:30',
+        lastCommit: 'refactor: optimize pipeline',
+        hasReadme: true,
+        readme: `<h1>Data Processor</h1>
+<p>Python-based data processing pipeline.</p>`
+      },
+      {
+        id: 4,
+        name: 'portfolio-site',
+        path: 'C:\\Projects\\portfolio-site',
+        language: 'javascript',
+        localModified: '2024-01-15 09:00',
+        gitModified: '2024-01-15 08:45',
+        lastCommit: 'design: update hero section',
+        hasReadme: true,
+        readme: `<h1>Portfolio Site</h1>
+<p>Personal portfolio website.</p>`
+      },
+      {
+        id: 5,
+        name: 'ecommerce-backend',
+        path: 'D:\\Workspace\\ecommerce-backend',
+        language: 'typescript',
+        localModified: '2024-01-14 22:15',
+        gitModified: '2024-01-14 20:00',
+        lastCommit: 'feat: add payment integration',
+        hasReadme: true,
+        readme: `<h1>E-commerce Backend</h1>
+<p>Full-featured e-commerce API.</p>`
+      },
+      {
+        id: 6,
+        name: 'cli-tools',
+        path: '~/dev/cli-tools',
+        language: 'go',
+        localModified: '2024-01-13 16:30',
+        gitModified: '2024-01-13 14:00',
+        lastCommit: 'chore: update dependencies',
+        hasReadme: false,
+        readme: '<p>No README found</p>'
+      }
+    ];
+    
+    let currentView = 'grid';
+    let currentFilter = 'all';
+    let currentSort = 'name';
+    
+    const languageLabels = {
+      'javascript': 'JS',
+      'typescript': 'TS',
+      'python': 'PY',
+      'rust': 'RS',
+      'go': 'GO',
+      'html': 'HTML',
+      'css': 'CSS',
+      'java': 'JAVA',
+      'shell': 'SH'
+    };
+    
+    function renderProjects() {
+      const container = document.getElementById('projects-grid');
+      let filtered = currentFilter === 'all' 
+        ? projects 
+        : projects.filter(p => p.language === currentFilter);
+      
+      // Sort
+      filtered.sort((a, b) => {
+        if (currentSort === 'name') return a.name.localeCompare(b.name);
+        if (currentSort === 'local-modified') return b.localModified.localeCompare(a.localModified);
+        if (currentSort === 'git-modified') return b.gitModified.localeCompare(a.gitModified);
+        if (currentSort === 'language') return a.language.localeCompare(b.language);
+        return 0;
+      });
+      
+      if (currentView === 'grid') {
+        container.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4';
+        container.innerHTML = filtered.map(p => `
+          <div onclick="openProjectModal(${p.id})" class="project-card bg-[#161b22] border border-[#30363d] rounded-xl p-4 cursor-pointer">
+            <div class="flex items-start justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <i data-lucide="folder-git-2" size="20" class="text-indigo-400"></i>
+                <h3 class="font-bold text-sm text-white">${p.name}</h3>
+              </div>
+              <span class="language-badge lang-${p.language}">${languageLabels[p.language] || p.language.toUpperCase()}</span>
+            </div>
+            <p class="text-[10px] text-[#8b949e] mb-3 truncate">${p.path}</p>
+            <div class="space-y-2 text-[10px]">
+              <div class="flex items-center justify-between">
+                <span class="text-[#484f58]">Local</span>
+                <span class="text-[#8b949e]">${p.localModified}</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-[#484f58]">Git</span>
+                <span class="text-[#8b949e]">${p.gitModified}</span>
+              </div>
+            </div>
+            ${p.lastCommit ? `
+              <div class="mt-3 pt-3 border-t border-[#30363d]">
+                <p class="text-[10px] text-[#8b949e] truncate">
+                  <span class="text-indigo-400">${p.lastCommit}</span>
+                </p>
+              </div>
+            ` : ''}
+          </div>
+        `).join('');
+      } else {
+        container.className = 'space-y-2';
+        container.innerHTML = filtered.map(p => `
+          <div onclick="openProjectModal(${p.id})" class="project-card bg-[#161b22] border border-[#30363d] rounded-xl p-3 cursor-pointer flex items-center gap-4">
+            <i data-lucide="folder-git-2" size={20} class="text-indigo-400 shrink-0"></i>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 mb-1">
+                <h3 class="font-bold text-sm text-white">${p.name}</h3>
+                <span class="language-badge lang-${p.language}">${languageLabels[p.language] || p.language.toUpperCase()}</span>
+              </div>
+              <p class="text-[10px] text-[#8b949e] truncate">${p.path}</p>
+            </div>
+            <div class="hidden md:flex items-center gap-8 text-[10px] shrink-0">
+              <div class="text-right">
+                <p class="text-[#484f58]">Local</p>
+                <p class="text-[#8b949e]">${p.localModified}</p>
+              </div>
+              <div class="text-right">
+                <p class="text-[#484f58]">Git</p>
+                <p class="text-[#8b949e]">${p.gitModified}</p>
+              </div>
+            </div>
+          </div>
+        `).join('');
+      }
+      
+      lucide.createIcons();
+    }
+    
+    function setView(view) {
+      currentView = view;
+      document.getElementById('view-grid-btn').className = view === 'grid' ? 'p-1.5 rounded bg-[#30363d] text-white' : 'p-1.5 rounded text-[#8b949e] hover:text-white';
+      document.getElementById('view-list-btn').className = view === 'list' ? 'p-1.5 rounded bg-[#30363d] text-white' : 'p-1.5 rounded text-[#8b949e] hover:text-white';
+      renderProjects();
+    }
+    
+    function filterByLanguage(lang) {
+      currentFilter = lang;
+      renderProjects();
+    }
+    
+    function sortProjects(sort) {
+      currentSort = sort;
+      renderProjects();
+    }
+    
+    function openProjectModal(projectId) {
+      const project = projects.find(p => p.id === projectId);
+      if (!project) return;
+      
+      document.getElementById('modal-project-name').textContent = project.name;
+      document.getElementById('modal-language-badge').textContent = languageLabels[project.language] || project.language.toUpperCase();
+      document.getElementById('modal-language-badge').className = `language-badge lang-${project.language}`;
+      document.getElementById('modal-local-date').textContent = project.localModified;
+      document.getElementById('modal-git-date').textContent = project.gitModified;
+      document.getElementById('modal-readme').innerHTML = project.readme;
+      
+      const modal = document.getElementById('project-modal');
+      const content = document.getElementById('project-modal-content');
+      modal.classList.remove('hidden');
+      setTimeout(() => {
+        content.classList.remove('translate-x-full');
+      }, 10);
+      lucide.createIcons();
+    }
+    
+    function closeProjectModal() {
+      const content = document.getElementById('project-modal-content');
+      content.classList.add('translate-x-full');
+      setTimeout(() => {
+        document.getElementById('project-modal').classList.add('hidden');
+      }, 300);
+    }
+    
+    function launchIDE(ide) {
+      const ideNames = {
+        'vscode': 'VSCode',
+        'cursor': 'Cursor',
+        'opencodes': 'OpenCode'
+      };
+      alert(`Launching ${ideNames[ide]}...`);
+    }
+    
+    function showAddDirectoryModal() {
+      document.getElementById('add-directory-modal').classList.remove('hidden');
+    }
+    
+    function closeAddDirectoryModal() {
+      document.getElementById('add-directory-modal').classList.add('hidden');
+      document.getElementById('directory-path-input').value = '';
+    }
+    
+    function browseDirectory() {
+      alert('Directory browser would open here');
+    }
+    
+    function addDirectory() {
+      const path = document.getElementById('directory-path-input').value;
+      if (path) {
+        alert(`Directory added: ${path}`);
+        closeAddDirectoryModal();
+      }
+    }
+    
+    // Initialize
+    renderProjects();
+  </script>
+</body>
+</html>
