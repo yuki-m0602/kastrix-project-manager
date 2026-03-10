@@ -7,7 +7,7 @@ function toggleSidebar() {
   const navLabels  = document.querySelectorAll('.nav-label');
   if (isSidebarCollapsed) {
     sidebar.style.width = '64px';
-    mainArea.style.paddingLeft = '72px';
+    mainArea.style.paddingLeft = '240px';
     logoText.classList.add('hidden');
     navLabels.forEach(l => l.classList.add('hidden'));
   } else {
