@@ -56,8 +56,48 @@ pub fn init_db(app_data_dir: &std::path::Path) -> SqlResult<Connection> {
         CREATE TABLE IF NOT EXISTS settings (
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL
-        );",
+        );
+
+        CREATE TABLE IF NOT EXISTS operations (
+            id          TEXT PRIMARY KEY,
+            seq         INTEGER NOT NULL,
+            prev_id     TEXT,
+            type        TEXT NOT NULL,
+            payload     TEXT NOT NULL,
+            member_id   TEXT,
+            signature   TEXT,
+            timestamp   TEXT NOT NULL,
+            ts_source   TEXT DEFAULT 'local',
+            synced      INTEGER DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS members (
+            id          TEXT PRIMARY KEY,
+            endpoint_id TEXT NOT NULL UNIQUE,
+            role        TEXT CHECK(role IN ('host','co_host','member')) DEFAULT 'member',
+            status      TEXT CHECK(status IN ('active','pending','kicked','blocked')) DEFAULT 'pending',
+            joined_at   TEXT DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS sync_state (
+            member_id     TEXT PRIMARY KEY,
+            last_seq      INTEGER DEFAULT 0,
+            last_synced_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS invite_codes (
+            id          TEXT PRIMARY KEY,
+            code        TEXT NOT NULL UNIQUE,
+            topic_id    TEXT NOT NULL,
+            host_ticket  TEXT,
+            expires_at  TEXT,
+            created_at  TEXT DEFAULT (datetime('now'))
+        );
+        ",
     )?;
+
+    // マイグレーション: 既存の invite_codes に host_ticket を追加
+    let _ = conn.execute("ALTER TABLE invite_codes ADD COLUMN host_ticket TEXT", []);
 
     Ok(conn)
 }

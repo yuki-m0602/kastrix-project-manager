@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kastrix — チーム機能 UI モックアップ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+    * { font-family: 'Inter', sans-serif; }
+    .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #30363d; border-radius: 10px; }
+    .glass { background: rgba(1, 4, 9, 0.6); backdrop-filter: blur(20px); }
+    .section-label {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.15em;
+      color: #6366f1;
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px dashed #30363d;
+    }
+    .mockup-note {
+      font-size: 9px;
+      color: #484f58;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body class="bg-[#0d1117] text-[#c9d1d9] text-[13px] min-h-screen p-6">
+  <div class="max-w-4xl mx-auto space-y-12">
+    <!-- Header -->
+    <header class="border-b border-[#30363d] pb-6">
+      <h1 class="text-xl font-black text-white tracking-tight">チーム機能 — 追加UIモックアップ</h1>
+      <p class="text-sm text-[#8b949e] mt-2">参照: specs/kastrix_team_design.md</p>
+    </header>
+
+    <!-- Index -->
+    <nav class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4">
+      <div class="section-label">目次</div>
+      <ul class="text-xs space-y-1 text-[#8b949e]">
+        <li><a href="#sidebar" class="text-indigo-400 hover:text-indigo-300">1. サイドバー（バッジ・Pushボタン）</a></li>
+        <li><a href="#settings-team" class="text-indigo-400 hover:text-indigo-300">2. Settings > チーム</a></li>
+        <li><a href="#inbox" class="text-indigo-400 hover:text-indigo-300">3. Inbox 参加申請</a></li>
+        <li><a href="#join-flow" class="text-indigo-400 hover:text-indigo-300">4. 招待コード入力（参加フロー）</a></li>
+        <li><a href="#conflict" class="text-indigo-400 hover:text-indigo-300">5. 衝突ダイアログ</a></li>
+      </ul>
+    </nav>
+
+    <!-- 1. Sidebar -->
+    <section id="sidebar">
+      <div class="section-label">1. サイドバー — 手動同期モード時</div>
+      <div class="flex gap-8 items-start flex-wrap">
+        <div class="glass border border-[#30363d] rounded-2xl p-2 w-56 shrink-0">
+          <div class="h-10 flex items-center px-3 border-b border-[#30363d]">
+            <span class="font-black text-[8px] tracking-[0.25em] text-[#484f58] uppercase">Kastrix</span>
+          </div>
+          <div class="p-2 space-y-0.5">
+            <button class="flex items-center w-full p-3 rounded-xl gap-2 text-[10px] bg-[#21262d] border border-[#484f58]">
+              <i data-lucide="layout-grid" size="16"></i>
+              <span class="font-bold">Overview</span>
+            </button>
+            <button class="flex items-center w-full p-3 rounded-xl gap-2 text-[10px] hover:bg-[#161b22]">
+              <i data-lucide="activity" size="16"></i>
+              <span class="font-bold">Activity Logs</span>
+            </button>
+            <button class="flex items-center w-full p-3 rounded-xl gap-2 text-[10px] hover:bg-[#161b22] relative">
+              <i data-lucide="inbox" size="16"></i>
+              <span class="font-bold">Inbox</span>
+              <span class="ml-auto w-5 h-5 rounded-full bg-amber-500 text-[9px] font-black flex items-center justify-center text-black">3</span>
+            </button>
+          </div>
+          <div class="pt-3 border-t border-[#30363d]/50 p-2">
+            <button class="flex items-center w-full p-3 rounded-xl gap-2 text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white font-bold">
+              <i data-lucide="upload" size="14"></i>
+              <span>Push (3)</span>
+            </button>
+          </div>
+        </div>
+        <div class="flex-1 min-w-[200px]">
+          <p class="text-xs text-[#8b949e]">
+            <strong>未配信バッジ</strong>: Inbox 横に未配信 Operation 数を表示（手動同期モード時のみ）<br>
+            <strong>Push ボタン</strong>: 未配信 Operation を一括送信
+          </p>
+          <p class="mockup-note">Phase 4</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. Settings > チーム -->
+    <section id="settings-team">
+      <div class="section-label">2. Settings > チーム</div>
+      <div class="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 space-y-6">
+        <!-- チーム作成・招待コード発行 -->
+        <div>
+          <h3 class="text-sm font-bold text-white mb-2">チーム作成・招待</h3>
+          <div class="flex flex-wrap gap-3 mb-3">
+            <button class="h-8 px-4 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white flex items-center gap-2">
+              <i data-lucide="users" size="14"></i>
+              チームを作成
+            </button>
+            <button class="h-8 px-4 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-xs font-bold text-white flex items-center gap-2">
+              <i data-lucide="link" size="14"></i>
+              招待コードを発行
+            </button>
+          </div>
+          <p class="mockup-note">Phase 1</p>
+        </div>
+
+        <!-- 招待コード発行モーダル（有効期限選択） -->
+        <div class="p-4 bg-[#0d1117] border border-[#30363d] rounded-xl">
+          <h4 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">招待コード発行</h4>
+          <div class="space-y-2 mb-3">
+            <label class="block text-[10px] text-[#8b949e]">有効期限</label>
+            <select class="w-full sm:w-48 bg-[#161b22] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-white">
+              <option>15分</option>
+              <option selected>1時間（デフォルト）</option>
+              <option>24時間</option>
+              <option>無期限</option>
+            </select>
+          </div>
+          <div class="flex gap-2">
+            <div class="flex-1 bg-[#161b22] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-[#484f58] font-mono">
+              KASTRIX-X7K2-9PQR
+            </div>
+            <button class="px-3 py-2 bg-[#30363d] rounded-xl text-[10px] font-bold text-white">
+              <i data-lucide="copy" size="14"></i>
+            </button>
+          </div>
+          <p class="mockup-note">Phase 2</p>
+        </div>
+
+        <!-- 招待コード一覧 -->
+        <div>
+          <h3 class="text-sm font-bold text-white mb-2">発行済みコード一覧</h3>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between p-3 bg-[#0d1117] border border-[#30363d] rounded-xl">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-mono text-white">KASTRIX-X7K2-9PQR</span>
+                <span class="text-[9px] text-amber-400">残り43分</span>
+              </div>
+              <button class="px-2 py-1 text-[9px] font-bold text-red-400 hover:bg-red-500/10 rounded-lg">無効化</button>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-[#0d1117] border border-[#30363d] rounded-xl">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-mono text-white">KASTRIX-AB3C-7XYZ</span>
+                <span class="text-[9px] text-[#8b949e]">残り2時間</span>
+              </div>
+              <button class="px-2 py-1 text-[9px] font-bold text-red-400 hover:bg-red-500/10 rounded-lg">無効化</button>
+            </div>
+          </div>
+          <p class="mockup-note">Phase 4 — Settings > チーム > 招待コード一覧</p>
+        </div>
+
+        <!-- 同期モード -->
+        <div>
+          <h3 class="text-sm font-bold text-white mb-2">同期モード</h3>
+          <p class="text-[10px] text-[#8b949e] mb-3">変更をチームに配信するタイミングを選択（ローカルのみ保存）</p>
+          <div class="flex gap-4">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="sync-mode" checked class="accent-indigo-500">
+              <span class="text-xs">自動同期（デフォルト）</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="sync-mode" class="accent-indigo-500">
+              <span class="text-xs">手動同期</span>
+            </label>
+          </div>
+          <p class="mockup-note">Phase 4</p>
+        </div>
+
+        <!-- 招待コード入力（参加する側） -->
+        <div class="pt-4 border-t border-[#30363d]">
+          <h3 class="text-sm font-bold text-white mb-2">チームに参加する</h3>
+          <div class="flex gap-2">
+            <input type="text" placeholder="KASTRIX-XXXX-XXXX" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-white placeholder-[#484f58] font-mono">
+            <button class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white">参加する</button>
+          </div>
+          <p class="mockup-note">Phase 1</p>
+        </div>
+
+        <!-- メンバー管理 -->
+        <div>
+          <h3 class="text-sm font-bold text-white mb-2">メンバー一覧</h3>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between p-3 bg-[#0d1117] border border-[#30363d] rounded-xl">
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400 text-[10px] font-bold">H</div>
+                <div>
+                  <span class="text-xs font-bold text-white">Host (you)</span>
+                  <span class="block text-[9px] text-[#484f58] font-mono">EndpointID: abc123...</span>
+                </div>
+              </div>
+              <span class="px-2 py-0.5 rounded text-[8px] font-bold bg-indigo-500/20 text-indigo-400">HOST</span>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-[#0d1117] border border-[#30363d] rounded-xl">
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-[10px] font-bold">C</div>
+                <div>
+                  <span class="text-xs font-bold text-white">CO-HOST</span>
+                  <span class="block text-[9px] text-[#484f58] font-mono">EndpointID: def456...</span>
+                </div>
+              </div>
+              <div class="flex gap-1">
+                <button class="px-2 py-1 text-[9px] font-bold text-[#8b949e] hover:bg-[#30363d] rounded-lg">ロール変更</button>
+                <button class="px-2 py-1 text-[9px] font-bold text-amber-400 hover:bg-amber-500/10 rounded-lg">キック</button>
+              </div>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-[#0d1117] border border-[#30363d] rounded-xl">
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-lg bg-[#30363d] flex items-center justify-center text-[#8b949e] text-[10px] font-bold">M</div>
+                <div>
+                  <span class="text-xs font-bold text-white">Member</span>
+                  <span class="block text-[9px] text-[#484f58] font-mono">EndpointID: ghi789...</span>
+                </div>
+              </div>
+              <button class="px-2 py-1 text-[9px] font-bold text-red-400 hover:bg-red-500/10 rounded-lg">ブロック</button>
+            </div>
+          </div>
+          <p class="text-[9px] text-amber-400/80 mt-3 flex items-start gap-2">
+            <i data-lucide="alert-triangle" size="12" class="shrink-0 mt-0.5"></i>
+            Kastrixを再インストールすることでブロックが回避される可能性があります。ホスト承認で対応してください。
+          </p>
+          <p class="mockup-note">Phase 5</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Inbox 参加申請 -->
+    <section id="inbox">
+      <div class="section-label">3. Inbox — 参加申請セクション</div>
+      <div class="bg-[#161b22] border border-[#30363d] rounded-2xl overflow-hidden">
+        <header class="h-14 bg-[#010409] border-b border-[#30363d] flex items-center justify-center px-4">
+          <h2 class="font-black text-[10px] tracking-[0.15em] text-[#c9d1d9] uppercase">Inbox</h2>
+        </header>
+        <div class="p-4 space-y-4">
+          <!-- 参加申請 -->
+          <div>
+            <h3 class="text-[10px] font-bold text-[#8b949e] uppercase mb-2 flex items-center gap-2">
+              <i data-lucide="user-plus" size="12"></i>
+              参加申請 <span class="text-indigo-400">[2件]</span>
+            </h3>
+            <div class="space-y-2">
+              <div class="flex items-center justify-between p-3 bg-[#0d1117] border border-[#30363d] rounded-xl gap-3">
+                <div class="min-w-0">
+                  <span class="text-xs font-bold text-white">E</span>
+                  <span class="block text-[9px] text-[#484f58] font-mono truncate">EndpointID: abc123def456...</span>
+                  <span class="text-[9px] text-[#484f58]">申請日時: 2026-03-11 10:30</span>
+                </div>
+                <div class="flex gap-1 shrink-0">
+                  <button class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-[9px] font-bold text-white">承認</button>
+                  <button class="px-3 py-1.5 bg-[#30363d] hover:bg-[#484f58] rounded-lg text-[9px] font-bold text-white">拒否</button>
+                </div>
+              </div>
+              <div class="flex items-center justify-between p-3 bg-[#0d1117] border border-[#30363d] rounded-xl gap-3">
+                <div class="min-w-0">
+                  <span class="text-xs font-bold text-white">F</span>
+                  <span class="block text-[9px] text-[#484f58] font-mono truncate">EndpointID: def456ghi789...</span>
+                  <span class="text-[9px] text-[#484f58]">申請日時: 2026-03-11 10:31</span>
+                </div>
+                <div class="flex gap-1 shrink-0">
+                  <button class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-[9px] font-bold text-white">承認</button>
+                  <button class="px-3 py-1.5 bg-[#30363d] hover:bg-[#484f58] rounded-lg text-[9px] font-bold text-white">拒否</button>
+                </div>
+              </div>
+            </div>
+            <p class="mockup-note">Phase 2 — HOST/CO-HOST が承認・拒否</p>
+          </div>
+
+          <div class="border-t border-[#30363d] pt-4">
+            <h3 class="text-[10px] font-bold text-[#8b949e] uppercase mb-2">通知</h3>
+            <div class="flex items-start gap-3 p-3 bg-[#0d1117] border border-[#30363d] rounded-xl">
+              <div class="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+                <i data-lucide="clock" size="14" class="text-amber-400"></i>
+              </div>
+              <div>
+                <span class="text-xs font-bold text-white">Due Soon</span>
+                <span class="text-[9px] text-[#484f58] ml-2">2h ago</span>
+                <p class="text-[11px] text-[#8b949e]">"Task title" is due in 2 days</p>
+              </div>
+            </div>
+            <p class="mockup-note">既存の Inbox 通知（Overdue / Due Soon / Activity）</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. 招待コード入力（参加フロー）— モーダル想定 -->
+    <section id="join-flow">
+      <div class="section-label">4. 招待コード入力 — 参加フロー（モーダル想定）</div>
+      <div class="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 max-w-md">
+        <h3 class="text-sm font-bold text-white mb-1">チームに参加</h3>
+        <p class="text-[10px] text-[#8b949e] mb-4">ホストから受け取った招待コードを入力してください。</p>
+        <input type="text" placeholder="KASTRIX-XXXX-XXXX" class="w-full bg-[#0d1117] border border-[#30363d] rounded-xl py-3 px-4 text-sm text-white placeholder-[#484f58] font-mono mb-4">
+        <div class="flex gap-2">
+          <button class="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white">参加申請を送る</button>
+          <button class="py-2.5 px-4 bg-[#30363d] hover:bg-[#484f58] rounded-xl text-xs font-bold text-white">キャンセル</button>
+        </div>
+        <p class="mockup-note mt-3">Phase 1 — コード入力後、ホスト承認待ち（Phase 2）</p>
+      </div>
+    </section>
+
+    <!-- 5. 衝突ダイアログ -->
+    <section id="conflict">
+      <div class="section-label">5. 衝突ダイアログ — local vs local</div>
+      <div class="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 max-w-md">
+        <div class="flex items-start gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
+            <i data-lucide="git-merge" size="20" class="text-amber-400"></i>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-white">同期の衝突が発生しました</h3>
+            <p class="text-[11px] text-[#8b949e] mt-1">同じタスクがオフライン中に両方で変更されています。どちらを採用しますか？</p>
+          </div>
+        </div>
+        <div class="space-y-2 mb-4">
+          <label class="flex items-start gap-3 p-3 bg-[#0d1117] border border-[#30363d] rounded-xl cursor-pointer hover:border-[#484f58]">
+            <input type="radio" name="conflict" class="accent-indigo-500 mt-1">
+            <div>
+              <span class="text-xs font-bold text-white">ローカルの変更を採用</span>
+              <p class="text-[10px] text-[#8b949e] mt-0.5">「タスクA」— ステータス: Done、更新: 10:30</p>
+            </div>
+          </label>
+          <label class="flex items-start gap-3 p-3 bg-[#0d1117] border border-[#30363d] rounded-xl cursor-pointer hover:border-[#484f58]">
+            <input type="radio" name="conflict" class="accent-indigo-500 mt-1">
+            <div>
+              <span class="text-xs font-bold text-white">受信した変更を採用</span>
+              <p class="text-[10px] text-[#8b949e] mt-0.5">「タスクA」— ステータス: In Progress、更新: 10:35</p>
+            </div>
+          </label>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white">適用</button>
+        </div>
+        <p class="mockup-note mt-3">Phase 4 — ts_source: local vs local の衝突時</p>
+      </div>
+    </section>
+
+    <!-- Phase 一覧 -->
+    <section class="border-t border-[#30363d] pt-6">
+      <div class="section-label">実装 Phase 対応表</div>
+      <table class="w-full text-xs">
+        <thead>
+          <tr class="text-[#484f58] border-b border-[#30363d]">
+            <th class="text-left py-2">UI要素</th>
+            <th class="text-left py-2">Phase</th>
+          </tr>
+        </thead>
+        <tbody class="text-[#8b949e]">
+          <tr class="border-b border-[#30363d]/50"><td class="py-2">チーム作成・招待コード発行・参加入力</td><td>1</td></tr>
+          <tr class="border-b border-[#30363d]/50"><td class="py-2">有効期限選択、Inbox 参加申請</td><td>2</td></tr>
+          <tr class="border-b border-[#30363d]/50"><td class="py-2">（DB暗号化等・UI変更なし）</td><td>3</td></tr>
+          <tr class="border-b border-[#30363d]/50"><td class="py-2">サイドバーバッジ・Push、招待コード一覧、同期モード、衝突ダイアログ</td><td>4</td></tr>
+          <tr class="border-b border-[#30363d]/50"><td class="py-2">メンバー管理、キック・ブロック、ブロック注意文</td><td>5</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>

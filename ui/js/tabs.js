@@ -17,41 +17,33 @@ function switchMainTab(tab) {
     btnTasks.classList.add('bg-[#21262d]', 'text-white', 'border-[#484f58]', 'shadow-sm');
     btnProjects.classList.remove('bg-[#21262d]', 'text-white', 'border-[#484f58]', 'shadow-sm');
     btnProjects.classList.add('text-[#8b949e]', 'bg-transparent', 'border-transparent');
-    tasksControls?.classList.remove('hidden');
-    projectsControls?.classList.add('hidden');
-    projectsControls?.classList.remove('flex');
-    addFolderBtn?.classList.add('hidden');
-    addFolderBtn?.classList.remove('flex');
-    taskFilter?.classList.remove('hidden');
-    taskFilter?.classList.add('flex');
-    projectFilter?.classList.add('hidden');
-    projectFilter?.classList.remove('flex');
+    tasksControls.style.display = 'flex';
+    projectsControls.style.display = 'none';
+    addFolderBtn.style.display = 'none';
+    taskFilter.style.display = 'flex';
+    projectFilter.style.display = 'none';
     if (currentTaskView === 'list') {
-      listView?.classList.remove('hidden');
-      kanbanView?.classList.add('hidden');
+      listView.style.display = '';
+      kanbanView.style.display = 'none';
     } else {
-      listView?.classList.add('hidden');
-      kanbanView?.classList.remove('hidden');
+      listView.style.display = 'none';
+      kanbanView.style.display = 'flex';
     }
-    projectsView?.classList.add('hidden');
+    projectsView.style.display = 'none';
     filterTasks();
   } else {
     btnProjects.classList.remove('text-[#8b949e]', 'bg-transparent', 'border-transparent');
     btnProjects.classList.add('bg-[#21262d]', 'text-white', 'border-[#484f58]', 'shadow-sm');
     btnTasks.classList.remove('bg-[#21262d]', 'text-white', 'border-[#484f58]', 'shadow-sm');
     btnTasks.classList.add('text-[#8b949e]', 'bg-transparent', 'border-transparent');
-    tasksControls?.classList.add('hidden');
-    projectsControls?.classList.remove('hidden');
-    projectsControls?.classList.add('flex');
-    addFolderBtn?.classList.remove('hidden');
-    addFolderBtn?.classList.add('flex');
-    taskFilter?.classList.add('hidden');
-    taskFilter?.classList.remove('flex');
-    projectFilter?.classList.remove('hidden');
-    projectFilter?.classList.add('flex');
-    listView?.classList.add('hidden');
-    kanbanView?.classList.add('hidden');
-    projectsView?.classList.remove('hidden');
+    tasksControls.style.display = 'none';
+    projectsControls.style.display = 'flex';
+    addFolderBtn.style.display = 'flex';
+    taskFilter.style.display = 'none';
+    projectFilter.style.display = 'flex';
+    listView.style.display = 'none';
+    kanbanView.style.display = 'none';
+    projectsView.style.display = 'block';
     renderProjects();
   }
 }
@@ -60,7 +52,7 @@ function switchMainTab(tab) {
 function addProjectTab(projectId) {
   if (!openTabs.includes(projectId)) openTabs.push(projectId);
   setActiveTab(projectId);
-  document.getElementById('project-picker')?.classList.add('hidden');
+  document.getElementById('project-picker').style.display = 'none';
 }
 
 function setActiveTab(tabId) {

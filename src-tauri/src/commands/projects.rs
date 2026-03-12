@@ -197,26 +197,44 @@ pub fn remove_project(id: String, state: State<DbState>) -> Result<(), String> {
     Ok(())
 }
 
+/// パスを vscode:// / cursor:// 用の URL パス形式に変換する。
+/// - Windows: C:\Users\xxx\proj → c:/Users/xxx/proj
+/// - Unix: /home/user/proj → /home/user/proj
+fn path_to_url_path(path: &str) -> String {
+    let normalized = path.replace('\\', "/");
+    // Windows: C:/ → c:/
+    if normalized.len() >= 2 {
+        let mut chars: Vec<char> = normalized.chars().collect();
+        if chars[0].is_ascii_alphabetic() && chars.get(1) == Some(&':') {
+            chars[0] = chars[0].to_lowercase().next().unwrap_or(chars[0]);
+        }
+        chars.into_iter().collect()
+    } else {
+        normalized
+    }
+}
+
 #[tauri::command]
 pub async fn open_in_ide(
-    app: tauri::AppHandle,
+    _app: tauri::AppHandle,
     ide: String,
-    path: String,
+    path: Option<String>,
 ) -> Result<(), String> {
-    use tauri_plugin_shell::ShellExt;
+    let path = path.ok_or("Project path is required")?;
+    let url_path = path_to_url_path(&path);
 
-    let cmd = match ide.as_str() {
-        "vscode" => "code",
-        "cursor" => "cursor",
-        "opencode" => "opencode",
+    // 公式ドキュメント準拠の URL 形式
+    // - vscode: https://code.visualstudio.com/docs/configure/command-line
+    // - cursor: VSCode フォークのため同形式。cursor:// は Linux 等で登録可能
+    // - opencode: 未公式確認のため vscode:// にフォールバック
+    let url = match ide.as_str() {
+        "vscode" => format!("vscode://file/{}/", url_path),
+        "cursor" => format!("cursor://file/{}/", url_path),
+        "opencode" => format!("vscode://file/{}/", url_path), // opencode:// 未確認のため vscode:// で試行
         _ => return Err("Unsupported IDE".into()),
     };
 
-    app.shell()
-        .command(cmd)
-        .arg(&path)
-        .spawn()
-        .map_err(|e| e.to_string())?;
+    opener::open(&url).map_err(|e| format!("Failed to open IDE: {}", e))?;
 
     Ok(())
 }

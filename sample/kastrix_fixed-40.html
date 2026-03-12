@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kastrix - Project Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+      
+      * {
+        font-family: 'Inter', sans-serif;
+      }
+      
+      .custom-scrollbar::-webkit-scrollbar { 
+        width: 4px; 
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb { 
+        background: #30363d; 
+        border-radius: 10px; 
+      }
+      .no-scrollbar::-webkit-scrollbar { 
+        display: none; 
+      }
+      .animate-in { 
+        animation: fadeIn 0.2s ease-out; 
+      }
+      @keyframes fadeIn { 
+        from { opacity: 0; transform: scale(0.98); } 
+        to { opacity: 1; transform: scale(1); } 
+      }
+      
+      /* Fix: sidebar takes no flex space on mobile (it's fixed positioned) */
+      @media (max-width: 1023px) {
+        #sidebar {
+          width: 224px !important;
+          position: fixed !important;
+        }
+        #sidebar + * {
+          margin-left: 0 !important;
+        }
+      }
+      
+      /* Fix: sidebar takes no flex space on mobile (it's fixed positioned) */
+      @media (max-width: 1023px) {
+        #sidebar {
+          width: 224px !important;
+          position: fixed !important;
+          flex-shrink: 1 !important;
+          min-width: 0 !important;
+        }
+        #sidebar + * {
+          margin-left: 0 !important;
+        }
+      }
+      
+      /* Thinner lucide icons */
+      [data-lucide] {
+        stroke-width: 1.5;
+      }
+      /* Filter/sort button icons forced small */
+      #task-filter [data-lucide],
+      #project-filter [data-lucide] {
+        width: 16px !important;
+        height: 16px !important;
+      }
+
+      /* Glass effect */
+      .glass {
+        background: rgba(1, 4, 9, 0.6);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+      }
+      
+      /* Glow effects */
+      .glow-indigo {
+        box-shadow: 0 0 15px rgba(99, 102, 241, 0.1);
+      }
+      
+      /* Mobile viewport fix */
+      @supports (height: 100dvh) {
+        .h-screen {
+          height: 100dvh;
+        }
+      }
+      
+      /* Prevent iOS zoom on input focus */
+      @media (max-width: 767px) {
+        select,
+        input,
+        button {
+          font-size: 16px;
+        }
+      }
+      
+      /* Fix for iOS Safari background-attachment */
+      .ios-fix {
+        background-attachment: scroll !important;
+      }
+      
+      /* Touch scroll optimization */
+      .touch-scroll {
+        -webkit-overflow-scrolling: touch;
+      }
+      
+      /* Prevent text zoom on iOS */
+      body {
+        -webkit-text-size-adjust: 100%;
+        -moz-text-size-adjust: 100%;
+        -ms-text-size-adjust: 100%;
+      }
+      
+      .touch-scroll {
+        -webkit-overflow-scrolling: touch;
+      }
+      
+      /* Improved contrast */
+      .text-muted {
+        color: #8b949e;
+      }
+      .text-secondary {
+        color: #484f58;
+      }
+      .text-primary {
+        color: #c9d1d9;
+      }
+      .bg-primary {
+        background-color: #0d1117;
+      }
+      .bg-secondary {
+        background-color: #010409;
+      }
+      .bg-tertiary {
+        background-color: #161b22;
+      }
+      .border-primary {
+        border-color: #30363d;
+      }
+      .border-secondary {
+        border-color: #484f58;
+      }
+      .hover-bg {
+        background-color: #161b22;
+      }
+      .hover-text {
+        color: #c9d1d9;
+      }
+      
+      /* Enhanced focus states */
+      .focus-ring {
+        box-shadow: 0 0 0 2px rgba(139, 148, 158, 0.3);
+      }
+      .focus-indigo {
+        box-shadow: 0 0 0 2px rgba(139, 148, 158, 0.3), 0 0 0 4px rgba(99, 102, 241, 0.2);
+      }
+      
+      /* Improved button states */
+      .btn-hover {
+        transition: all 0.2s ease;
+      }
+      .btn-hover:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      
+      /* Enhanced readability */
+      .text-xs-sm {
+        font-size: 0.75rem;
+      }
+      .text-sm {
+        font-size: 0.875rem;
+      }
+      .text-base {
+        font-size: 1rem;
+      }
+      
+      /* Font size consistency */
+      .text-[13px] {
+        font-size: 13px;
+      }
+      .text-[10px] {
+        font-size: 10px;
+      }
+      .text-[9px] {
+        font-size: 9px;
+      }
+      .text-[8px] {
+        font-size: 8px;
+      }
+      
+      /* Subtle animations */
+      .smooth-transition {
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      
+      /* Improved spacing */
+      .p-2-sm {
+        padding: 0.5rem;
+      }
+      .p-3-sm {
+        padding: 0.75rem;
+      }
+      .p-4-sm {
+        padding: 1rem;
+      }
+      
+      /* Enhanced focus for accessibility */
+      :focus-visible {
+        outline: 2px solid rgba(139, 148, 158, 0.6);
+        outline-offset: 2px;
+      }
+    </style>
+    
+    <!-- Fix for Tailwind CSS responsive issues -->
+    <script>
+      // Fix for mobile viewport issues
+      if (window.innerWidth <= 768) {
+        document.documentElement.style.setProperty('--tw-min-w-0', '0');
+        // Additional mobile fixes
+        document.body.classList.add('touch-scroll');
+      }
+    </script>
+  </head>
+<body class="bg-primary text-primary text-[13px] h-screen overflow-hidden">
+  <!-- Mobile Overlay -->
+  <div id="mobile-overlay" class="fixed inset-0 bg-black/50 z-20 hidden" onclick="closeMobileSidebar()"></div>
+
+  <!-- Sidebar (fixed, completely outside layout flow) -->
+  <aside id="sidebar" class="glass border border-[#30363d] flex flex-col transition-all duration-300 z-30 rounded-2xl fixed top-2 bottom-2 left-2 overflow-hidden -translate-x-[calc(100%+8px)] lg:translate-x-0" style="width:224px">
+    <div class="h-12 flex items-center justify-between px-3 shrink-0 border-b border-[#30363d]">
+      <span id="logo-text" class="font-black text-[8px] tracking-[0.25em] text-[#484f58] ml-2 uppercase">Kastrix</span>
+      <button onclick="toggleSidebar()" class="hidden lg:block p-2 hover:bg-[#161b22] rounded-xl text-[#484f58] hover:text-white transition-all">
+        <i data-lucide="chevron-left" size="14"></i>
+      </button>
+    </div>
+    <div class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-3">
+      <div class="space-y-0.5">
+        <button onclick="setActiveMenu('overview')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="overview">
+          <i data-lucide="layout-grid" size="16"></i>
+          <span class="nav-label font-bold tracking-wide">Overview</span>
+        </button>
+        <button onclick="setActiveMenu('logs')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="logs">
+          <i data-lucide="activity" size="16"></i>
+          <span class="nav-label font-bold tracking-wide">Activity Logs</span>
+        </button>
+        <button onclick="setActiveMenu('inbox')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="inbox">
+          <i data-lucide="inbox" size="16"></i>
+          <span class="nav-label font-bold tracking-wide">Inbox</span>
+        </button>
+      </div>
+      <div class="pt-3 border-t border-[#30363d]/50 space-y-0.5">
+        <button onclick="setActiveMenu('analytics')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="analytics">
+          <i data-lucide="bar-chart-3" size="16"></i>
+          <span class="nav-label font-bold tracking-wide">Analytics</span>
+        </button>
+        <button onclick="setActiveMenu('settings')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="settings">
+          <i data-lucide="settings" size="16"></i>
+          <span class="nav-label font-bold tracking-wide">Settings</span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main area: full width on mobile, offset on PC to make room for sidebar -->
+  <div id="main-area" class="h-full p-2 lg:pl-[240px] overflow-hidden">
+    <div class="h-full flex flex-col min-w-0 bg-[#0d1117] rounded-2xl border border-[#30363d] overflow-hidden shadow-inner relative">
+      
+      <!-- Mobile Header -->
+      <div class="lg:hidden h-10 bg-[#010409] border-b border-[#30363d] flex items-center justify-between px-2 sm:px-3 shrink-0">
+        <button onclick="openMobileSidebar()" class="p-2 hover:bg-[#161b22] rounded-xl text-[#8b949e] hover:text-white transition-all">
+          <i data-lucide="menu" size="16"></i>
+        </button>
+        <span id="mobile-page-title" class="font-black text-[10px] tracking-[0.15em] text-[#c9d1d9] uppercase">Overview</span>
+        <div class="w-8"></div>
+      </div>
+      
+      <!-- Overview View -->
+        <div id="view-overview" class="view-section flex-1 flex flex-col overflow-y-auto touch-scroll">
+          <!-- Tabs -->
+          <div class="h-9 sm:h-10 bg-[#010409] border-b border-[#30363d] flex items-center px-2 sm:px-3 gap-1 sm:gap-2 overflow-x-auto no-scrollbar shrink-0">
+            <div class="tab-item flex items-center h-6 sm:h-7 px-2.5 sm:px-3 min-w-[70px] sm:min-w-[90px] cursor-pointer text-[9px] sm:text-xs transition-all rounded-lg sm:rounded-xl relative border bg-transparent border-transparent text-[#8b949e] hover:bg-[#161b22] hover:text-[#c9d1d9]" data-tab="projects" onclick="switchMainTab('projects')">
+              <div class="flex items-center gap-1 sm:gap-1.5">
+                <i data-lucide="folder-git-2" size="10" class="sm:w-3 sm:h-3"></i>
+                <span class="font-bold tracking-tight">Projects</span>
+              </div>
+            </div>
+            <div class="tab-item flex items-center h-6 sm:h-7 px-2.5 sm:px-3 min-w-[70px] sm:min-w-[90px] cursor-pointer text-[9px] sm:text-xs transition-all rounded-lg sm:rounded-xl relative border bg-[#21262d] text-white border-[#484f58] shadow-sm" data-tab="tasks" onclick="switchMainTab('tasks')">
+              <div class="flex items-center gap-1 sm:gap-1.5">
+                <i data-lucide="check-square" size="10" class="sm:w-3 sm:h-3"></i>
+                <span class="font-bold tracking-tight">Tasks</span>
+              </div>
+            </div>
+          </div>
+        
+        <!-- Header -->
+        <header class="h-14 shrink-0 border-b border-[#30363d] flex items-center justify-between px-3 sm:px-6">
+          <div class="flex items-center gap-2 min-w-0">
+            <!-- Tasks View Toggle (List/Board) -->
+            <div id="tasks-view-controls" class="flex bg-[#010409] border border-[#30363d] rounded-xl p-0.5">
+              <button onclick="setTaskView('list')" id="btn-task-list" class="view-btn p-1.5 rounded-lg bg-[#30363d] text-white transition-all" title="List">
+                <i data-lucide="list" size="14"></i>
+              </button>
+              <button onclick="setTaskView('kanban')" id="btn-task-kanban" class="view-btn p-1.5 rounded-lg text-[#8b949e] hover:text-white transition-all" title="Board">
+                <i data-lucide="layout-columns" size="14"></i>
+              </button>
+            </div>
+
+            <!-- Task Filter Buttons -->
+            <div id="task-filter" class="hidden sm:flex items-center gap-1.5">
+
+              <!-- Status filter -->
+              <div class="relative">
+                <button onclick="toggleDropdown('dd-status')" class="flex items-center gap-1.5 h-7 px-2.5 bg-[#010409] border border-[#30363d] rounded-xl text-[9px] font-bold text-[#8b949e] hover:text-white hover:border-[#484f58] transition-all">
+                  <i data-lucide="filter" size="7"></i>
+                  <span id="label-status">All Status</span>
+                  <i data-lucide="chevron-down" size="7" class="text-[#484f58]"></i>
+                </button>
+                <div id="dd-status" class="hidden absolute top-9 left-0 bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl z-50 min-w-[130px] py-1 animate-in">
+                  <button onclick="setTaskStatus('all','All Status')"      class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">All Status</button>
+                  <button onclick="setTaskStatus('todo','Todo')"           class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Todo</button>
+                  <button onclick="setTaskStatus('in-progress','In Progress')" class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">In Progress</button>
+                  <button onclick="setTaskStatus('done','Done')"           class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Done</button>
+                </div>
+              </div>
+
+              <!-- Sort -->
+              <div class="relative">
+                <button onclick="toggleDropdown('dd-sort')" class="flex items-center gap-1.5 h-7 px-2.5 bg-[#010409] border border-[#30363d] rounded-xl text-[9px] font-bold text-[#8b949e] hover:text-white hover:border-[#484f58] transition-all">
+                  <i data-lucide="arrow-up-down" size="7"></i>
+                  <span id="label-sort">Date</span>
+                  <i data-lucide="chevron-down" size="7" class="text-[#484f58]"></i>
+                </button>
+                <div id="dd-sort" class="hidden absolute top-9 left-0 bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl z-50 min-w-[130px] py-1 animate-in">
+                  <button onclick="setTaskSort('date','Date')"         class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Date</button>
+                  <button onclick="setTaskSort('priority','Priority')" class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Priority</button>
+                  <button onclick="setTaskSort('title','Title')"       class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Title</button>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Project Filter Buttons -->
+            <div id="project-filter" class="hidden sm:flex items-center gap-1.5">
+
+              <!-- Language filter -->
+              <div class="relative">
+                <button onclick="toggleDropdown('dd-lang')" class="flex items-center gap-1.5 h-7 px-2.5 bg-[#010409] border border-[#30363d] rounded-xl text-[9px] font-bold text-[#8b949e] hover:text-white hover:border-[#484f58] transition-all">
+                  <i data-lucide="filter" size="7"></i>
+                  <span id="label-lang">All Languages</span>
+                  <i data-lucide="chevron-down" size="7" class="text-[#484f58]"></i>
+                </button>
+                <div id="dd-lang" class="hidden absolute top-9 left-0 bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl z-50 min-w-[140px] py-1 animate-in">
+                  <button onclick="setProjLang('all','All Languages')"    class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">All Languages</button>
+                  <button onclick="setProjLang('javascript','JavaScript')" class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">JavaScript</button>
+                  <button onclick="setProjLang('typescript','TypeScript')" class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">TypeScript</button>
+                  <button onclick="setProjLang('python','Python')"         class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Python</button>
+                  <button onclick="setProjLang('rust','Rust')"             class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Rust</button>
+                  <button onclick="setProjLang('go','Go')"                 class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Go</button>
+                </div>
+              </div>
+
+              <!-- Project Sort -->
+              <div class="relative">
+                <button onclick="toggleDropdown('dd-proj-sort')" class="flex items-center gap-1.5 h-7 px-2.5 bg-[#010409] border border-[#30363d] rounded-xl text-[9px] font-bold text-[#8b949e] hover:text-white hover:border-[#484f58] transition-all">
+                  <i data-lucide="arrow-up-down" size="7"></i>
+                  <span id="label-proj-sort">Modified</span>
+                  <i data-lucide="chevron-down" size="7" class="text-[#484f58]"></i>
+                </button>
+                <div id="dd-proj-sort" class="hidden absolute top-9 left-0 bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl z-50 min-w-[130px] py-1 animate-in">
+                  <button onclick="setProjSort('modified','Modified')" class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Modified</button>
+                  <button onclick="setProjSort('name','Name')"         class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Name</button>
+                  <button onclick="setProjSort('git','Git')"           class="dd-item w-full text-left px-3 py-1.5 text-[10px] font-bold text-[#8b949e] hover:text-white hover:bg-[#21262d] transition-all">Git</button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Projects View Toggle (Grid/List) -->
+          <div id="projects-view-controls" class="hidden bg-[#010409] border border-[#30363d] rounded-xl p-0.5">
+            <button onclick="setProjectViewMode('grid')" id="btn-project-grid" class="view-btn p-1.5 rounded-lg bg-[#30363d] text-white transition-all" title="Grid">
+              <i data-lucide="layout-grid" size="12"></i>
+            </button>
+            <button onclick="setProjectViewMode('list')" id="btn-project-list" class="view-btn p-1.5 rounded-lg text-[#8b949e] hover:text-white transition-all" title="List">
+              <i data-lucide="list" size="12"></i>
+            </button>
+          </div>
+        </header>
+
+<!-- List View -->
+        <div id="list-view" class="view-mode overflow-hidden custom-scrollbar">
+          <table class="w-full text-left border-separate border-spacing-y-2">
+            <thead>
+              <tr class="text-[#484f58] text-[9px] uppercase font-black tracking-widest">
+                <th class="px-4">Name</th>
+                <th class="px-4 hidden sm:table-cell">Assignee</th>
+                <th class="px-4 text-right">Status</th>
+              </tr>
+            </thead>
+            <tbody id="list-view-body"></tbody>
+          </table>
+        </div>
+
+        <!-- Kanban View -->
+        <div id="kanban-view" class="view-mode flex-1 overflow-auto custom-scrollbar hidden">
+          <div class="flex flex-col lg:flex-row gap-4 lg:gap-6 h-full">
+            <!-- Todo Column -->
+            <div class="flex-1 min-w-0 lg:min-w-[280px] flex flex-col">
+              <div class="flex items-center gap-2 mb-3 lg:mb-4">
+                <div class="w-2 h-2 rounded-full bg-slate-400"></div>
+                <span class="text-[10px] font-black uppercase tracking-widest text-[#8b949e]">Todo</span>
+                <span class="text-[10px] text-[#484f58] font-bold" id="count-todo">0</span>
+              </div>
+              <div class="space-y-2 lg:space-y-3" id="kanban-todo"></div>
+            </div>
+
+            <!-- In Progress Column -->
+            <div class="flex-1 min-w-0 lg:min-w-[280px] flex flex-col">
+              <div class="flex items-center gap-2 mb-3 lg:mb-4">
+                <div class="w-2 h-2 rounded-full bg-blue-400"></div>
+                <span class="text-[10px] font-black uppercase tracking-widest text-[#8b949e]">In Progress</span>
+                <span class="text-[10px] text-[#484f58] font-bold" id="count-inprogress">0</span>
+              </div>
+              <div class="space-y-2 lg:space-y-3" id="kanban-inprogress"></div>
+            </div>
+
+            <!-- Done Column -->
+            <div class="flex-1 min-w-0 lg:min-w-[280px] flex flex-col">
+              <div class="flex items-center gap-2 mb-3 lg:mb-4">
+                <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
+                <span class="text-[10px] font-black uppercase tracking-widest text-[#8b949e]">Done</span>
+                <span class="text-[10px] text-[#484f58] font-bold" id="count-done">0</span>
+              </div>
+              <div class="space-y-3" id="kanban-done"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Projects View -->
+        <div id="view-projects" class="view-section overflow-auto custom-scrollbar hidden p-3">
+          <!-- Grid View -->
+          <div id="projects-grid-view" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <!-- Project cards will be rendered here -->
+          </div>
+<!-- List View -->
+          <div id="projects-list-view" class="hidden">
+            <table class="w-full text-left border-separate border-spacing-y-1 sm:border-spacing-y-2">
+              <thead>
+                <tr class="text-[#484f58] text-[8px] sm:text-[9px] uppercase font-black tracking-widest px-4">
+                  <th class="px-2 sm:px-4 w-1/2">Name</th>
+                  <th class="px-4 w-1/2 text-right">Updated</th>
+                </tr>
+              </thead>
+              <tbody id="projects-list-body">
+                <tr class="border-b border-[#30363d] hover:bg-[#161b22]">
+                  <td class="p-2 sm:p-4">
+                    <div class="flex items-center gap-2 sm:gap-3">
+                      <div class="w-5 h-5 rounded-md bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-[9px] font-black">M</div>
+                      <div>
+                        <p class="text-sm font-bold text-white">Marketing Web</p>
+                        <p class="text-[8px] sm:text-[9px] text-[#8b949e]">C:\Projects\marketing-web</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="p-2 sm:p-4 text-right">
+                    <div class="space-y-0.5 sm:space-y-1 text-right">
+                      <p class="text-[8px] sm:text-[9px] text-[#8b949e]">Git: 2024-01-14 09:15</p>
+                      <p class="text-[8px] sm:text-[9px] text-[#8b949e]">Local: 2024-01-15 14:30</p>
+                    </div>
+                  </td>
+                  <td class="p-2 sm:p-4 text-right">
+                  </td>
+                </tr>
+                <tr class="border-b border-[#30363d] hover:bg-[#161b22]">
+                  <td class="p-2 sm:p-4">
+                    <div class="flex items-center gap-2 sm:gap-3">
+                      <div class="w-5 h-5 rounded-md bg-purple-500/20 text-purple-400 flex items-center justify-center text-[9px] font-black">A</div>
+                      <div>
+                        <p class="text-sm font-bold text-white">Mobile App</p>
+                        <p class="text-[8px] sm:text-[9px] text-[#8b949e]">C:\Projects\mobile-app</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="p-2 sm:p-4 text-right">
+                    <div class="space-y-0.5 sm:space-y-1 text-right">
+                      <p class="text-[8px] sm:text-[9px] text-[#8b949e]">Git: 2024-01-13 16:45</p>
+                      <p class="text-[8px] sm:text-[9px] text-[#8b949e]">Local: 2024-01-14 10:30</p>
+                    </div>
+                  </td>
+                  <td class="p-2 sm:p-4 text-right">
+                  </td>
+                </tr>
+                <tr class="border-b border-[#30363d] hover:bg-[#161b22]">
+                  <td class="p-2 sm:p-4">
+                    <div class="flex items-center gap-2 sm:gap-3">
+                      <div class="w-5 h-5 rounded-md bg-pink-500/20 text-pink-400 flex items-center justify-center text-[9px] font-black">D</div>
+                      <div>
+                        <p class="text-sm font-bold text-white">Design System</p>
+                        <p class="text-[8px] sm:text-[9px] text-[#8b949e]">C:\Projects\design-system</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="p-2 sm:p-4 text-right">
+                    <div class="space-y-0.5 sm:space-y-1 text-right">
+                      <p class="text-[8px] sm:text-[9px] text-[#8b949e]">Git: 2024-01-12 14:20</p>
+                      <p class="text-[8px] sm:text-[9px] text-[#8b949e]">Local: 2024-01-13 08:15</p>
+                    </div>
+                  </td>
+                  <td class="p-2 sm:p-4 text-right">
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Task Detail Modal -->
+      <div id="task-modal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeTaskModal()"></div>
+        <div class="absolute right-0 top-0 h-full w-full sm:w-[480px] bg-[#0d1117] border-l border-[#30363d] shadow-2xl transform transition-transform duration-300 translate-x-full flex flex-col" id="task-modal-content">
+            <div class="flex-1 overflow-y-auto custom-scrollbar p-6">
+              <div class="space-y-6">
+                <div>
+                  <h2 id="modal-task-title" class="text-xl font-bold text-white leading-tight">タスクタイトル</h2>
+                </div>
+                <div class="flex items-center gap-3">
+                  <span id="modal-task-status" class="px-3 py-1 rounded-lg text-[10px] font-black border">STATUS</span>
+                  <span id="modal-task-priority" class="px-3 py-1 rounded-lg text-[10px] font-black">PRIORITY</span>
+                </div>
+                <div class="flex items-center gap-3 p-4 bg-[#161b22] border border-[#30363d] rounded-2xl">
+                  <div id="modal-project-icon" class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-sm font-black">M</div>
+                  <div>
+                    <p class="text-[10px] text-[#484f58] font-bold uppercase tracking-wider">Project</p>
+                    <p id="modal-project-name" class="text-sm font-bold text-white">Marketing Web</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-xl bg-[#161b22] border border-[#30363d] flex items-center justify-center">
+                    <i data-lucide="user" size="18" class="text-[#8b949e]"></i>
+                  </div>
+                  <div>
+                    <p class="text-[10px] text-[#484f58] font-bold uppercase tracking-wider">Assignee</p>
+                    <p id="modal-assignee" class="text-sm font-bold text-white">Tanaka</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-xl bg-[#161b22] border border-[#30363d] flex items-center justify-center">
+                    <i data-lucide="calendar" size="18" class="text-[#8b949e]"></i>
+                  </div>
+                  <div>
+                    <p class="text-[10px] text-[#484f58] font-bold uppercase tracking-wider">Due Date</p>
+                    <p id="modal-date" class="text-sm font-bold text-white">2023-10-27 11:00</p>
+                  </div>
+                </div>
+                <div class="pt-4 border-t border-[#30363d]">
+                  <p class="text-[10px] text-[#484f58] font-black uppercase tracking-widest mb-3">Description</p>
+                  <p class="text-[#c9d1d9] text-sm leading-relaxed">タスクの詳細説明がここに表示されます。必要に応じて編集できます。</p>
+                </div>
+              </div>
+            </div>
+            <div class="h-16 border-t border-[#30363d] flex items-center justify-end gap-3 px-6 bg-[#010409]">
+              <button onclick="closeTaskModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-[#8b949e] hover:text-white transition-all">Close</button>
+              <button class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white transition-all">Edit Task</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Project Picker Dropdown -->
+      <div id="project-picker" class="absolute top-12 left-[200px] w-56 bg-[#161b22] border border-[#30363d] rounded-2xl shadow-2xl hidden z-50">
+        <div class="p-3 border-b border-[#30363d]">
+          <p class="text-[10px] font-black text-[#484f58] uppercase tracking-widest">Select Project</p>
+        </div>
+        <div class="p-2 space-y-1">
+          <button onclick="addProjectTab('proj-1')" class="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-[#21262d] transition-all">
+            <span class="w-6 h-6 rounded-md bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-[9px] font-black">M</span>
+            <span class="text-xs font-bold text-white">Marketing Web</span>
+          </button>
+          <button onclick="addProjectTab('proj-2')" class="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-[#21262d] transition-all">
+            <span class="w-6 h-6 rounded-md bg-purple-500/20 text-purple-400 flex items-center justify-center text-[9px] font-black">A</span>
+            <span class="text-xs font-bold text-white">Mobile App</span>
+          </button>
+          <button onclick="addProjectTab('proj-3')" class="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-[#21262d] transition-all">
+            <span class="w-6 h-6 rounded-md bg-pink-500/20 text-pink-400 flex items-center justify-center text-[9px] font-black">D</span>
+            <span class="text-xs font-bold text-white">Design System</span>
+          </button>
+        </div>
+      </div>
+
+<!-- Project Detail Modal -->
+      <div id="project-detail-modal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeProjectDetailModal()"></div>
+        <div class="absolute right-0 top-0 h-full w-full sm:w-[480px] bg-[#0d1117] border-l border-[#30363d] shadow-2xl transform transition-transform duration-300 translate-x-full" id="project-detail-modal-content">
+          <div class="h-full flex flex-col">
+            <!-- Modal Header -->
+            <div class="h-12 border-b border-[#30363d] flex items-center justify-between px-4 bg-[#161b22]">
+              <div class="flex items-center gap-3">
+                <span id="project-modal-lang-badge" class="px-2 py-0.5 rounded text-[9px] font-black bg-[#2b748920] text-[#2b7489]">TS</span>
+                <h2 id="project-modal-name" class="font-bold text-sm text-white">Project Name</h2>
+              </div>
+              <button onclick="closeProjectDetailModal()" class="p-2 hover:bg-[#21262d] rounded-lg text-[#8b949e] hover:text-white transition-colors">
+                <i data-lucide="x" size="16"></i>
+              </button>
+            </div>
+            <!-- Modal Body -->
+            <div class="flex-1 overflow-y-auto custom-scrollbar p-4">
+              <div class="space-y-4">
+                <!-- Date Info -->
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="bg-[#161b22] rounded-xl p-3 border border-[#30363d]">
+                    <p class="text-[9px] text-[#484f58] uppercase font-bold mb-1">Local Modified</p>
+                    <p id="project-modal-local" class="text-xs text-white font-medium">2024-01-15 14:30</p>
+                  </div>
+                  <div class="bg-[#161b22] rounded-xl p-3 border border-[#30363d]">
+                    <p class="text-[9px] text-[#484f58] uppercase font-bold mb-1">Git Last Commit</p>
+                    <p id="project-modal-git" class="text-xs text-white font-medium">2024-01-14 09:15</p>
+                  </div>
+                </div>
+                
+                <!-- Path -->
+                <div class="bg-[#161b22] rounded-xl p-3 border border-[#30363d]">
+                  <p class="text-[9px] text-[#484f58] uppercase font-bold mb-1">Path</p>
+                  <p id="project-modal-path" class="text-xs text-[#8b949e] font-mono">C:\Projects\project</p>
+                </div>
+                
+                <!-- IDE Launch Buttons -->
+                <div>
+                  <p class="text-[9px] text-[#484f58] uppercase font-bold mb-2">Open in IDE</p>
+                  <div class="flex flex-col sm:flex-row gap-2">
+                    <button onclick="launchIDE('vscode')" class="flex-1 flex items-center justify-center gap-2 px-3 py-2 sm:py-2.5 bg-[#007acc] hover:bg-[#0066aa] rounded-xl text-xs font-bold text-white transition-colors">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M17.583.063a1.5 1.5 0 0 1 1.342 1.2l4.5 18a1.5 1.5 0 0 1-1.2 1.842l-6 1.5a1.5 1.5 0 0 1-1.842-1.2l-1.5-6 3.6-3.6-3.6-3.6 1.5-6A1.5 1.5 0 0 1 17.583.063zm-9 6l-6 6 6 6 3-3-3-3 3-3-3-3z"/>
+                      </svg>
+                      VSCode
+                    </button>
+                    <button onclick="launchIDE('cursor')" class="flex-1 flex items-center justify-center gap-2 px-3 py-2 sm:py-2.5 bg-[#6366f1] hover:bg-[#5558e0] rounded-xl text-xs font-bold text-white transition-colors">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                      </svg>
+                      Cursor
+                    </button>
+                    <button onclick="launchIDE('opencodes')" class="flex-1 flex items-center justify-center gap-2 px-3 py-2 sm:py-2.5 bg-[#10b981] hover:bg-[#059669] rounded-xl text-xs font-bold text-white transition-colors">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                      </svg>
+                      OpenCode
+                    </button>
+                  </div>
+                </div>
+                
+                <!-- README -->
+                <div>
+                  <div class="flex items-center gap-2 mb-2">
+                    <i data-lucide="file-text" size="12" class="text-[#8b949e]"></i>
+                    <h3 class="font-bold text-[9px] uppercase tracking-wider text-[#8b949e]">README.md</h3>
+                  </div>
+                  <div id="project-modal-readme" class="bg-[#161b22] rounded-xl p-3 sm:p-4 border border-[#30363d] text-sm text-[#c9d1d9]">
+                    <p>Project description would appear here...</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="h-12 border-t border-[#30363d] flex items-center justify-end gap-2 sm:gap-3 px-4 sm:px-6 bg-[#161b22]">
+              <button onclick="closeProjectDetailModal()" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-bold text-[#8b949e] hover:text-white transition-colors">Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+        <!-- Logs View -->
+        <div id="view-logs" class="view-section flex-1 flex flex-col overflow-hidden hidden">
+          <div class="h-14 shrink-0 border-b border-[#30363d] hidden lg:flex items-center px-6">
+            <h1 class="font-black text-sm tracking-wide text-white">Activity Logs</h1>
+          </div>
+          <div class="flex-1 overflow-auto custom-scrollbar p-4 sm:p-6">
+            <p class="text-[#8b949e] text-sm">Logs will appear here.</p>
+            <div id="logs-list" class="mt-4 space-y-2"></div>
+          </div>
+        </div>
+
+        <!-- Inbox View -->
+        <div id="view-inbox" class="view-section flex-1 flex flex-col overflow-hidden hidden">
+          <div class="h-14 shrink-0 border-b border-[#30363d] hidden lg:flex items-center px-6">
+            <h1 class="font-black text-sm tracking-wide text-white">Inbox</h1>
+          </div>
+          <div class="flex-1 overflow-auto custom-scrollbar p-4 sm:p-6">
+            <p class="text-[#8b949e] text-sm">Messages and notifications will appear here.</p>
+            <div id="inbox-list" class="mt-4 space-y-2"></div>
+          </div>
+        </div>
+
+        <!-- Analytics View -->
+        <div id="view-analytics" class="view-section flex-1 flex flex-col overflow-hidden hidden">
+          <div class="h-14 shrink-0 border-b border-[#30363d] hidden lg:flex items-center px-6">
+            <h1 class="font-black text-sm tracking-wide text-white">Analytics</h1>
+          </div>
+          <div class="flex-1 overflow-auto custom-scrollbar p-4 sm:p-6">
+            <p class="text-[#8b949e] text-sm">Charts and metrics will appear here.</p>
+          </div>
+        </div>
+
+        <!-- Settings View -->
+        <div id="view-settings" class="view-section flex-1 flex flex-col overflow-hidden hidden">
+          <div class="h-14 shrink-0 border-b border-[#30363d] hidden lg:flex items-center px-6">
+            <h1 class="font-black text-sm tracking-wide text-white">Settings</h1>
+          </div>
+          <div class="flex-1 overflow-auto custom-scrollbar p-4 sm:p-6">
+            <p class="text-[#8b949e] text-sm">Application settings will appear here.</p>
+          </div>
+        </div>
+
+        <!-- AI Chat -->
+      <button onclick="toggleAiChat()" class="absolute right-6 bottom-6 w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center shadow-lg hover:bg-indigo-500 transition-all z-40">
+        <i data-lucide="sparkles" size="20" class="text-white"></i>
+      </button>
+
+      <div id="ai-chat" class="absolute right-6 bottom-20 w-80 h-[480px] bg-[#161b22] border border-[#30363d] shadow-2xl rounded-[32px] flex flex-col overflow-hidden hidden z-50">
+        <div class="p-4 bg-[#010409] border-b border-[#30363d] flex justify-between items-center">
+          <span class="text-[10px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-2">
+            <i data-lucide="sparkles" size="14"></i> Log Analyzer
+          </span>
+          <i data-lucide="x" size="18" class="cursor-pointer text-[#484f58]" onclick="toggleAiChat()"></i>
+        </div>
+        <div class="flex-1 p-4 overflow-y-auto space-y-4 custom-scrollbar text-[12px]">
+          <div class="flex justify-start">
+            <div class="max-w-[85%] px-4 py-2 rounded-2xl bg-[#0d1117] border border-[#30363d] text-[#c9d1d9]">「Logs」画面に統合し、E��去のアクチE��ビティ履歴のみを表示するように変更しました、E/div>
+          </div>
+        </div>
+        <form class="p-4 border-t border-[#30363d]" onsubmit="event.preventDefault();">
+          <input placeholder="Ask about activity history..." class="w-full bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-4 text-xs outline-none focus:ring-1 ring-amber-500/50" />
+        </form>
+      </div>
+    </div>
+  </div>
+
+<!-- Hidden selects for state (used by filterTasks / renderProjects) -->
+<select id="task-status-filter" class="hidden"><option value="all" selected>all</option><option value="todo">todo</option><option value="in-progress">in-progress</option><option value="done">done</option></select>
+<select id="task-sort" class="hidden"><option value="date" selected>date</option><option value="priority">priority</option><option value="title">title</option></select>
+<select id="project-lang-filter" class="hidden"><option value="all" selected>all</option><option value="javascript">javascript</option><option value="typescript">typescript</option><option value="python">python</option><option value="rust">rust</option><option value="go">go</option></select>
+<select id="project-sort" class="hidden"><option value="modified" selected>modified</option><option value="name">name</option><option value="git">git</option></select>
+
+<script>
+// Initialize Lucide icons
+lucide.createIcons();
+
+// Force filter/sort icon sizes after lucide renders
+function fixFilterIconSizes() {
+  ['task-filter', 'project-filter'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.querySelectorAll('svg').forEach(svg => {
+      svg.setAttribute('width', '16');
+      svg.setAttribute('height', '16');
+    });
+  });
+}
+setTimeout(fixFilterIconSizes, 0);
+
+// Fix for mobile viewport issues
+if (window.innerWidth <= 768) {
+  document.documentElement.style.setProperty('--tw-min-w-0', '0');
+}
+
+// ── State ────────────────────────────────────────────────
+let isSidebarCollapsed = false;
+let activeMenu = 'overview';
+let currentView = 'list';
+let isAiOpen = false;
+let activeTabId = 'all';
+let openTabs = ['all', 'proj-1', 'proj-2'];
+let currentTaskView = 'list';
+let currentProjectViewMode = 'grid';
+
+// ── Data ─────────────────────────────────────────────────
+const projects = [
+  { id: 'proj-1', name: 'Marketing Web', color: 'indigo', icon: 'M' },
+  { id: 'proj-2', name: 'Mobile App',    color: 'purple', icon: 'A' },
+  { id: 'proj-3', name: 'Design System', color: 'pink',   icon: 'D' }
+];
+
+const tasks = [
+  { id: '1', projectId: 'proj-1', title: 'ランディングページ制作', status: 'done',        priority: 'high',   date: '2023-10-27 11:00', assignee: 'Tanaka',  action: 'completed' },
+  { id: '2', projectId: 'proj-1', title: 'SEOキーワード選定',       status: 'in-progress', priority: 'medium', date: '2023-10-26 09:15', assignee: 'Sato',    action: 'started'   },
+  { id: '3', projectId: 'proj-2', title: 'ログイン画面の実装',       status: 'todo',        priority: 'high',   date: '2023-10-27 11:00', assignee: 'Suzuki',  action: 'created'   },
+  { id: '4', projectId: 'proj-3', title: 'カラーパレット定義',       status: 'done',        priority: 'low',    date: '2023-10-24 16:45', assignee: 'Ito',     action: 'completed' },
+  { id: '5', projectId: 'proj-2', title: 'APIドキュメント更新',      status: 'done',        priority: 'medium', date: '2023-10-23 10:30', assignee: 'Suzuki',  action: 'completed' }
+];
+
+const localProjects = [
+  { id: 1, name: 'lumina-dashboard',   path: 'C:\\Projects\\lumina-dashboard',    language: 'typescript', localModified: '2024-01-15 14:30', gitModified: '2024-01-14 09:15', lastCommit: 'feat: add project filtering'  },
+  { id: 2, name: 'api-gateway',        path: 'C:\\Projects\\api-gateway',          language: 'rust',       localModified: '2024-01-14 18:45', gitModified: '2024-01-14 16:20', lastCommit: 'fix: handle cors headers'     },
+  { id: 3, name: 'data-processor',     path: 'D:\\Workspace\\data-processor',      language: 'python',     localModified: '2024-01-13 11:20', gitModified: '2024-01-12 15:30', lastCommit: 'refactor: optimize pipeline'  },
+  { id: 4, name: 'portfolio-site',     path: 'C:\\Projects\\portfolio-site',       language: 'javascript', localModified: '2024-01-15 09:00', gitModified: '2024-01-15 08:45', lastCommit: 'design: update hero section'  },
+  { id: 5, name: 'ecommerce-backend',  path: 'D:\\Workspace\\ecommerce-backend',   language: 'typescript', localModified: '2024-01-14 22:15', gitModified: '2024-01-14 20:00', lastCommit: 'feat: add payment integration'},
+  { id: 6, name: 'cli-tools',          path: '~/dev/cli-tools',                       language: 'go',         localModified: '2024-01-13 16:30', gitModified: '2024-01-13 14:00', lastCommit: 'chore: update dependencies'   }
+];
+
+const langColors = {
+  javascript: { bg: 'bg-[#f1e05a20]', text: 'text-[#f1e05a]', label: 'JS' },
+  typescript: { bg: 'bg-[#2b748920]', text: 'text-[#2b7489]', label: 'TS' },
+  python:     { bg: 'bg-[#3572A520]', text: 'text-[#3572A5]', label: 'PY' },
+  rust:       { bg: 'bg-[#dea58420]', text: 'text-[#dea584]', label: 'RS' },
+  go:         { bg: 'bg-[#00ADD820]', text: 'text-[#00ADD8]', label: 'GO' }
+};
+
+// ── Sidebar ───────────────────────────────────────────────
+function toggleSidebar() {
+  isSidebarCollapsed = !isSidebarCollapsed;
+  const sidebar    = document.getElementById('sidebar');
+  const mainArea   = document.getElementById('main-area');
+  const logoText   = document.getElementById('logo-text');
+  const navLabels  = document.querySelectorAll('.nav-label');
+  if (isSidebarCollapsed) {
+    sidebar.style.width = '64px';
+    mainArea.style.paddingLeft = '72px';
+    logoText.classList.add('hidden');
+    navLabels.forEach(l => l.classList.add('hidden'));
+  } else {
+    sidebar.style.width = '224px';
+    mainArea.style.paddingLeft = '240px';
+    logoText.classList.remove('hidden');
+    navLabels.forEach(l => l.classList.remove('hidden'));
+  }
+}
+
+function openMobileSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  sidebar.style.transform = 'translateX(0)';
+  document.getElementById('mobile-overlay').classList.remove('hidden');
+}
+
+function closeMobileSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  sidebar.style.transform = 'translateX(calc(-100% - 8px))';
+  document.getElementById('mobile-overlay').classList.add('hidden');
+}
+
+function setActiveMenu(menu) {
+  activeMenu = menu;
+  const pageTitles = {
+    overview:  'Overview',
+    logs:      'Activity Logs',
+    inbox:     'Inbox',
+    analytics: 'Analytics',
+    settings:  'Settings'
+  };
+  const titleEl = document.getElementById('mobile-page-title');
+  if (titleEl) titleEl.textContent = pageTitles[menu] || '';
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    const active = btn.dataset.menu === menu;
+    btn.classList.toggle('bg-[#21262d]',    active);
+    btn.classList.toggle('text-white',       active);
+    btn.classList.toggle('border-[#484f58]', active);
+    btn.classList.toggle('shadow-sm',        active);
+  });
+  const viewMap = {
+    overview:  'view-overview',
+    logs:      'view-logs',
+    inbox:     'view-inbox',
+    analytics: 'view-analytics',
+    settings:  'view-settings'
+  };
+  document.querySelectorAll('.view-section').forEach(s => s.classList.add('hidden'));
+  document.getElementById(viewMap[menu])?.classList.remove('hidden');
+}
+
+// ── Main Tabs (Projects / Tasks) ──────────────────────────
+function switchMainTab(tab) {
+  const btnProjects    = document.querySelector('[data-tab="projects"]');
+  const btnTasks       = document.querySelector('[data-tab="tasks"]');
+  const tasksControls  = document.getElementById('tasks-view-controls');
+  const projectsControls = document.getElementById('projects-view-controls');
+  const taskFilter     = document.getElementById('task-filter');
+  const projectFilter  = document.getElementById('project-filter');
+  const listView       = document.getElementById('list-view');
+  const kanbanView     = document.getElementById('kanban-view');
+  const projectsView   = document.getElementById('view-projects');
+  if (!btnProjects || !btnTasks) return;
+
+  if (tab === 'tasks') {
+    btnTasks.classList.remove('text-[#8b949e]', 'bg-transparent', 'border-transparent');
+    btnTasks.classList.add('bg-[#21262d]', 'text-white', 'border-[#484f58]', 'shadow-sm');
+    btnProjects.classList.remove('bg-[#21262d]', 'text-white', 'border-[#484f58]', 'shadow-sm');
+    btnProjects.classList.add('text-[#8b949e]', 'bg-transparent', 'border-transparent');
+    tasksControls?.classList.remove('hidden');
+    projectsControls?.classList.add('hidden');
+    projectsControls?.classList.remove('flex');
+    taskFilter?.classList.remove('hidden');
+    taskFilter?.classList.add('flex');
+    projectFilter?.classList.add('hidden');
+    projectFilter?.classList.remove('flex');
+    if (currentTaskView === 'list') {
+      listView?.classList.remove('hidden');
+      kanbanView?.classList.add('hidden');
+    } else {
+      listView?.classList.add('hidden');
+      kanbanView?.classList.remove('hidden');
+    }
+    projectsView?.classList.add('hidden');
+    filterTasks();
+  } else {
+    btnProjects.classList.remove('text-[#8b949e]', 'bg-transparent', 'border-transparent');
+    btnProjects.classList.add('bg-[#21262d]', 'text-white', 'border-[#484f58]', 'shadow-sm');
+    btnTasks.classList.remove('bg-[#21262d]', 'text-white', 'border-[#484f58]', 'shadow-sm');
+    btnTasks.classList.add('text-[#8b949e]', 'bg-transparent', 'border-transparent');
+    tasksControls?.classList.add('hidden');
+    projectsControls?.classList.remove('hidden');
+    projectsControls?.classList.add('flex');
+    taskFilter?.classList.add('hidden');
+    taskFilter?.classList.remove('flex');
+    projectFilter?.classList.remove('hidden');
+    projectFilter?.classList.add('flex');
+    listView?.classList.add('hidden');
+    kanbanView?.classList.add('hidden');
+    projectsView?.classList.remove('hidden');
+    renderProjects();
+  }
+}
+
+// ── Task View ─────────────────────────────────────────────
+function setTaskView(view) {
+  currentTaskView = view;
+  const listView  = document.getElementById('list-view');
+  const kanbanView = document.getElementById('kanban-view');
+  const btnList   = document.getElementById('btn-task-list');
+  const btnKanban = document.getElementById('btn-task-kanban');
+  if (view === 'list') {
+    listView?.classList.remove('hidden');
+    kanbanView?.classList.add('hidden');
+    btnList?.classList.add('bg-[#30363d]', 'text-white');
+    btnList?.classList.remove('text-[#8b949e]');
+    btnKanban?.classList.remove('bg-[#30363d]', 'text-white');
+    btnKanban?.classList.add('text-[#8b949e]');
+  } else {
+    listView?.classList.add('hidden');
+    kanbanView?.classList.remove('hidden');
+    btnKanban?.classList.add('bg-[#30363d]', 'text-white');
+    btnKanban?.classList.remove('text-[#8b949e]');
+    btnList?.classList.remove('bg-[#30363d]', 'text-white');
+    btnList?.classList.add('text-[#8b949e]');
+  }
+  filterTasks();
+}
+
+function filterTasks() {
+  const statusFilter = document.getElementById('task-status-filter')?.value || 'all';
+  const sortBy       = document.getElementById('task-sort')?.value || 'date';
+  let filtered = statusFilter === 'all' ? [...tasks] : tasks.filter(t => t.status === statusFilter);
+  if (sortBy === 'priority') {
+    const order = { high: 0, medium: 1, low: 2 };
+    filtered.sort((a, b) => order[a.priority] - order[b.priority]);
+  } else if (sortBy === 'title') {
+    filtered.sort((a, b) => a.title.localeCompare(b.title));
+  } else {
+    filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
+  }
+  renderTaskList(filtered);
+  renderKanban(filtered);
+}
+
+// ── Custom Dropdown ───────────────────────────────────────
+function toggleDropdown(id) {
+  const dd = document.getElementById(id);
+  const isHidden = dd.classList.contains('hidden');
+  // 全部閉じる
+  document.querySelectorAll('[id^="dd-"]').forEach(el => el.classList.add('hidden'));
+  if (isHidden) dd.classList.remove('hidden');
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('[onclick^="toggleDropdown"]')) {
+    document.querySelectorAll('[id^="dd-"]').forEach(el => el.classList.add('hidden'));
+  }
+});
+
+// Task status
+function setTaskStatus(value, label) {
+  document.getElementById('label-status').textContent = label;
+  document.getElementById('dd-status').classList.add('hidden');
+  const sel = document.getElementById('task-status-filter');
+  if (sel) sel.value = value;
+  filterTasks();
+}
+
+// Task sort
+function setTaskSort(value, label) {
+  document.getElementById('label-sort').textContent = label;
+  document.getElementById('dd-sort').classList.add('hidden');
+  const sel = document.getElementById('task-sort');
+  if (sel) sel.value = value;
+  filterTasks();
+}
+
+// Project language
+function setProjLang(value, label) {
+  document.getElementById('label-lang').textContent = label;
+  document.getElementById('dd-lang').classList.add('hidden');
+  const sel = document.getElementById('project-lang-filter');
+  if (sel) sel.value = value;
+  renderProjects();
+}
+
+// Project sort
+function setProjSort(value, label) {
+  document.getElementById('label-proj-sort').textContent = label;
+  document.getElementById('dd-proj-sort').classList.add('hidden');
+  const sel = document.getElementById('project-sort');
+  if (sel) sel.value = value;
+  renderProjects();
+}
+
+function filterTasksByStatus(v) { filterTasks(); }
+function sortTasks(v)           { filterTasks(); }
+
+function renderTaskList(filteredTasks) {
+  const tbody = document.getElementById('list-view-body');
+  if (!tbody) return;
+  const statusMap = {
+    'todo':        { border: 'border-slate-400/20', color: 'text-slate-400'   },
+    'in-progress': { border: 'border-blue-400/20',  color: 'text-blue-400'    },
+    'done':        { border: 'border-emerald-400/20',color: 'text-emerald-400' }
+  };
+  tbody.innerHTML = filteredTasks.map(t => `
+    <tr onclick="openTaskModal('${t.id}')" class="hover:bg-[#161b22] group cursor-pointer transition-all">
+      <td class="px-4 py-4 font-bold text-[#f0f6fc]">${t.title}</td>
+      <td class="px-4 py-4 text-[#8b949e] hidden sm:table-cell">${t.assignee}</td>
+      <td class="px-4 py-4">
+        <span class="px-2 py-0.5 rounded-md text-[9px] font-black border whitespace-nowrap ${statusMap[t.status].border} ${statusMap[t.status].color}">${t.status.toUpperCase()}</span>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function renderKanban(filteredTasks) {
+  const priorityColors = {
+    high:   'bg-red-500/10 text-red-500',
+    medium: 'bg-yellow-500/10 text-yellow-500',
+    low:    'bg-green-500/10 text-green-500'
+  };
+  ['todo', 'in-progress', 'done'].forEach(status => {
+    const key       = status === 'in-progress' ? 'inprogress' : status;
+    const container = document.getElementById('kanban-' + key);
+    if (!container) return;
+    const statusTasks = filteredTasks.filter(t => t.status === status);
+    const countEl = document.getElementById('count-' + key);
+    if (countEl) countEl.textContent = statusTasks.length;
+    const borderColor = status === 'todo' ? 'slate' : status === 'in-progress' ? 'blue' : 'emerald';
+    container.innerHTML = statusTasks.map(t => `
+      <div onclick="openTaskModal('${t.id}')" class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 hover:border-${borderColor}-400/30 transition-all cursor-pointer ${status === 'done' ? 'opacity-60' : ''}">
+        <p class="text-white font-bold text-sm leading-tight mb-3 ${status === 'done' ? 'line-through' : ''}">${t.title}</p>
+        <div class="flex items-center justify-between">
+          <div class="w-5 h-5 rounded bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-[9px] font-black">${t.assignee[0]}</div>
+          <span class="text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-tighter ${priorityColors[t.priority]}">${t.priority.toUpperCase()}</span>
+        </div>
+      </div>
+    `).join('');
+  });
+}
+
+// ── History API: モバイルの「戻る」でモーダルを閉じる ────────
+let _modalHistory = null;
+
+function _pushModalHistory(type) {
+  _modalHistory = type;
+  history.pushState({ modal: type }, '');
+}
+
+window.addEventListener('popstate', () => {
+  if (_modalHistory === 'task') {
+    _modalHistory = null;
+    const content = document.getElementById('task-modal-content');
+    content.classList.add('translate-x-full');
+    setTimeout(() => document.getElementById('task-modal').classList.add('hidden'), 300);
+  } else if (_modalHistory === 'project') {
+    _modalHistory = null;
+    const content = document.getElementById('project-detail-modal-content');
+    if (content) {
+      content.classList.add('translate-x-full');
+      setTimeout(() => document.getElementById('project-detail-modal')?.classList.add('hidden'), 300);
+    }
+  }
+});
+
+function openTaskModal(taskId) {
+  const task = tasks.find(t => t.id === taskId);
+  if (!task) return;
+  document.getElementById('modal-task-title').textContent    = task.title;
+  document.getElementById('modal-task-status').textContent   = task.status.toUpperCase();
+  document.getElementById('modal-task-priority').textContent = task.priority.toUpperCase();
+  document.getElementById('modal-assignee').textContent      = task.assignee;
+  document.getElementById('modal-date').textContent          = task.date;
+  const modal   = document.getElementById('task-modal');
+  const content = document.getElementById('task-modal-content');
+  modal.classList.remove('hidden');
+  setTimeout(() => content.classList.remove('translate-x-full'), 10);
+  _pushModalHistory('task');
+}
+
+function closeTaskModal() {
+  if (_modalHistory === 'task') {
+    _modalHistory = null;
+    history.back();
+    return;
+  }
+  const content = document.getElementById('task-modal-content');
+  content.classList.add('translate-x-full');
+  setTimeout(() => document.getElementById('task-modal').classList.add('hidden'), 300);
+}
+
+// ── Project View ──────────────────────────────────────────
+function setProjectViewMode(mode) {
+  currentProjectViewMode = mode;
+  const gridView = document.getElementById('projects-grid-view');
+  const listView = document.getElementById('projects-list-view');
+  const btnGrid  = document.getElementById('btn-project-grid');
+  const btnList  = document.getElementById('btn-project-list');
+  if (mode === 'grid') {
+    gridView?.classList.remove('hidden');
+    listView?.classList.add('hidden');
+    btnGrid?.classList.add('bg-[#30363d]', 'text-white');
+    btnGrid?.classList.remove('text-[#8b949e]');
+    btnList?.classList.remove('bg-[#30363d]', 'text-white');
+    btnList?.classList.add('text-[#8b949e]');
+  } else {
+    gridView?.classList.add('hidden');
+    listView?.classList.remove('hidden');
+    btnList?.classList.add('bg-[#30363d]', 'text-white');
+    btnList?.classList.remove('text-[#8b949e]');
+    btnGrid?.classList.remove('bg-[#30363d]', 'text-white');
+    btnGrid?.classList.add('text-[#8b949e]');
+  }
+}
+
+function renderProjects() {
+  const container = document.getElementById('projects-grid-view');
+  if (!container) return;
+  const sortValue  = document.getElementById('project-sort')?.value || 'modified';
+  const langFilter = document.getElementById('project-lang-filter')?.value || 'all';
+  let sorted = [...localProjects];
+  if (sortValue === 'name')     sorted.sort((a, b) => a.name.localeCompare(b.name));
+  else if (sortValue === 'git') sorted.sort((a, b) => new Date(b.gitModified) - new Date(a.gitModified));
+  else                          sorted.sort((a, b) => new Date(b.localModified) - new Date(a.localModified));
+  if (langFilter !== 'all')     sorted = sorted.filter(p => p.language === langFilter);
+
+  container.innerHTML = sorted.map(p => {
+    const lang = langColors[p.language] || { bg: 'bg-[#8b949e20]', text: 'text-[#8b949e]', label: '?' };
+    return `
+      <div onclick="openProjectDetailModal(${p.id})" class="bg-[#161b22] border border-[#30363d] rounded-2xl p-3 sm:p-4 hover:border-[#484f58] transition-all cursor-pointer">
+        <div class="flex items-start justify-between mb-2 sm:mb-3">
+          <div class="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-[#21262d] flex items-center justify-center shrink-0">
+              <i data-lucide="folder-git-2" size="18" class="text-indigo-400"></i>
+            </div>
+            <div class="min-w-0">
+              <h3 class="font-bold text-white text-sm sm:text-base truncate">${p.name}</h3>
+              <p class="text-[9px] sm:text-xs text-[#8b949e] truncate">${p.path}</p>
+            </div>
+          </div>
+          <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[8px] sm:text-[10px] font-black ${lang.bg} ${lang.text} shrink-0 ml-2">${lang.label}</span>
+        </div>
+        <div class="space-y-0.5 sm:space-y-1 text-[9px] sm:text-xs text-[#8b949e]">
+          <div class="flex justify-between"><span>Local</span><span>${p.localModified}</span></div>
+          <div class="flex justify-between"><span>Git</span><span>${p.gitModified}</span></div>
+        </div>
+        <div class="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-[#30363d]">
+          <p class="text-[9px] sm:text-xs text-indigo-400 truncate">${p.lastCommit}</p>
+        </div>
+      </div>`;
+  }).join('');
+  lucide.createIcons();
+}
+
+function sortProjects(v)           { renderProjects(); }
+function filterProjectsByLang(v)   { renderProjects(); }
+
+function openProjectDetailModal(projectId) {
+  const project = localProjects.find(p => p.id === projectId);
+  if (!project) return;
+  const lang = langColors[project.language] || { label: '?' };
+  document.getElementById('project-modal-name')?.setAttribute('textContent', project.name);
+  document.getElementById('project-modal-name').textContent      = project.name;
+  document.getElementById('project-modal-lang-badge').textContent = lang.label;
+  document.getElementById('project-modal-local').textContent     = project.localModified;
+  document.getElementById('project-modal-git').textContent       = project.gitModified;
+  document.getElementById('project-modal-path').textContent      = project.path;
+  const modal   = document.getElementById('project-detail-modal');
+  const content = document.getElementById('project-detail-modal-content');
+  if (modal && content) {
+    modal.classList.remove('hidden');
+    setTimeout(() => content.classList.remove('translate-x-full'), 10);
+    _pushModalHistory('project');
+  }
+}
+
+function closeProjectDetailModal() {
+  if (_modalHistory === 'project') {
+    _modalHistory = null;
+    history.back();
+    return;
+  }
+  const content = document.getElementById('project-detail-modal-content');
+  if (content) {
+    content.classList.add('translate-x-full');
+    setTimeout(() => document.getElementById('project-detail-modal')?.classList.add('hidden'), 300);
+  }
+}
+
+function openProjectModal(projectId) {
+  const num = parseInt(projectId.replace('proj-', ''));
+  openProjectDetailModal(num);
+}
+
+function launchIDE(ide) {
+  const paths = {
+    vscode:    'vscode://file/',
+    cursor:    'cursor://file/',
+    opencodes: 'opencode://file/'
+  };
+  const path = document.getElementById('project-modal-path')?.textContent || '';
+  alert('Open in ' + ide + ': ' + path + '\n(対応IDEがインストールされている場合に動作)');
+}
+
+// ── Project Picker / Tabs ─────────────────────────────────
+function addProjectTab(projectId) {
+  if (!openTabs.includes(projectId)) openTabs.push(projectId);
+  setActiveTab(projectId);
+  document.getElementById('project-picker')?.classList.add('hidden');
+}
+
+function setActiveTab(tabId) {
+  activeTabId = tabId;
+  renderTabs();
+  filterTasks();
+}
+
+function renderTabs() {
+  const tabsList = document.getElementById('tabs-list');
+  if (!tabsList) return;
+  tabsList.innerHTML = openTabs.map(tabId => {
+    const project = projects.find(p => p.id === tabId);
+    const isActive = tabId === activeTabId;
+    return `<button onclick="setActiveTab('${tabId}')"
+      class="px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${isActive ? 'bg-[#30363d] text-white' : 'text-[#8b949e] hover:text-white'}">
+      ${tabId === 'all' ? 'All Projects' : project?.name || tabId}
+    </button>`;
+  }).join('');
+}
+
+// ── AI Chat ───────────────────────────────────────────────
+function toggleAiChat() {
+  document.getElementById('ai-chat').classList.toggle('hidden');
+}
+
+// ── Close pickers on outside click ───────────────────────
+document.addEventListener('click', e => {
+  const picker = document.getElementById('project-picker');
+  const addBtn = document.getElementById('add-tab-btn');
+  if (picker && addBtn && !picker.contains(e.target) && e.target !== addBtn && !addBtn.contains(e.target)) {
+    picker.classList.add('hidden');
+  }
+});
+
+// ── Initialize ────────────────────────────────────────────
+function init() {
+  lucide.createIcons();
+  fixFilterIconSizes();
+  setActiveMenu('overview');
+  switchMainTab('tasks');
+  setTaskView('list');
+  setProjectViewMode('grid');
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+</script>
+</body>
+</html> 

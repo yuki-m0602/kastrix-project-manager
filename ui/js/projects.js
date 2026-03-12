@@ -6,15 +6,15 @@ function setProjectViewMode(mode) {
   const btnGrid  = document.getElementById('btn-project-grid');
   const btnList  = document.getElementById('btn-project-list');
   if (mode === 'grid') {
-    gridView?.classList.remove('hidden');
-    listView?.classList.add('hidden');
+    gridView.style.display = '';
+    if (listView) listView.style.display = 'none';
     btnGrid?.classList.add('bg-[#30363d]', 'text-white');
     btnGrid?.classList.remove('text-[#8b949e]');
     btnList?.classList.remove('bg-[#30363d]', 'text-white');
     btnList?.classList.add('text-[#8b949e]');
   } else {
-    gridView?.classList.add('hidden');
-    listView?.classList.remove('hidden');
+    if (gridView) gridView.style.display = 'none';
+    if (listView) listView.style.display = 'block';
     btnList?.classList.add('bg-[#30363d]', 'text-white');
     btnList?.classList.remove('text-[#8b949e]');
     btnGrid?.classList.remove('bg-[#30363d]', 'text-white');
@@ -27,14 +27,23 @@ function renderProjects() {
   if (!container) return;
   const sortValue  = document.getElementById('project-sort')?.value || 'modified';
   const langFilter = document.getElementById('project-lang-filter')?.value || 'all';
-  let sorted = [...localProjects];
+  let sorted = [...(localProjects || [])];
   if (sortValue === 'name')          sorted.sort((a, b) => a.name.localeCompare(b.name));
   else if (sortValue === 'git')      sorted.sort((a, b) => new Date(b.gitModified) - new Date(a.gitModified));
   else if (sortValue === 'language') sorted.sort((a, b) => (a.language || '').localeCompare(b.language || ''));
   else                               sorted.sort((a, b) => new Date(b.localModified) - new Date(a.localModified));
   if (langFilter !== 'all')     sorted = sorted.filter(p => (p.language || '').toLowerCase() === langFilter);
 
-  container.innerHTML = sorted.map(p => {
+  const emptyHtml = `
+    <div class="col-span-full flex flex-col items-center justify-center py-16 px-4 text-center">
+      <i data-lucide="folder-plus" size="48" class="text-[#484f58] mb-4"></i>
+      <p class="text-sm font-bold text-white mb-1">No projects yet</p>
+      <p class="text-xs text-[#8b949e] mb-4">Add a folder to scan for Git projects</p>
+      <button onclick="addProjectFolder()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white">
+        <i data-lucide="folder-plus" size="14" class="inline mr-1"></i> Add Folder
+      </button>
+    </div>`;
+  container.innerHTML = sorted.length === 0 ? emptyHtml : sorted.map(p => {
     const lang = langColors[(p.language || '').toLowerCase()] || { bg: 'bg-[#8b949e20]', text: 'text-[#8b949e]', label: '?' };
     return `
       <div onclick="openProjectDetailModal('${p.id}')" class="bg-[#161b22] border border-[#30363d] rounded-2xl p-3 sm:p-4 hover:border-[#484f58] transition-all cursor-pointer">
@@ -63,7 +72,9 @@ function renderProjects() {
   // リストビューも動的描画
   const listBody = document.getElementById('projects-list-body');
   if (listBody) {
-    listBody.innerHTML = sorted.map(p => {
+    listBody.innerHTML = sorted.length === 0
+      ? '<tr><td colspan="2" class="p-8 text-center text-[#8b949e] text-sm">No projects yet. Add a folder to get started.</td></tr>'
+      : sorted.map(p => {
       const lang = langColors[(p.language || '').toLowerCase()] || { bg: 'bg-[#8b949e20]', text: 'text-[#8b949e]', label: '?' };
       return `
         <tr onclick="openProjectDetailModal('${p.id}')" class="border-b border-[#30363d] hover:bg-[#161b22] cursor-pointer">
@@ -111,7 +122,7 @@ async function addProjectFolder() {
 // Project filter setters
 function setProjLang(value, label) {
   document.getElementById('label-lang').textContent = label;
-  document.getElementById('dd-lang').classList.add('hidden');
+  document.getElementById('dd-lang').style.display = 'none';
   const sel = document.getElementById('project-lang-filter');
   if (sel) sel.value = value;
   renderProjects();
@@ -119,7 +130,7 @@ function setProjLang(value, label) {
 
 function setProjSort(value, label) {
   document.getElementById('label-proj-sort').textContent = label;
-  document.getElementById('dd-proj-sort').classList.add('hidden');
+  document.getElementById('dd-proj-sort').style.display = 'none';
   const sel = document.getElementById('project-sort');
   if (sel) sel.value = value;
   renderProjects();
@@ -146,7 +157,7 @@ function openProjectDetailModal(projectId) {
   const modal   = document.getElementById('project-detail-modal');
   const content = document.getElementById('project-detail-modal-content');
   if (modal && content) {
-    modal.classList.remove('hidden');
+    modal.style.display = '';
     setTimeout(() => content.classList.remove('translate-x-full'), 10);
     _pushModalHistory('project');
   }
@@ -161,7 +172,7 @@ function closeProjectDetailModal() {
   const content = document.getElementById('project-detail-modal-content');
   if (content) {
     content.classList.add('translate-x-full');
-    setTimeout(() => document.getElementById('project-detail-modal')?.classList.add('hidden'), 300);
+    setTimeout(() => document.getElementById('project-detail-modal').style.display = 'none', 300);
   }
 }
 
@@ -177,6 +188,7 @@ function openProjectModal(projectId) {
 }
 
 async function launchIDE(ide) {
-  const path = document.getElementById('project-modal-path')?.textContent || '';
+  const pathEl = document.getElementById('project-modal-path');
+  const path = pathEl?.textContent?.trim() || null;
   await apiOpenInIde(ide, path);
 }

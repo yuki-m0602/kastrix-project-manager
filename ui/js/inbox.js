@@ -14,11 +14,13 @@ async function renderInbox() {
   // Overdue tasks
   const now = new Date();
   tasks.forEach(t => {
-    if (t.dueDate && t.status !== 'done') {
-      const due = new Date(t.dueDate);
+    const dueStr = t.dueDate || t.due_date;
+    if (dueStr && t.status !== 'done') {
+      const due = new Date(dueStr);
       if (due < now) {
         notifications.push({
           type: 'overdue',
+          taskId: t.id,
           icon: 'alert-circle',
           color: 'red',
           title: 'Overdue Task',
@@ -30,6 +32,7 @@ async function renderInbox() {
         if (diffDays <= 3) {
           notifications.push({
             type: 'upcoming',
+            taskId: t.id,
             icon: 'clock',
             color: 'amber',
             title: 'Due Soon',
@@ -46,12 +49,13 @@ async function renderInbox() {
   logs.forEach(l => {
     const ts = new Date(l.timestamp);
     if (ts.getTime() > dayAgo) {
+      const msg = [l.taskTitle, l.projectName].filter(Boolean).join(' in ');
       notifications.push({
         type: 'activity',
         icon: 'info',
         color: 'blue',
         title: l.action,
-        message: l.details || '',
+        message: msg || 'Activity',
         time: ts,
       });
     }
@@ -61,9 +65,11 @@ async function renderInbox() {
   notifications.sort((a, b) => b.time - a.time);
 
   container.innerHTML = notifications.length === 0
-    ? '<div class="flex flex-col items-center justify-center h-full text-center gap-3"><i data-lucide="inbox" size="40" class="text-[#30363d]"></i><p class="text-xs text-[#484f58]">No notifications</p></div>'
-    : notifications.map(n => `
-      <div class="flex items-start gap-3 p-3 bg-[#161b22] border border-[#30363d] rounded-xl">
+    ? '<div class="flex flex-col items-center gap-3 pt-8 text-center"><i data-lucide="inbox" size="40" class="text-[#30363d]"></i><p class="text-xs text-[#484f58]">No notifications</p></div>'
+    : notifications.map(n => {
+      const clickable = n.taskId && typeof openTaskModal === 'function';
+      return `
+      <div class="flex items-start gap-3 p-3 bg-[#161b22] border border-[#30363d] rounded-xl ${clickable ? 'cursor-pointer hover:border-[#484f58] transition-all' : ''}" ${clickable ? `onclick="openTaskModal('${n.taskId}')"` : ''}>
         <div class="w-8 h-8 rounded-lg bg-${n.color}-500/10 flex items-center justify-center shrink-0">
           <i data-lucide="${n.icon}" size="14" class="text-${n.color}-400"></i>
         </div>
@@ -75,7 +81,8 @@ async function renderInbox() {
           <p class="text-[11px] text-[#8b949e] truncate">${n.message}</p>
         </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
 
   lucide.createIcons();
 }

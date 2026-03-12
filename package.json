@@ -1,10 +1,14 @@
 {
   "scripts": {
     "tauri": "tauri",
-    "dev": "npx live-server ui --port=1420 --no-browser",
+    "dev": "npm run css:watch & npx live-server ui --port=1420 --no-browser",
+    "css:watch": "npx @tailwindcss/cli -i ./ui/src/styles.css -o ./ui/vendor/tailwind.css --minify --content ./ui/index.html --content ./ui/js/*.js --watch",
+    "css:build": "npx @tailwindcss/cli -i ./ui/src/styles.css -o ./ui/vendor/tailwind.css --minify --content ./ui/index.html --content ./ui/js/*.js",
+    "build:ui": "npm run css:build",
     "start": "npm run dev & npx tauri dev"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.2.1",
     "autoprefixer": "^10.4.27",
     "http-server": "^14.1.1",
     "postcss": "^8.5.8",

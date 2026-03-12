@@ -6,15 +6,15 @@ function setTaskView(view) {
   const btnList   = document.getElementById('btn-task-list');
   const btnKanban = document.getElementById('btn-task-kanban');
   if (view === 'list') {
-    listView?.classList.remove('hidden');
-    kanbanView?.classList.add('hidden');
+    listView.style.display = '';
+    kanbanView.style.display = 'none';
     btnList?.classList.add('bg-[#30363d]', 'text-white');
     btnList?.classList.remove('text-[#8b949e]');
     btnKanban?.classList.remove('bg-[#30363d]', 'text-white');
     btnKanban?.classList.add('text-[#8b949e]');
   } else {
-    listView?.classList.add('hidden');
-    kanbanView?.classList.remove('hidden');
+    listView.style.display = 'none';
+    kanbanView.style.display = 'flex';
     btnKanban?.classList.add('bg-[#30363d]', 'text-white');
     btnKanban?.classList.remove('text-[#8b949e]');
     btnList?.classList.remove('bg-[#30363d]', 'text-white');
@@ -27,6 +27,9 @@ function filterTasks() {
   const statusFilter = document.getElementById('task-status-filter')?.value || 'all';
   const sortBy       = document.getElementById('task-sort')?.value || 'date';
   let filtered = statusFilter === 'all' ? [...tasks] : tasks.filter(t => t.status === statusFilter);
+  if (activeTabId && activeTabId !== 'all') {
+    filtered = filtered.filter(t => String(t.projectId) === String(activeTabId));
+  }
   if (sortBy === 'priority') {
     const order = { high: 0, medium: 1, low: 2 };
     filtered.sort((a, b) => order[a.priority] - order[b.priority]);
@@ -45,12 +48,13 @@ function sortTasks(v)           { filterTasks(); }
 function renderTaskList(filteredTasks) {
   const tbody = document.getElementById('list-view-body');
   if (!tbody) return;
+  const emptyRow = '<tr><td colspan="3" class="px-4 py-12 text-center text-[#8b949e] text-sm">No tasks yet. Click "+ New Task" to create one.</td></tr>';
   const statusMap = {
     'todo':        { border: 'border-slate-400/20', color: 'text-slate-400'   },
     'in-progress': { border: 'border-blue-400/20',  color: 'text-blue-400'    },
     'done':        { border: 'border-emerald-400/20',color: 'text-emerald-400' }
   };
-  tbody.innerHTML = filteredTasks.map(t => `
+  tbody.innerHTML = filteredTasks.length === 0 ? emptyRow : filteredTasks.map(t => `
     <tr onclick="openTaskModal('${t.id}')" class="hover:bg-[#161b22] group cursor-pointer transition-all">
       <td class="px-4 py-4 font-bold text-[#f0f6fc]">${t.title}</td>
       <td class="px-4 py-4 text-[#8b949e] hidden sm:table-cell">${t.assignee}</td>
@@ -121,13 +125,14 @@ async function _kanbanDrop(e) {
   const task = tasks.find(t => String(t.id) === taskId);
   if (!task || task.status === newStatus) return;
   await apiUpdateTaskStatus(taskId, newStatus);
+  if (_isTauri) await reloadTasks();
   filterTasks();
 }
 
 // Task filter setters
 function setTaskStatus(value, label) {
   document.getElementById('label-status').textContent = label;
-  document.getElementById('dd-status').classList.add('hidden');
+  document.getElementById('dd-status').style.display = 'none';
   const sel = document.getElementById('task-status-filter');
   if (sel) sel.value = value;
   filterTasks();
@@ -135,24 +140,30 @@ function setTaskStatus(value, label) {
 
 function setTaskSort(value, label) {
   document.getElementById('label-sort').textContent = label;
-  document.getElementById('dd-sort').classList.add('hidden');
+  document.getElementById('dd-sort').style.display = 'none';
   const sel = document.getElementById('task-sort');
   if (sel) sel.value = value;
   filterTasks();
 }
 
 function openTaskModal(taskId) {
-  const task = tasks.find(t => t.id === taskId);
+  const task = tasks.find(t => String(t.id) === String(taskId));
   if (!task) return;
   document.getElementById('modal-task-title').textContent    = task.title;
   document.getElementById('modal-task-status').textContent   = task.status.toUpperCase();
   document.getElementById('modal-task-priority').textContent = task.priority.toUpperCase();
   document.getElementById('modal-assignee').textContent      = task.assignee || '-';
   document.getElementById('modal-date').textContent          = task.dueDate || '-';
+  document.getElementById('modal-task-desc').textContent     = task.description || '-';
+  const proj = projects.find(p => String(p.id) === String(task.projectId));
+  const projName = proj ? proj.name : (localProjects.find(p => String(p.id) === String(task.projectId))?.name || '-');
+  document.getElementById('modal-project-name').textContent  = projName;
+  const iconEl = document.getElementById('modal-project-icon');
+  if (iconEl) iconEl.textContent = projName !== '-' ? projName[0].toUpperCase() : '?';
   _currentTaskId = task.id;
   const modal   = document.getElementById('task-modal');
   const content = document.getElementById('task-modal-content');
-  modal.classList.remove('hidden');
+  modal.style.display = '';
   setTimeout(() => content.classList.remove('translate-x-full'), 10);
   _pushModalHistory('task');
 }
@@ -165,7 +176,7 @@ function closeTaskModal() {
   }
   const content = document.getElementById('task-modal-content');
   content.classList.add('translate-x-full');
-  setTimeout(() => document.getElementById('task-modal').classList.add('hidden'), 300);
+  setTimeout(() => document.getElementById('task-modal').style.display = 'none', 300);
 }
 
 // ── Task CRUD ────────────────────────────────────────────────
@@ -181,7 +192,7 @@ function openCreateTaskModal() {
   _populateProjectDropdown();
   const modal = document.getElementById('task-edit-modal');
   const content = document.getElementById('task-edit-modal-content');
-  modal.classList.remove('hidden');
+  modal.style.display = '';
   setTimeout(() => content.classList.remove('translate-x-full'), 10);
   _pushModalHistory('task-edit');
 }
@@ -200,7 +211,7 @@ function openEditTaskModal(taskId) {
   document.getElementById('task-edit-project').value = task.projectId || '';
   const modal = document.getElementById('task-edit-modal');
   const content = document.getElementById('task-edit-modal-content');
-  modal.classList.remove('hidden');
+  modal.style.display = '';
   setTimeout(() => content.classList.remove('translate-x-full'), 10);
   _pushModalHistory('task-edit');
 }
@@ -222,7 +233,7 @@ function closeTaskEditModal() {
   const content = document.getElementById('task-edit-modal-content');
   if (content) {
     content.classList.add('translate-x-full');
-    setTimeout(() => document.getElementById('task-edit-modal')?.classList.add('hidden'), 300);
+    setTimeout(() => document.getElementById('task-edit-modal').style.display = 'none', 300);
   }
 }
 
@@ -243,6 +254,7 @@ async function submitTaskForm() {
     } else {
       await apiCreateTask(input);
     }
+    if (_isTauri) await reloadTasks();
     closeTaskEditModal();
     filterTasks();
   } catch (e) {
@@ -255,6 +267,7 @@ async function deleteCurrentTask() {
   if (!confirm('このタスクを削除しますか？')) return;
   try {
     await apiDeleteTask(_currentTaskId);
+    if (_isTauri) await reloadTasks();
     _currentTaskId = null;
     closeTaskModal();
     filterTasks();

@@ -3,3 +3,4 @@ pub mod logs;
 pub mod projects;
 pub mod settings;
 pub mod tasks;
+pub mod team;

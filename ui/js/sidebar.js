@@ -1,4 +1,15 @@
 // ── Sidebar ───────────────────────────────────────────────
+function toggleSidebarVisibility() {
+  if (window.innerWidth < 1024) {
+    const sidebar = document.getElementById('sidebar');
+    const isOpen = sidebar && sidebar.style.transform === 'translateX(0)';
+    if (isOpen) closeMobileSidebar();
+    else openMobileSidebar();
+  } else {
+    toggleSidebar();
+  }
+}
+
 function toggleSidebar() {
   isSidebarCollapsed = !isSidebarCollapsed;
   const sidebar    = document.getElementById('sidebar');
@@ -7,27 +18,27 @@ function toggleSidebar() {
   const navLabels  = document.querySelectorAll('.nav-label');
   if (isSidebarCollapsed) {
     sidebar.style.width = '64px';
-    mainArea.style.paddingLeft = '240px';
-    logoText.classList.add('hidden');
-    navLabels.forEach(l => l.classList.add('hidden'));
+    mainArea.style.paddingLeft = '80px';
+    logoText.style.display = 'none';
+    navLabels.forEach(l => l.style.display = 'none');
   } else {
     sidebar.style.width = '224px';
     mainArea.style.paddingLeft = '240px';
-    logoText.classList.remove('hidden');
-    navLabels.forEach(l => l.classList.remove('hidden'));
+    logoText.style.display = '';
+    navLabels.forEach(l => l.style.display = '');
   }
 }
 
 function openMobileSidebar() {
   const sidebar = document.getElementById('sidebar');
   sidebar.style.transform = 'translateX(0)';
-  document.getElementById('mobile-overlay').classList.remove('hidden');
+  document.getElementById('mobile-overlay').style.display = '';
 }
 
 function closeMobileSidebar() {
   const sidebar = document.getElementById('sidebar');
   sidebar.style.transform = 'translateX(calc(-100% - 8px))';
-  document.getElementById('mobile-overlay').classList.add('hidden');
+  document.getElementById('mobile-overlay').style.display = 'none';
 }
 
 function setActiveMenu(menu) {
@@ -59,12 +70,33 @@ function setActiveMenu(menu) {
     analytics: 'view-analytics',
     settings:  'view-settings'
   };
-  document.querySelectorAll('.view-section').forEach(s => s.classList.add('hidden'));
-  document.getElementById(viewMap[actualView])?.classList.remove('hidden');
-  if (isProjects) switchMainTab('projects');
+  const displayMap = {
+    overview:  'flex',
+    logs:      'flex',
+    inbox:     'flex',
+    analytics: 'flex',
+    settings:  'flex'
+  };
+  document.querySelectorAll('.view-section').forEach(s => s.style.display = 'none');
+  const targetView = document.getElementById(viewMap[actualView]);
+  if (targetView) {
+    targetView.style.display = displayMap[actualView] || 'flex';
+  }
+  if (actualView === 'overview' || isProjects) switchMainTab('projects');
   if (actualView === 'logs' && typeof renderLogs === 'function') renderLogs();
   if (actualView === 'settings' && typeof renderSettings === 'function') renderSettings();
   if (actualView === 'analytics' && typeof renderAnalytics === 'function') renderAnalytics();
   if (actualView === 'inbox' && typeof renderInbox === 'function') renderInbox();
-  closeMobileSidebar();
+  // Logs/Inbox/Analytics/Settings ではメインヘッダーを非表示（各ビューにメニューボタンあり）
+  const mainHeader = document.getElementById('main-header');
+  if (mainHeader) {
+    const hideMainHeader = ['logs', 'inbox', 'analytics', 'settings'].includes(actualView);
+    mainHeader.style.display = hideMainHeader ? 'none' : '';
+  }
+  if (window.innerWidth < 1024) {
+    closeMobileSidebar();
+  } else {
+    const sidebar = document.getElementById('sidebar');
+    sidebar.style.transform = '';
+  }
 }

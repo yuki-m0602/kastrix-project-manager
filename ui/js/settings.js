@@ -89,6 +89,41 @@ async function renderSettings() {
       </div>
     </section>
 
+    <!-- Team -->
+    <section class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6">
+      <h2 class="text-sm font-bold text-white mb-1">チーム</h2>
+      <p class="text-[10px] text-[#8b949e] mb-4">チームを作成してメンバーを招待するか、招待コードで参加できます。</p>
+
+      <div class="space-y-4">
+        <div>
+          <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">チーム作成・招待</h3>
+          <div class="flex flex-wrap gap-2 mb-3">
+            <button onclick="teamCreate()" class="h-8 px-4 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white flex items-center gap-2">
+              <i data-lucide="users" size="14"></i>
+              チームを作成
+            </button>
+            <button onclick="teamIssueInvite()" class="h-8 px-4 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-xs font-bold text-white flex items-center gap-2">
+              <i data-lucide="link" size="14"></i>
+              招待コードを発行
+            </button>
+          </div>
+        </div>
+
+        <div id="team-invite-codes-section" class="hidden">
+          <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">発行済みコード一覧</h3>
+          <div id="team-invite-codes-list" class="space-y-2"></div>
+        </div>
+
+        <div class="pt-4 border-t border-[#30363d]">
+          <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">チームに参加する</h3>
+          <div class="flex gap-2">
+            <input id="team-join-code" type="text" placeholder="KASTRIX-XXXX-XXXX" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-white placeholder-[#484f58] font-mono">
+            <button onclick="teamJoin()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white">参加する</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- IDE Preferences -->
     <section class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6">
       <h2 class="text-sm font-bold text-white mb-1">IDE Preferences</h2>
@@ -108,7 +143,133 @@ async function renderSettings() {
     if (sel) sel.value = savedIde;
   }
 
+  // Load team invite codes
+  await renderTeamInviteCodes();
+
   lucide.createIcons();
+}
+
+async function renderTeamInviteCodes() {
+  if (!_isTauri) return;
+  const section = document.getElementById('team-invite-codes-section');
+  const list = document.getElementById('team-invite-codes-list');
+  if (!section || !list) return;
+  try {
+    const codes = await apiTeamListInviteCodes();
+    if (codes.length === 0) {
+      section.classList.add('hidden');
+      return;
+    }
+    section.classList.remove('hidden');
+    list.innerHTML = codes.map(c => {
+      const expiresText = c.expires_at ? formatExpiresAt(c.expires_at) : '無期限';
+      return `
+        <div class="flex items-center justify-between p-3 bg-[#0d1117] border border-[#30363d] rounded-xl">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-xs font-mono text-white truncate">${escapeHtml(c.code)}</span>
+            <span class="text-[9px] text-[#8b949e] shrink-0">${expiresText}</span>
+          </div>
+          <button onclick="teamRevokeCode(this)" data-code="${escapeHtml(c.code)}" class="px-2 py-1 text-[9px] font-bold text-red-400 hover:bg-red-500/10 rounded-lg shrink-0">無効化</button>
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    console.error('Failed to load invite codes:', e);
+    section.classList.add('hidden');
+  }
+}
+
+function formatExpiresAt(isoStr) {
+  if (!isoStr) return '';
+  try {
+    const d = new Date(isoStr);
+    const now = new Date();
+    const diff = d - now;
+    if (diff <= 0) return '期限切れ';
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return `残り${mins}分`;
+    const hrs = Math.floor(mins / 60);
+    return `残り${hrs}時間`;
+  } catch (_) {
+    return '';
+  }
+}
+
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+async function teamCreate() {
+  if (!_isTauri) {
+    alert('チーム機能は Tauri 環境で動作します');
+    return;
+  }
+  try {
+    const result = await apiTeamCreate();
+    if (result && result.code) {
+      await navigator.clipboard.writeText(result.code);
+      alert(`チームを作成しました。\n招待コード: ${result.code}\n（クリップボードにコピーしました）`);
+      await renderTeamInviteCodes();
+      renderSettings();
+    }
+  } catch (e) {
+    alert('エラー: ' + (e?.toString?.() || e));
+  }
+}
+
+async function teamIssueInvite() {
+  if (!_isTauri) {
+    alert('チーム機能は Tauri 環境で動作します');
+    return;
+  }
+  try {
+    const result = await apiTeamIssueInvite(60);
+    if (result && result.code) {
+      await navigator.clipboard.writeText(result.code);
+      alert(`招待コードを発行しました。\n${result.code}\n（クリップボードにコピーしました）`);
+      await renderTeamInviteCodes();
+      renderSettings();
+    }
+  } catch (e) {
+    alert('エラー: ' + (e?.toString?.() || e));
+  }
+}
+
+async function teamJoin() {
+  if (!_isTauri) {
+    alert('チーム機能は Tauri 環境で動作します');
+    return;
+  }
+  const input = document.getElementById('team-join-code');
+  const code = input?.value?.trim();
+  if (!code) {
+    alert('招待コードを入力してください');
+    return;
+  }
+  try {
+    const result = await apiTeamJoin(code);
+    if (result && result.message) {
+      alert(result.message);
+      if (input) input.value = '';
+    }
+  } catch (e) {
+    alert('エラー: ' + (e?.toString?.() || e));
+  }
+}
+
+async function teamRevokeCode(btn) {
+  if (!_isTauri || !btn?.dataset?.code) return;
+  const code = btn.dataset.code;
+  if (!confirm(`招待コード ${code} を無効化しますか？`)) return;
+  try {
+    await apiTeamRevokeInviteCode(code);
+    await renderTeamInviteCodes();
+    renderSettings();
+  } catch (e) {
+    alert('エラー: ' + (e?.toString?.() || e));
+  }
 }
 
 async function addWatchedDirectory() {

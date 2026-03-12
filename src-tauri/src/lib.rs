@@ -1,11 +1,14 @@
+use std::sync::Arc;
 use std::sync::Mutex;
 use tauri::Manager;
+use tokio::sync::RwLock;
 
 mod commands;
 mod db;
 mod git_util;
 mod lang_detect;
 mod models;
+mod team;
 mod watcher;
 mod ai;
 
@@ -22,11 +25,27 @@ pub fn run() {
             let conn = db::init_db(&app_data_dir).expect("Failed to initialize database");
             app.manage(db::DbState(Mutex::new(conn)));
 
+            let iroh_state: team::IrohState = Arc::new(RwLock::new(None));
+            let iroh_state_clone = iroh_state.clone();
+            tauri::async_runtime::spawn(async move {
+                match team::IrohNodeState::init().await {
+                    Ok(node) => {
+                        let mut guard = iroh_state_clone.write().await;
+                        *guard = Some(node);
+                    }
+                    Err(e) => {
+                        eprintln!("iroh init failed (team sync disabled): {}", e);
+                    }
+                }
+            });
+            app.manage(iroh_state);
+
             let _main_window = app.get_webview_window("main").unwrap();
 
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::team::team_get_endpoint_id,
             commands::projects::scan_directory,
             commands::projects::get_projects,
             commands::projects::get_project,
@@ -50,6 +69,11 @@ pub fn run() {
             commands::settings::remove_watched_dir,
             commands::settings::get_setting,
             commands::settings::set_setting,
+            commands::team::team_create,
+            commands::team::team_issue_invite,
+            commands::team::team_join,
+            commands::team::team_list_invite_codes,
+            commands::team::team_revoke_invite_code,
         ])
         .run(tauri::generate_context!())
         .expect("Error while running Tauri application");

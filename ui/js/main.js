@@ -1,6 +1,25 @@
 // ── Lucide Icons ──────────────────────────────────────────
 lucide.createIcons();
 
+// ── Window Controls (for frameless window) ───────────────────────
+async function initWindowControls() {
+  if (!window.__TAURI__) return;
+  const { getCurrentWindow } = window.__TAURI__.window;
+  const win = getCurrentWindow();
+  
+  document.getElementById('btn-minimize')?.addEventListener('click', () => win.minimize());
+  document.getElementById('btn-maximize')?.addEventListener('click', async () => {
+    const isMaximized = await win.isMaximized();
+    if (isMaximized) {
+      win.unmaximize();
+    } else {
+      win.maximize();
+    }
+  });
+  document.getElementById('btn-close')?.addEventListener('click', () => win.close());
+}
+initWindowControls();
+
 function fixFilterIconSizes() {
   ['task-filter', 'project-filter'].forEach(id => {
     const el = document.getElementById(id);
@@ -20,14 +39,14 @@ if (window.innerWidth <= 768) {
 // ── Custom Dropdown ───────────────────────────────────────
 function toggleDropdown(id) {
   const dd = document.getElementById(id);
-  const isHidden = dd.classList.contains('hidden');
-  document.querySelectorAll('[id^="dd-"]').forEach(el => el.classList.add('hidden'));
-  if (isHidden) dd.classList.remove('hidden');
+  const isHidden = dd.style.display === 'none';
+  document.querySelectorAll('[id^="dd-"]').forEach(el => el.style.display = 'none');
+  if (isHidden) dd.style.display = '';
 }
 
 document.addEventListener('click', e => {
   if (!e.target.closest('[onclick^="toggleDropdown"]')) {
-    document.querySelectorAll('[id^="dd-"]').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('[id^="dd-"]').forEach(el => el.style.display = 'none');
   }
 });
 
@@ -42,20 +61,20 @@ window.addEventListener('popstate', () => {
     _modalHistory = null;
     const content = document.getElementById('task-modal-content');
     content.classList.add('translate-x-full');
-    setTimeout(() => document.getElementById('task-modal').classList.add('hidden'), 300);
+    setTimeout(() => document.getElementById('task-modal').style.display = 'none', 300);
   } else if (_modalHistory === 'project') {
     _modalHistory = null;
     const content = document.getElementById('project-detail-modal-content');
     if (content) {
       content.classList.add('translate-x-full');
-      setTimeout(() => document.getElementById('project-detail-modal')?.classList.add('hidden'), 300);
+      setTimeout(() => document.getElementById('project-detail-modal').style.display = 'none', 300);
     }
   } else if (_modalHistory === 'task-edit') {
     _modalHistory = null;
     const content = document.getElementById('task-edit-modal-content');
     if (content) {
       content.classList.add('translate-x-full');
-      setTimeout(() => document.getElementById('task-edit-modal')?.classList.add('hidden'), 300);
+      setTimeout(() => document.getElementById('task-edit-modal').style.display = 'none', 300);
     }
   }
 });
@@ -65,16 +84,22 @@ document.addEventListener('click', e => {
   const picker = document.getElementById('project-picker');
   const addBtn = document.getElementById('add-tab-btn');
   if (picker && addBtn && !picker.contains(e.target) && e.target !== addBtn && !addBtn.contains(e.target)) {
-    picker.classList.add('hidden');
+    picker.style.display = 'none';
   }
   const searchResults = document.getElementById('search-results');
   const searchInput = document.getElementById('global-search');
   if (searchResults && searchInput && !searchResults.contains(e.target) && e.target !== searchInput) {
-    searchResults.classList.add('hidden');
+    searchResults.style.display = 'none';
   }
 });
 
 // ── Data Loading ─────────────────────────────────────────
+async function reloadTasks() {
+  const tasksData = await apiGetTasks();
+  tasks.length = 0;
+  tasks.push(...tasksData);
+}
+
 async function loadData() {
   try {
     // 起動時に全 watched directories をスキャンして最新化
@@ -83,10 +108,12 @@ async function loadData() {
       apiGetProjects(),
       apiGetTasks()
     ]);
+    const safeProjects = Array.isArray(projectsData) ? projectsData : [];
+    const safeTasks = Array.isArray(tasksData) ? tasksData : [];
     localProjects.length = 0;
-    localProjects.push(...projectsData);
+    localProjects.push(...safeProjects);
     tasks.length = 0;
-    tasks.push(...tasksData);
+    tasks.push(...safeTasks);
     // Rebuild projects array for tabs/picker
     projects.length = 0;
     localProjects.forEach(p => {
@@ -105,7 +132,7 @@ function handleSearch(query) {
   const container = document.getElementById('search-results');
   if (!container) return;
   if (!query || query.length < 1) {
-    container.classList.add('hidden');
+    container.style.display = 'none';
     return;
   }
   const q = query.toLowerCase();
@@ -113,14 +140,14 @@ function handleSearch(query) {
   const matchedTasks = tasks.filter(t => t.title.toLowerCase().includes(q)).slice(0, 5);
   if (matchedProjects.length === 0 && matchedTasks.length === 0) {
     container.innerHTML = '<p class="px-3 py-2 text-xs text-[#8b949e]">No results found</p>';
-    container.classList.remove('hidden');
+    container.style.display = '';
     return;
   }
   let html = '';
   if (matchedProjects.length > 0) {
     html += '<div class="px-3 pt-2 pb-1"><span class="text-[9px] font-bold text-[#484f58] uppercase tracking-wider">Projects</span></div>';
     matchedProjects.forEach(p => {
-      html += `<button onclick="openProjectDetailModal('${p.id}'); document.getElementById('search-results').classList.add('hidden'); document.getElementById('global-search').value='';" class="w-full text-left px-3 py-2 hover:bg-[#21262d] transition-all flex items-center gap-2">
+      html += `<button onclick="openProjectDetailModal('${p.id}'); document.getElementById('search-results').style.display='none'; document.getElementById('global-search').value='';" class="w-full text-left px-3 py-2 hover:bg-[#21262d] transition-all flex items-center gap-2">
         <i data-lucide="folder-git-2" size="14" class="text-indigo-400 shrink-0"></i>
         <span class="text-xs text-white truncate">${p.name}</span>
       </button>`;
@@ -129,14 +156,14 @@ function handleSearch(query) {
   if (matchedTasks.length > 0) {
     html += '<div class="px-3 pt-2 pb-1"><span class="text-[9px] font-bold text-[#484f58] uppercase tracking-wider">Tasks</span></div>';
     matchedTasks.forEach(t => {
-      html += `<button onclick="openTaskModal('${t.id}'); document.getElementById('search-results').classList.add('hidden'); document.getElementById('global-search').value='';" class="w-full text-left px-3 py-2 hover:bg-[#21262d] transition-all flex items-center gap-2">
+      html += `<button onclick="openTaskModal('${t.id}'); document.getElementById('search-results').style.display='none'; document.getElementById('global-search').value='';" class="w-full text-left px-3 py-2 hover:bg-[#21262d] transition-all flex items-center gap-2">
         <i data-lucide="check-square" size="14" class="text-emerald-400 shrink-0"></i>
         <span class="text-xs text-white truncate">${t.title}</span>
       </button>`;
     });
   }
   container.innerHTML = html;
-  container.classList.remove('hidden');
+  container.style.display = '';
   lucide.createIcons();
 }
 
@@ -157,8 +184,10 @@ async function renderLogs() {
   };
   container.innerHTML = logs.map(log => {
     const cfg = actionConfig[log.action] || actionConfig.updated;
+    const taskId = log.taskId;
+    const clickable = taskId && typeof openTaskModal === 'function';
     return `
-      <div class="flex items-start gap-3 p-3 bg-[#161b22] border border-[#30363d] rounded-xl">
+      <div class="flex items-start gap-3 p-3 bg-[#161b22] border border-[#30363d] rounded-xl ${clickable ? 'cursor-pointer hover:border-[#484f58] transition-all' : ''}" ${clickable ? `onclick="openTaskModal('${taskId}')"` : ''}>
         <div class="w-8 h-8 rounded-lg ${cfg.bg} flex items-center justify-center shrink-0">
           <i data-lucide="${cfg.icon}" size="16" class="${cfg.color}"></i>
         </div>
@@ -188,11 +217,14 @@ async function exportLogs() {
 
 // ── Initialize ────────────────────────────────────────────
 async function init() {
-  await loadData();
+  try {
+    await loadData();
+  } catch (e) {
+    console.error('loadData failed:', e);
+  }
+  switchMainTab('projects');
   lucide.createIcons();
   fixFilterIconSizes();
-  setActiveMenu('overview');
-  switchMainTab('tasks');
   setTaskView('list');
   setProjectViewMode('grid');
 }

@@ -186,7 +186,8 @@
         align-items: center;
         height: 32px; /* keep compact inside header */
       }
-      #tasks-view-controls .view-btn {
+      #tasks-view-controls .view-btn,
+      #projects-view-controls .view-btn {
         height: 28px;
         min-width: 28px;
         padding: 0.25rem;
@@ -194,9 +195,17 @@
         align-items: center;
         justify-content: center;
       }
-      #tasks-view-controls [data-lucide] {
+      #tasks-view-controls [data-lucide],
+      #projects-view-controls [data-lucide] {
         width: 14px !important;
         height: 14px !important;
+      }
+      /* Projects grid/list toggle: match h-7 of same-row items */
+      #projects-view-controls {
+        display: flex;
+        align-items: center;
+        height: 28px;
+        padding: 0;
       }
       
       /* Improved spacing */
@@ -229,7 +238,7 @@
   </head>
 <body class="bg-primary text-primary text-[13px] h-screen overflow-hidden">
   <!-- Mobile Overlay -->
-  <div id="mobile-overlay" class="fixed inset-0 bg-black/50 z-20 hidden" onclick="closeMobileSidebar()"></div>
+  <div id="mobile-overlay" class="fixed inset-0 bg-black/50 z-20" onclick="closeMobileSidebar()" style="display: none;"></div>
 
   <!-- Custom Title Bar (for frameless window) -->
   <div class="fixed top-0 left-0 right-0 h-8 bg-[#0d1117] z-50 flex items-center" data-tauri-drag-region>
@@ -242,8 +251,8 @@
     </div>
   </div>
 
-  <!-- Sidebar (fixed, completely outside layout flow) -->
-  <aside id="sidebar" class="glass border border-[#30363d] flex flex-col transition-all duration-300 z-30 rounded-2xl fixed top-8 bottom-2 left-2 overflow-hidden translate-x-0" style="width:224px">
+  <!-- Sidebar (overlays main content) -->
+  <aside id="sidebar" class="glass border border-[#30363d] flex flex-col transition-all duration-300 z-40 rounded-2xl fixed top-8 left-2 bottom-2 overflow-hidden -translate-x-[calc(100%+8px)] lg:translate-x-0" style="width:224px">
     <div class="h-12 flex items-center justify-between px-3 shrink-0 border-b border-[#30363d]">
       <span id="logo-text" class="font-black text-[8px] tracking-[0.25em] text-[#484f58] ml-2 uppercase">Kastrix</span>
       <button onclick="toggleSidebar()" class="hidden lg:block p-2 hover:bg-[#161b22] rounded-xl text-[#484f58] hover:text-white transition-all">
@@ -256,56 +265,56 @@
           <i data-lucide="layout-grid" size="16"></i>
           <span class="nav-label font-bold tracking-wide">Overview</span>
         </button>
-        <button onclick="setActiveMenu('projects')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="projects">
-          <i data-lucide="folder-git-2" size="16"></i>
-          <span class="nav-label font-bold tracking-wide">Projects</span>
-        </button>
-        <button onclick="setActiveMenu('logs')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="logs">
-          <i data-lucide="activity" size="16"></i>
-          <span class="nav-label font-bold tracking-wide">Activity Logs</span>
-        </button>
-        <button onclick="setActiveMenu('inbox')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="inbox">
-          <i data-lucide="inbox" size="16"></i>
-          <span class="nav-label font-bold tracking-wide">Inbox</span>
-        </button>
+          <button onclick="setActiveMenu('logs')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="logs">
+            <i data-lucide="activity" size="16"></i>
+            <span class="nav-label font-bold tracking-wide">Activity Logs</span>
+          </button>
+          <button onclick="setActiveMenu('inbox')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="inbox">
+            <i data-lucide="inbox" size="16"></i>
+            <span class="nav-label font-bold tracking-wide">Inbox</span>
+          </button>
+        </div>
+        <div class="pt-3 border-t border-[#30363d]/50 space-y-0.5">
+          <button onclick="setActiveMenu('analytics')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="analytics">
+            <i data-lucide="bar-chart-3" size="16"></i>
+            <span class="nav-label font-bold tracking-wide">Analytics</span>
+          </button>
+          <button onclick="setActiveMenu('settings')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="settings">
+            <i data-lucide="settings" size="16"></i>
+            <span class="nav-label font-bold tracking-wide">Settings</span>
+          </button>
+        </div>
       </div>
-      <div class="pt-3 border-t border-[#30363d]/50 space-y-0.5">
-        <button onclick="setActiveMenu('analytics')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="analytics">
-          <i data-lucide="bar-chart-3" size="16"></i>
-          <span class="nav-label font-bold tracking-wide">Analytics</span>
-        </button>
-        <button onclick="setActiveMenu('settings')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="settings">
-          <i data-lucide="settings" size="16"></i>
-          <span class="nav-label font-bold tracking-wide">Settings</span>
-        </button>
-      </div>
-    </div>
-  </aside>
+    </aside>
 
-  <!-- Main area: full width on mobile, offset on PC to make room for sidebar -->
-  <div id="main-area" class="h-full px-2 lg:pl-[240px] pt-8 pb-2 overflow-hidden">
+    <!-- Main area -->
+    <div id="main-area" class="h-full p-2 pt-8 overflow-hidden w-full" style="padding-left: 240px;">
     <div class="h-full flex flex-col min-w-0 bg-[#0d1117] rounded-2xl border border-[#30363d] overflow-hidden shadow-inner relative">
       
-      <!-- Mobile Header -->
-      <div class="lg:hidden h-10 bg-[#010409] border-b border-[#30363d] flex items-center justify-between px-2 sm:px-3 shrink-0">
-        <button onclick="openMobileSidebar()" class="p-2 hover:bg-[#161b22] rounded-xl text-[#8b949e] hover:text-white transition-all">
-          <i data-lucide="menu" size="16"></i>
-        </button>
-        <span id="mobile-page-title" class="font-black text-[10px] tracking-[0.15em] text-[#c9d1d9] uppercase">Overview</span>
-        <div class="w-8"></div>
+      <!-- Header with Menu (sidebar toggle when sidebar hidden) -->
+      <div id="main-header" class="h-10 bg-[#010409] border-b border-[#30363d] flex items-center justify-between px-2 sm:px-3 shrink-0">
+        <div class="w-10 shrink-0 lg:w-0 lg:overflow-hidden flex">
+          <button id="btn-sidebar-menu" onclick="toggleSidebarVisibility()" class="p-2 hover:bg-[#161b22] rounded-xl text-[#8b949e] hover:text-white transition-all" title="メニュー">
+            <i data-lucide="menu" size="16"></i>
+          </button>
+        </div>
+        <span id="mobile-page-title" class="flex-1 text-center font-black text-[10px] tracking-[0.15em] text-[#c9d1d9] uppercase">Overview</span>
+        <div class="w-10 shrink-0 lg:w-0 lg:overflow-hidden"></div>
       </div>
       
+      <!-- View container: Overview / Logs / Inbox / Analytics / Settings -->
+      <div id="view-container" class="flex-1 flex flex-col min-h-0 overflow-hidden relative">
       <!-- Overview View -->
-        <div id="view-overview" class="view-section flex-1 flex flex-col overflow-y-auto touch-scroll">
+        <div id="view-overview" class="view-section absolute inset-0 flex flex-col overflow-y-auto touch-scroll min-h-0" style="display: flex;">
           <!-- Tabs -->
           <div class="h-9 sm:h-10 bg-[#010409] border-b border-[#30363d] flex items-center px-2 sm:px-3 gap-1 sm:gap-2 overflow-x-auto no-scrollbar shrink-0">
-            <div class="tab-item flex items-center h-6 sm:h-7 px-2.5 sm:px-3 min-w-[70px] sm:min-w-[90px] cursor-pointer text-[9px] sm:text-xs transition-all rounded-lg sm:rounded-xl relative border bg-transparent border-transparent text-[#8b949e] hover:bg-[#161b22] hover:text-[#c9d1d9]" data-tab="projects" onclick="switchMainTab('projects')">
+            <div class="tab-item flex items-center h-6 sm:h-7 px-2.5 sm:px-3 min-w-[70px] sm:min-w-[90px] cursor-pointer text-[9px] sm:text-xs transition-all rounded-lg sm:rounded-xl relative border bg-[#21262d] text-white border-[#484f58] shadow-sm" data-tab="projects" onclick="switchMainTab('projects')">
               <div class="flex items-center gap-1 sm:gap-1.5">
                 <i data-lucide="folder-git-2" size="10" class="sm:w-3 sm:h-3"></i>
                 <span class="font-bold tracking-tight">Projects</span>
               </div>
             </div>
-            <div class="tab-item flex items-center h-6 sm:h-7 px-2.5 sm:px-3 min-w-[70px] sm:min-w-[90px] cursor-pointer text-[9px] sm:text-xs transition-all rounded-lg sm:rounded-xl relative border bg-[#21262d] text-white border-[#484f58] shadow-sm" data-tab="tasks" onclick="switchMainTab('tasks')">
+            <div class="tab-item flex items-center h-6 sm:h-7 px-2.5 sm:px-3 min-w-[70px] sm:min-w-[90px] cursor-pointer text-[9px] sm:text-xs transition-all rounded-lg sm:rounded-xl relative border bg-transparent border-transparent text-[#8b949e] hover:bg-[#161b22] hover:text-[#c9d1d9]" data-tab="tasks" onclick="switchMainTab('tasks')">
               <div class="flex items-center gap-1 sm:gap-1.5">
                 <i data-lucide="check-square" size="10" class="sm:w-3 sm:h-3"></i>
                 <span class="font-bold tracking-tight">Tasks</span>
@@ -319,7 +328,7 @@
         <header class="h-14 shrink-0 border-b border-[#30363d] flex items-center justify-between px-3 sm:px-6">
           <div class="flex items-center gap-2 min-w-0">
             <!-- Tasks View Toggle (List/Board) -->
-            <div id="tasks-view-controls" class="flex bg-[#010409] border border-[#30363d] rounded-xl p-0.5">
+            <div id="tasks-view-controls" class="hidden flex bg-[#010409] border border-[#30363d] rounded-xl p-0.5">
               <button onclick="setTaskView('list')" id="btn-task-list" class="view-btn p-1.5 rounded-lg bg-[#30363d] text-white transition-all" title="List">
                 <i data-lucide="list" size="14" class="w-3.5 h-3.5"></i>
               </button>
@@ -360,6 +369,16 @@
                 </div>
               </div>
 
+            </div>
+
+            <!-- Projects View Toggle (Grid/List) -->
+            <div id="projects-view-controls" class="hidden bg-[#010409] border border-[#30363d] rounded-xl p-0.5 overflow-hidden">
+              <button onclick="setProjectViewMode('grid')" id="btn-project-grid" class="view-btn p-1.5 rounded-l-xl bg-[#30363d] text-white transition-all" title="Grid">
+                <i data-lucide="layout-grid" size="14"></i>
+              </button>
+              <button onclick="setProjectViewMode('list')" id="btn-project-list" class="view-btn p-1.5 rounded-r-xl text-[#8b949e] hover:text-white transition-all" title="List">
+                <i data-lucide="list" size="14"></i>
+              </button>
             </div>
 
             <!-- Project Filter Buttons -->
@@ -404,22 +423,12 @@
             <!-- Search -->
             <div class="relative hidden sm:block">
               <input id="global-search" type="text" placeholder="Search..."
-                class="w-40 bg-[#010409] border border-[#30363d] rounded-xl py-1.5 px-3 pl-8 text-xs text-white outline-none focus:border-indigo-500 focus:w-56 transition-all"
+                class="w-40 bg-[#010409] border border-[#30363d] rounded-xl py-1.5 px-3 text-xs text-white outline-none focus:border-indigo-500 focus:w-56 transition-all"
                 oninput="handleSearch(this.value)">
-              <i data-lucide="search" size="14" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#484f58] pointer-events-none"></i>
               <div id="search-results" class="hidden absolute top-9 right-0 w-72 bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl z-50 max-h-80 overflow-y-auto py-1"></div>
             </div>
             <!-- New Task -->
             <button onclick="openCreateTaskModal()" class="h-7 px-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-[10px] font-bold text-white transition-all whitespace-nowrap hidden sm:block">+ New Task</button>
-            <!-- Projects View Toggle (Grid/List) -->
-            <div id="projects-view-controls" class="hidden bg-[#010409] border border-[#30363d] rounded-xl p-0.5">
-              <button onclick="setProjectViewMode('grid')" id="btn-project-grid" class="view-btn p-1.5 rounded-lg bg-[#30363d] text-white transition-all" title="Grid">
-                <i data-lucide="layout-grid" size="14"></i>
-              </button>
-              <button onclick="setProjectViewMode('list')" id="btn-project-list" class="view-btn p-1.5 rounded-lg text-[#8b949e] hover:text-white transition-all" title="List">
-                <i data-lucide="list" size="14"></i>
-              </button>
-            </div>
             <button id="btn-add-folder" onclick="addProjectFolder()" class="hidden h-7 px-3 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-[10px] font-bold text-white transition-all whitespace-nowrap items-center gap-1.5">
               <i data-lucide="folder-plus" size="14"></i> Add Folder
             </button>
@@ -427,7 +436,7 @@
         </header>
 
 <!-- List View -->
-        <div id="list-view" class="view-mode overflow-hidden custom-scrollbar">
+        <div id="list-view" class="view-mode overflow-hidden custom-scrollbar hidden" style="display: none;">
           <table class="w-full text-left border-separate border-spacing-y-2">
             <thead>
               <tr class="text-[#484f58] text-[9px] uppercase font-black tracking-widest">
@@ -441,7 +450,7 @@
         </div>
 
         <!-- Kanban View -->
-        <div id="kanban-view" class="view-mode flex-1 overflow-auto custom-scrollbar hidden">
+        <div id="kanban-view" class="view-mode flex-1 overflow-auto custom-scrollbar hidden" style="display: none;">
           <div class="flex flex-col lg:flex-row gap-4 lg:gap-6 h-full">
             <!-- Todo Column -->
             <div class="flex-1 min-w-0 lg:min-w-[280px] flex flex-col">
@@ -476,7 +485,7 @@
         </div>
 
         <!-- Projects View -->
-        <div id="view-projects" class="view-section overflow-auto custom-scrollbar hidden p-3">
+        <div id="view-projects" class="view-section overflow-auto custom-scrollbar hidden p-3" style="display: none;">
           <!-- Grid View -->
           <div id="projects-grid-view" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <!-- Project cards will be rendered here -->
@@ -498,7 +507,7 @@
       </div>
 
       <!-- Task Detail Modal -->
-      <div id="task-modal" class="fixed inset-0 z-50 hidden">
+      <div id="task-modal" class="fixed inset-0 z-50" style="display: none;">
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeTaskModal()"></div>
         <div class="absolute right-0 top-0 h-full w-full sm:w-[480px] bg-[#0d1117] border-l border-[#30363d] shadow-2xl transform transition-transform duration-300 translate-x-full flex flex-col" id="task-modal-content">
             <div class="flex-1 overflow-y-auto custom-scrollbar p-6">
@@ -537,7 +546,7 @@
                 </div>
                 <div class="pt-4 border-t border-[#30363d]">
                   <p class="text-[10px] text-[#484f58] font-black uppercase tracking-widest mb-3">Description</p>
-                  <p class="text-[#c9d1d9] text-sm leading-relaxed">タスクの詳細説明がここに表示されます。必要に応じて編集できます。</p>
+                  <p id="modal-task-desc" class="text-[#c9d1d9] text-sm leading-relaxed">-</p>
                 </div>
               </div>
             </div>
@@ -552,7 +561,7 @@
       </div>
 
       <!-- Project Picker Dropdown -->
-      <div id="project-picker" class="absolute top-12 left-[200px] w-56 bg-[#161b22] border border-[#30363d] rounded-2xl shadow-2xl hidden z-50">
+      <div id="project-picker" class="absolute top-12 left-[200px] w-56 bg-[#161b22] border border-[#30363d] rounded-2xl shadow-2xl z-50" style="display: none;">
         <div class="p-3 border-b border-[#30363d]">
           <p class="text-[10px] font-black text-[#484f58] uppercase tracking-widest">Select Project</p>
         </div>
@@ -562,7 +571,7 @@
       </div>
 
 <!-- Project Detail Modal -->
-      <div id="project-detail-modal" class="fixed inset-0 z-50 hidden">
+      <div id="project-detail-modal" class="fixed inset-0 z-50" style="display: none;">
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeProjectDetailModal()"></div>
         <div class="absolute right-0 top-0 h-full w-full sm:w-[480px] bg-[#0d1117] border-l border-[#30363d] shadow-2xl transform transition-transform duration-300 translate-x-full" id="project-detail-modal-content">
           <div class="h-full flex flex-col">
@@ -613,7 +622,7 @@
                       </svg>
                       Cursor
                     </button>
-                    <button onclick="launchIDE('opencodes')" class="flex-1 flex items-center justify-center gap-2 px-3 py-2 sm:py-2.5 bg-[#10b981] hover:bg-[#059669] rounded-xl text-xs font-bold text-white transition-colors">
+                    <button onclick="launchIDE('opencode')" class="flex-1 flex items-center justify-center gap-2 px-3 py-2 sm:py-2.5 bg-[#10b981] hover:bg-[#059669] rounded-xl text-xs font-bold text-white transition-colors">
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
                       </svg>
@@ -642,7 +651,7 @@
       </div>
 
       <!-- Task Edit/Create Modal -->
-      <div id="task-edit-modal" class="fixed inset-0 z-50 hidden">
+      <div id="task-edit-modal" class="fixed inset-0 z-50" style="display: none;">
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeTaskEditModal()"></div>
         <div class="absolute right-0 top-0 h-full w-full sm:w-[480px] bg-[#0d1117] border-l border-[#30363d] shadow-2xl transform transition-transform duration-300 translate-x-full flex flex-col" id="task-edit-modal-content">
           <div class="h-12 border-b border-[#30363d] flex items-center justify-between px-4 bg-[#161b22]">
@@ -696,49 +705,76 @@
       </div>
 
         <!-- Logs View -->
-        <div id="view-logs" class="view-section flex-1 flex flex-col overflow-hidden hidden">
-          <div class="h-14 shrink-0 border-b border-[#30363d] hidden lg:flex items-center justify-between px-6">
-            <h1 class="font-black text-sm tracking-wide text-white">Activity Logs</h1>
-            <button onclick="exportLogs()" class="h-7 px-3 bg-[#010409] border border-[#30363d] hover:border-[#484f58] rounded-xl text-[10px] font-bold text-[#8b949e] hover:text-white transition-all flex items-center gap-1.5">
-              <i data-lucide="download" size="12"></i>
-              Export CSV
-            </button>
-          </div>
+        <div id="view-logs" class="view-section absolute inset-0 flex flex-col overflow-hidden min-h-0" style="display: none;">
+          <header class="h-14 shrink-0 bg-[#010409] border-b border-[#30363d] flex items-center justify-between px-3 sm:px-6">
+            <div class="w-10 shrink-0 lg:w-0 lg:overflow-hidden">
+              <button onclick="toggleSidebarVisibility()" class="p-2 hover:bg-[#161b22] rounded-xl text-[#8b949e] hover:text-white transition-all lg:hidden" title="メニュー">
+                <i data-lucide="menu" size="16"></i>
+              </button>
+            </div>
+            <h1 class="flex-1 text-center font-black text-[10px] tracking-[0.15em] text-[#c9d1d9] uppercase">Activity Logs</h1>
+            <div class="w-10 shrink-0 flex justify-end">
+              <button onclick="exportLogs()" class="h-7 px-3 bg-[#161b22] border border-[#30363d] hover:border-[#484f58] rounded-xl text-[10px] font-bold text-[#8b949e] hover:text-white transition-all flex items-center gap-1.5">
+                <i data-lucide="download" size="12"></i>
+                Export CSV
+              </button>
+            </div>
+          </header>
           <div class="flex-1 overflow-auto custom-scrollbar p-4 sm:p-6">
             <div id="logs-list" class="space-y-3"></div>
           </div>
         </div>
 
         <!-- Inbox View -->
-        <div id="view-inbox" class="view-section flex-1 flex flex-col overflow-hidden hidden">
-          <div class="h-14 shrink-0 border-b border-[#30363d] hidden lg:flex items-center px-6">
-            <h1 class="font-black text-sm tracking-wide text-white">Inbox</h1>
-          </div>
+        <div id="view-inbox" class="view-section absolute inset-0 flex flex-col overflow-hidden min-h-0" style="display: none;">
+          <header class="h-14 shrink-0 bg-[#010409] border-b border-[#30363d] flex items-center justify-between px-3 sm:px-6">
+            <div class="w-10 shrink-0 lg:w-0 lg:overflow-hidden">
+              <button onclick="toggleSidebarVisibility()" class="p-2 hover:bg-[#161b22] rounded-xl text-[#8b949e] hover:text-white transition-all lg:hidden" title="メニュー">
+                <i data-lucide="menu" size="16"></i>
+              </button>
+            </div>
+            <h1 class="flex-1 text-center font-black text-[10px] tracking-[0.15em] text-[#c9d1d9] uppercase">Inbox</h1>
+            <div class="w-10 shrink-0 lg:w-0 lg:overflow-hidden"></div>
+          </header>
           <div id="inbox-content" class="flex-1 overflow-auto custom-scrollbar p-4 sm:p-6 space-y-2"></div>
         </div>
 
         <!-- Analytics View -->
-        <div id="view-analytics" class="view-section flex-1 flex flex-col overflow-hidden hidden">
-          <div class="h-14 shrink-0 border-b border-[#30363d] hidden lg:flex items-center px-6">
-            <h1 class="font-black text-sm tracking-wide text-white">Analytics</h1>
-          </div>
+        <div id="view-analytics" class="view-section absolute inset-0 flex flex-col overflow-hidden min-h-0" style="display: none;">
+          <header class="h-14 shrink-0 bg-[#010409] border-b border-[#30363d] flex items-center justify-between px-3 sm:px-6">
+            <div class="w-10 shrink-0 lg:w-0 lg:overflow-hidden">
+              <button onclick="toggleSidebarVisibility()" class="p-2 hover:bg-[#161b22] rounded-xl text-[#8b949e] hover:text-white transition-all lg:hidden" title="メニュー">
+                <i data-lucide="menu" size="16"></i>
+              </button>
+            </div>
+            <h1 class="flex-1 text-center font-black text-[10px] tracking-[0.15em] text-[#c9d1d9] uppercase">Analytics</h1>
+            <div class="w-10 shrink-0 lg:w-0 lg:overflow-hidden"></div>
+          </header>
           <div id="analytics-content" class="flex-1 overflow-auto custom-scrollbar p-4 sm:p-6 space-y-4"></div>
         </div>
 
         <!-- Settings View -->
-        <div id="view-settings" class="view-section flex-1 flex flex-col overflow-hidden hidden">
-          <div class="h-14 shrink-0 border-b border-[#30363d] hidden lg:flex items-center px-6">
-            <h1 class="font-black text-sm tracking-wide text-white">Settings</h1>
-          </div>
+        <div id="view-settings" class="view-section absolute inset-0 flex flex-col overflow-hidden min-h-0" style="display: none;">
+          <header class="h-14 shrink-0 bg-[#010409] border-b border-[#30363d] flex items-center justify-between px-3 sm:px-6">
+            <div class="w-10 shrink-0 lg:w-0 lg:overflow-hidden">
+              <button onclick="toggleSidebarVisibility()" class="p-2 hover:bg-[#161b22] rounded-xl text-[#8b949e] hover:text-white transition-all lg:hidden" title="メニュー">
+                <i data-lucide="menu" size="16"></i>
+              </button>
+            </div>
+            <h1 class="flex-1 text-center font-black text-[10px] tracking-[0.15em] text-[#c9d1d9] uppercase">Settings</h1>
+            <div class="w-10 shrink-0 lg:w-0 lg:overflow-hidden"></div>
+          </header>
           <div id="settings-content" class="flex-1 overflow-auto custom-scrollbar p-4 sm:p-6 space-y-4"></div>
         </div>
+      </div>
+      <!-- /view-container -->
 
         <!-- AI Chat -->
       <button onclick="toggleAiChat()" class="absolute right-6 bottom-6 w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center shadow-lg hover:bg-indigo-500 transition-all z-40">
         <i data-lucide="sparkles" size="20" class="text-white"></i>
       </button>
 
-      <div id="ai-chat" class="absolute right-6 bottom-20 w-80 h-[480px] bg-[#161b22] border border-[#30363d] shadow-2xl rounded-[32px] flex flex-col overflow-hidden hidden z-50">
+      <div id="ai-chat" class="absolute right-6 bottom-20 w-80 h-[480px] bg-[#161b22] border border-[#30363d] shadow-2xl rounded-[32px] flex flex-col overflow-hidden hidden z-50" style="display: none;">
         <div class="p-4 bg-[#010409] border-b border-[#30363d] flex justify-between items-center">
           <span class="text-[10px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-2">
             <i data-lucide="sparkles" size="14"></i> Log Analyzer
@@ -760,7 +796,6 @@
         </form>
       </div>
     </div>
-  </div>
 
 <!-- Hidden selects for state (used by filterTasks / renderProjects) -->
 <select id="task-status-filter" class="hidden"><option value="all" selected>all</option><option value="todo">todo</option><option value="in-progress">in-progress</option><option value="done">done</option></select>

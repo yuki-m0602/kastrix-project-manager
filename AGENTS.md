@@ -31,6 +31,7 @@ project-root/
 - `agent_docs/debugging.md` — デバッグの手順
 - `agent_docs/refactoring.md` — リファクタリングの手順
 - `agent_docs/ui.md` — UI実装の手順
+- `agent_docs/team_feature.md` — チーム機能の実装手順
 
 ---
 

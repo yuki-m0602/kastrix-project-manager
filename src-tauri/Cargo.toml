@@ -13,7 +13,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["devtools"] }
+tauri = { version = "2.10", features = ["devtools"] }
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
@@ -26,6 +26,13 @@ chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 keyring = { version = "3", features = ["sync-secret-service", "windows-native", "apple-native"] }
 tokio = { version = "1", features = ["full"] }
+opener = "0.7"
+rand = "0.9"
+hex = "0.4"
+# iroh: Tauri の windows 0.61 に合わせて 0.92 を使用（netwatch 0.9 → windows 0.61）
+iroh = { version = "0.92", default-features = false, features = ["discovery-pkarr-dht"] }
+iroh-base = "0.92"
+iroh-gossip = { version = "0.92", default-features = false, features = ["net"] }
 
 [profile.release]
 panic = "abort"

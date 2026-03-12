@@ -3,6 +3,7 @@ use std::path::Path;
 use std::sync::mpsc;
 use tauri::{AppHandle, Emitter};
 
+#[allow(dead_code)]
 pub fn start_watcher(app: AppHandle, watch_path: &Path) -> Option<RecommendedWatcher> {
     let (tx, rx) = mpsc::channel();
 

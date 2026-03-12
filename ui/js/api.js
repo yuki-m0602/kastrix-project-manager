@@ -10,8 +10,13 @@ async function _invoke(cmd, args) {
 
 // ── Projects ─────────────────────────────────────────────
 async function apiGetProjects() {
-  const result = await _invoke('get_projects');
-  return result || [...localProjects];
+  try {
+    const result = await _invoke('get_projects');
+    return Array.isArray(result) ? result : [...(localProjects || [])];
+  } catch (e) {
+    console.error('apiGetProjects failed:', e);
+    return [...(localProjects || [])];
+  }
 }
 
 async function apiScanDirectory(path) {
@@ -33,16 +38,26 @@ async function apiGetReadme(path) {
 
 async function apiOpenInIde(ide, path) {
   if (_isTauri) {
-    await _invoke('open_in_ide', { ide, path });
+    try {
+      await _invoke('open_in_ide', { ide, path: path || null });
+    } catch (e) {
+      console.error('Failed to open IDE:', e);
+      alert('Failed to open IDE: ' + e);
+    }
   } else {
-    alert('Open in ' + ide + ': ' + path + '\n(Tauri環境で動作)');
+    alert('Open in ' + ide + '\n(Tauri環境で動作)');
   }
 }
 
 // ── Tasks ────────────────────────────────────────────────
 async function apiGetTasks(projectId) {
-  const result = await _invoke('get_tasks', projectId ? { projectId } : {});
-  return result || [...tasks];
+  try {
+    const result = await _invoke('get_tasks', projectId ? { projectId } : {});
+    return Array.isArray(result) ? result : [...(tasks || [])];
+  } catch (e) {
+    console.error('apiGetTasks failed:', e);
+    return [...(tasks || [])];
+  }
 }
 
 async function apiCreateTask(input) {
@@ -141,4 +156,26 @@ async function apiDeleteApiKey(provider) {
 async function apiAnalyzeLogs(prompt, provider) {
   if (!_isTauri) return 'AI analysis requires Tauri environment with an API key configured.';
   return await _invoke('analyze_logs', { prompt, provider });
+}
+
+// ── Team ─────────────────────────────────────────────────
+async function apiTeamCreate() {
+  return await _invoke('team_create', {});
+}
+
+async function apiTeamIssueInvite(expiresMinutes) {
+  return await _invoke('team_issue_invite', { expiresMinutes: expiresMinutes ?? null });
+}
+
+async function apiTeamJoin(code) {
+  return await _invoke('team_join', { code });
+}
+
+async function apiTeamListInviteCodes() {
+  const result = await _invoke('team_list_invite_codes', {});
+  return Array.isArray(result) ? result : [];
+}
+
+async function apiTeamRevokeInviteCode(code) {
+  return await _invoke('team_revoke_invite_code', { code });
 }

@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.kastrix.desktop",
   "build": {
-    "beforeBuildCommand": "",
+    "beforeBuildCommand": "npm run css:build",
     "beforeDevCommand": "",
     "frontendDist": "../ui"
   },
@@ -19,7 +19,8 @@
         "fullscreen": false,
         "minWidth": 800,
         "minHeight": 600,
-        "center": true
+        "center": true,
+        "decorations": false
       }
     ],
     "security": {

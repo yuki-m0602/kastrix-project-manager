@@ -1,6 +1,7 @@
 use git2::Repository;
 use std::path::Path;
 
+#[allow(dead_code)]
 pub struct GitInfo {
     pub last_commit_message: Option<String>,
     pub last_commit_date: Option<String>,

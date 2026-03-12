@@ -3,8 +3,9 @@ let _aiMessages = [];
 
 function toggleAiChat() {
   const el = document.getElementById('ai-chat');
-  el.classList.toggle('hidden');
-  if (!el.classList.contains('hidden')) {
+  const isHidden = el.style.display === 'none';
+  el.style.display = isHidden ? 'flex' : 'none';
+  if (isHidden) {
     _initAiChat();
   }
 }
