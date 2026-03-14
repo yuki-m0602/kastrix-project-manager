@@ -5,7 +5,7 @@
 use iroh::protocol::Router;
 use iroh::{Endpoint, NodeId, Watcher};
 use iroh_base::ticket::NodeTicket;
-use iroh_gossip::api::GossipSender;
+use iroh_gossip::api::{GossipReceiver, GossipSender};
 use iroh_gossip::net::Gossip;
 use iroh_gossip::proto::TopicId;
 use iroh_gossip::ALPN;
@@ -70,24 +70,24 @@ impl IrohNodeState {
     }
 
     /// TopicId に subscribe（ホスト: bootstrap=[]、メンバー: bootstrap=[host_node_id]）
-    /// 購読は subscriptions に保持され、broadcast に使用可能
+    /// 購読は subscriptions に保持。receiver を返す（ホストは NeighborUp をリッスンして参加申請を受信）
     pub async fn subscribe(
         &self,
         topic_id: TopicId,
         topic_id_hex: &str,
         bootstrap: Vec<NodeId>,
-    ) -> Result<(), String> {
+    ) -> Result<GossipReceiver, String> {
         let topic = self
             .gossip
             .subscribe(topic_id, bootstrap)
             .await
             .map_err(|e| format!("gossip subscribe failed: {}", e))?;
-        let (sender, _receiver) = topic.split();
+        let (sender, receiver) = topic.split();
         self.subscriptions
             .write()
             .await
             .insert(topic_id_hex.to_string(), sender);
-        Ok(())
+        Ok(receiver)
     }
 
     /// トピックの GossipSender を取得（subscribe 済みの場合、broadcast 用）

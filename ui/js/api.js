@@ -179,3 +179,16 @@ async function apiTeamListInviteCodes() {
 async function apiTeamRevokeInviteCode(code) {
   return await _invoke('team_revoke_invite_code', { code });
 }
+
+async function apiTeamListPendingJoins() {
+  const result = await _invoke('team_list_pending_joins', {});
+  return Array.isArray(result) ? result : [];
+}
+
+async function apiTeamApproveJoin(endpointId, topicId) {
+  return await _invoke('team_approve_join', { endpointId, topicId });
+}
+
+async function apiTeamRejectJoin(endpointId, topicId) {
+  return await _invoke('team_reject_join', { endpointId, topicId });
+}

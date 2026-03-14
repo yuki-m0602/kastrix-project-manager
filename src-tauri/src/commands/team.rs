@@ -3,8 +3,22 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use crate::db::DbState;
 use crate::team::{generate_invite_code, normalize_code, IrohState};
-use tauri::State;
+use futures::StreamExt;
+use iroh_gossip::api::Event;
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter, State};
+use tokio::sync::RwLock;
 use uuid::Uuid;
+
+/// 参加申請（NeighborUp で受信）
+#[derive(Clone, serde::Serialize)]
+pub struct PendingJoinInfo {
+    pub endpoint_id: String,
+    pub topic_id: String,
+    pub requested_at: String,
+}
+
+pub type PendingJoinsState = Arc<RwLock<Vec<PendingJoinInfo>>>;
 
 /// EndpointID（NodeId）を取得。iroh 未初期化時はエラー
 #[tauri::command]
@@ -20,11 +34,43 @@ fn topic_id_to_hex(id: &[u8; 32]) -> String {
     id.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
+/// ホスト用: GossipReceiver から NeighborUp を受信し、参加申請として保存・通知
+async fn spawn_join_listener(
+    mut receiver: iroh_gossip::api::GossipReceiver,
+    pending_joins: PendingJoinsState,
+    app: AppHandle,
+    topic_id: String,
+) {
+    while let Some(event) = receiver.next().await {
+        match event {
+            Ok(Event::NeighborUp(node_id)) => {
+                let endpoint_id = node_id.to_string();
+                let requested_at = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+                let info = PendingJoinInfo {
+                    endpoint_id: endpoint_id.clone(),
+                    topic_id: topic_id.clone(),
+                    requested_at,
+                };
+                {
+                    let mut guard = pending_joins.write().await;
+                    if !guard.iter().any(|p| p.endpoint_id == endpoint_id && p.topic_id == topic_id) {
+                        guard.push(info.clone());
+                    }
+                }
+                let _ = app.emit("team-pending-join", &info);
+            }
+            _ => {}
+        }
+    }
+}
+
 /// チームを作成し、招待コードを発行
 #[tauri::command]
 pub async fn team_create(
+    app: AppHandle,
     state: State<'_, DbState>,
     iroh: State<'_, IrohState>,
+    pending_joins: State<'_, PendingJoinsState>,
 ) -> Result<TeamCreateResult, String> {
     let (code, topic_id) = generate_invite_code();
     let topic_id_hex = topic_id_to_hex(&topic_id);
@@ -36,10 +82,19 @@ pub async fn team_create(
             .as_ref()
             .ok_or_else(|| "iroh が初期化されていません。チーム機能を利用できません。".to_string())?;
         let topic_id_iroh = iroh_gossip::proto::TopicId::from_bytes(topic_id);
-        node.subscribe(topic_id_iroh, &topic_id_hex, vec![])
+        let receiver = node
+            .subscribe(topic_id_iroh, &topic_id_hex, vec![])
             .await
             .map_err(|e| format!("トピック参加に失敗: {}", e))?;
         let ticket = node.node_ticket().await.map_err(|e| e.to_string())?;
+
+        // ホスト: NeighborUp をリッスンして参加申請を受信
+        let pending_joins = pending_joins.inner().clone();
+        let topic_id_for_listener = topic_id_hex.clone();
+        tauri::async_runtime::spawn(async move {
+            spawn_join_listener(receiver, pending_joins, app, topic_id_for_listener).await;
+        });
+
         ticket.to_string()
     };
 
@@ -227,6 +282,48 @@ pub async fn team_list_invite_codes(
         result.push(row.map_err(|e| e.to_string())?);
     }
     Ok(result)
+}
+
+/// 参加申請一覧を取得（ホスト用）
+#[tauri::command]
+pub async fn team_list_pending_joins(
+    pending_joins: State<'_, PendingJoinsState>,
+) -> Result<Vec<PendingJoinInfo>, String> {
+    let guard = pending_joins.read().await;
+    Ok(guard.clone())
+}
+
+/// 参加申請を承認（ホスト用）
+#[tauri::command]
+pub async fn team_approve_join(
+    state: State<'_, DbState>,
+    pending_joins: State<'_, PendingJoinsState>,
+    endpoint_id: String,
+    topic_id: String,
+) -> Result<(), String> {
+    {
+        let mut guard = pending_joins.write().await;
+        guard.retain(|p| !(p.endpoint_id == endpoint_id && p.topic_id == topic_id));
+    }
+    let db = state.0.lock().map_err(|e| e.to_string())?;
+    db.execute(
+        "INSERT OR IGNORE INTO members (id, endpoint_id, role, status) VALUES (?1, ?2, 'member', 'active')",
+        rusqlite::params![Uuid::new_v4().to_string(), endpoint_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// 参加申請を拒否（ホスト用）
+#[tauri::command]
+pub async fn team_reject_join(
+    pending_joins: State<'_, PendingJoinsState>,
+    endpoint_id: String,
+    topic_id: String,
+) -> Result<(), String> {
+    let mut guard = pending_joins.write().await;
+    guard.retain(|p| !(p.endpoint_id == endpoint_id && p.topic_id == topic_id));
+    Ok(())
 }
 
 /// 招待コードを無効化

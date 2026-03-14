@@ -2868,7 +2868,9 @@ name = "kastrix"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "bytes",
  "chrono",
+ "futures",
  "git2",
  "hex",
  "iroh",

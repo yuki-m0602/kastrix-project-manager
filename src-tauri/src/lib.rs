@@ -27,6 +27,8 @@ pub fn run() {
 
             let iroh_state: team::IrohState = Arc::new(RwLock::new(None));
             let iroh_state_clone = iroh_state.clone();
+            let pending_joins: commands::team::PendingJoinsState = Arc::new(RwLock::new(Vec::new()));
+            app.manage(pending_joins);
             tauri::async_runtime::spawn(async move {
                 match team::IrohNodeState::init().await {
                     Ok(node) => {
@@ -74,6 +76,9 @@ pub fn run() {
             commands::team::team_join,
             commands::team::team_list_invite_codes,
             commands::team::team_revoke_invite_code,
+            commands::team::team_list_pending_joins,
+            commands::team::team_approve_join,
+            commands::team::team_reject_join,
         ])
         .run(tauri::generate_context!())
         .expect("Error while running Tauri application");

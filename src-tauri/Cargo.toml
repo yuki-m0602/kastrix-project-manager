@@ -26,6 +26,8 @@ chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 keyring = { version = "3", features = ["sync-secret-service", "windows-native", "apple-native"] }
 tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+bytes = "1"
 opener = "0.7"
 rand = "0.9"
 hex = "0.4"

@@ -114,6 +114,11 @@ async function renderSettings() {
           <div id="team-invite-codes-list" class="space-y-2"></div>
         </div>
 
+        <div id="team-pending-joins-section" class="hidden">
+          <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">参加申請</h3>
+          <div id="team-pending-joins-list" class="space-y-2"></div>
+        </div>
+
         <div class="pt-4 border-t border-[#30363d]">
           <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">チームに参加する</h3>
           <div class="flex gap-2">
@@ -143,10 +148,41 @@ async function renderSettings() {
     if (sel) sel.value = savedIde;
   }
 
-  // Load team invite codes
+  // Load team invite codes and pending joins
   await renderTeamInviteCodes();
+  await renderTeamPendingJoins();
 
   lucide.createIcons();
+}
+
+async function renderTeamPendingJoins() {
+  if (!_isTauri) return;
+  const section = document.getElementById('team-pending-joins-section');
+  const list = document.getElementById('team-pending-joins-list');
+  if (!section || !list) return;
+  try {
+    const pending = await apiTeamListPendingJoins();
+    if (pending.length === 0) {
+      section.classList.add('hidden');
+      return;
+    }
+    section.classList.remove('hidden');
+    list.innerHTML = pending.map((p) => `
+      <div class="flex items-center justify-between p-3 bg-[#0d1117] border border-[#30363d] rounded-xl">
+        <div class="flex flex-col gap-0.5 min-w-0">
+          <span class="text-xs font-mono text-white truncate" title="${escapeHtml(p.endpoint_id)}">${escapeHtml(p.endpoint_id.slice(0, 16))}...</span>
+          <span class="text-[9px] text-[#8b949e]">${escapeHtml(p.requested_at)}</span>
+        </div>
+        <div class="flex items-center gap-1 shrink-0">
+          <button onclick="teamApproveJoin(this)" data-endpoint="${escapeHtml(p.endpoint_id)}" data-topic="${escapeHtml(p.topic_id)}" class="px-2 py-1 text-[9px] font-bold text-green-400 hover:bg-green-500/10 rounded-lg">承認</button>
+          <button onclick="teamRejectJoin(this)" data-endpoint="${escapeHtml(p.endpoint_id)}" data-topic="${escapeHtml(p.topic_id)}" class="px-2 py-1 text-[9px] font-bold text-red-400 hover:bg-red-500/10 rounded-lg">拒否</button>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    console.error('Failed to load pending joins:', e);
+    section.classList.add('hidden');
+  }
 }
 
 async function renderTeamInviteCodes() {
@@ -267,6 +303,26 @@ async function teamJoin() {
   }
 }
 
+async function teamApproveJoin(btn) {
+  if (!_isTauri || !btn?.dataset?.endpoint || !btn?.dataset?.topic) return;
+  try {
+    await apiTeamApproveJoin(btn.dataset.endpoint, btn.dataset.topic);
+    await renderTeamPendingJoins();
+  } catch (e) {
+    alert('エラー: ' + (e?.toString?.() || e));
+  }
+}
+
+async function teamRejectJoin(btn) {
+  if (!_isTauri || !btn?.dataset?.endpoint || !btn?.dataset?.topic) return;
+  try {
+    await apiTeamRejectJoin(btn.dataset.endpoint, btn.dataset.topic);
+    await renderTeamPendingJoins();
+  } catch (e) {
+    alert('エラー: ' + (e?.toString?.() || e));
+  }
+}
+
 async function teamCopyInviteLink(btn) {
   const invite = btn?.dataset?.invite;
   if (!invite) return;
@@ -337,4 +393,11 @@ async function saveAiProvider(value) {
 
 async function saveDefaultIde(value) {
   await apiSetSetting('default_ide', value);
+}
+
+// 参加申請イベントをリッスン（ホストがチーム作成済みの場合）
+if (_isTauri && window.__TAURI__?.event?.listen) {
+  window.__TAURI__.event.listen('team-pending-join', () => {
+    if (typeof renderTeamPendingJoins === 'function') renderTeamPendingJoins();
+  });
 }
