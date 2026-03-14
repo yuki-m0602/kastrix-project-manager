@@ -5,5 +5,5 @@
 mod invite_code;
 mod iroh_node;
 
-pub use invite_code::{generate_invite_code, normalize_code, validate_code_format};
+pub use invite_code::{generate_invite_code, normalize_code};
 pub use iroh_node::{IrohNodeState, IrohState};

@@ -117,7 +117,7 @@ async function renderSettings() {
         <div class="pt-4 border-t border-[#30363d]">
           <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">チームに参加する</h3>
           <div class="flex gap-2">
-            <input id="team-join-code" type="text" placeholder="KASTRIX-XXXX-XXXX" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-white placeholder-[#484f58] font-mono">
+            <input id="team-join-code" type="text" placeholder="招待リンクを貼り付け（ホストから共有された文字列）" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-white placeholder-[#484f58] font-mono">
             <button onclick="teamJoin()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white">参加する</button>
           </div>
         </div>
@@ -163,13 +163,19 @@ async function renderTeamInviteCodes() {
     section.classList.remove('hidden');
     list.innerHTML = codes.map(c => {
       const expiresText = c.expires_at ? formatExpiresAt(c.expires_at) : '無期限';
+      const copyBtn = c.invite_string
+        ? `<button onclick="teamCopyInviteLink(this)" data-invite="${escapeHtml(c.invite_string)}" class="px-2 py-1 text-[9px] font-bold text-indigo-400 hover:bg-indigo-500/10 rounded-lg shrink-0">リンクをコピー</button>`
+        : '';
       return `
         <div class="flex items-center justify-between p-3 bg-[#0d1117] border border-[#30363d] rounded-xl">
           <div class="flex items-center gap-2 min-w-0">
             <span class="text-xs font-mono text-white truncate">${escapeHtml(c.code)}</span>
             <span class="text-[9px] text-[#8b949e] shrink-0">${expiresText}</span>
           </div>
-          <button onclick="teamRevokeCode(this)" data-code="${escapeHtml(c.code)}" class="px-2 py-1 text-[9px] font-bold text-red-400 hover:bg-red-500/10 rounded-lg shrink-0">無効化</button>
+          <div class="flex items-center gap-1 shrink-0">
+            ${copyBtn}
+            <button onclick="teamRevokeCode(this)" data-code="${escapeHtml(c.code)}" class="px-2 py-1 text-[9px] font-bold text-red-400 hover:bg-red-500/10 rounded-lg">無効化</button>
+          </div>
         </div>
       `;
     }).join('');
@@ -182,7 +188,9 @@ async function renderTeamInviteCodes() {
 function formatExpiresAt(isoStr) {
   if (!isoStr) return '';
   try {
-    const d = new Date(isoStr);
+    // SQLite の "YYYY-MM-DD HH:MM:SS" を ISO 8601 形式に変換（ローカル時刻として解釈）
+    const normalized = String(isoStr).replace(' ', 'T');
+    const d = new Date(normalized);
     const now = new Date();
     const diff = d - now;
     if (diff <= 0) return '期限切れ';
@@ -208,9 +216,9 @@ async function teamCreate() {
   }
   try {
     const result = await apiTeamCreate();
-    if (result && result.code) {
-      await navigator.clipboard.writeText(result.code);
-      alert(`チームを作成しました。\n招待コード: ${result.code}\n（クリップボードにコピーしました）`);
+    if (result && result.invite_string) {
+      await navigator.clipboard.writeText(result.invite_string);
+      alert(`チームを作成しました。\n招待コード: ${result.code}\n\n参加する人にこの招待リンクを共有してください（クリップボードにコピー済み）`);
       await renderTeamInviteCodes();
       renderSettings();
     }
@@ -256,6 +264,17 @@ async function teamJoin() {
     }
   } catch (e) {
     alert('エラー: ' + (e?.toString?.() || e));
+  }
+}
+
+async function teamCopyInviteLink(btn) {
+  const invite = btn?.dataset?.invite;
+  if (!invite) return;
+  try {
+    await navigator.clipboard.writeText(invite);
+    alert('招待リンクをクリップボードにコピーしました');
+  } catch (e) {
+    alert('コピーに失敗しました: ' + (e?.toString?.() || e));
   }
 }
 

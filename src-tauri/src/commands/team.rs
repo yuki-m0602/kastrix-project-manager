@@ -1,7 +1,8 @@
 //! チーム機能 Tauri コマンド
 
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use crate::db::DbState;
-use crate::team::{generate_invite_code, normalize_code, validate_code_format, IrohState};
+use crate::team::{generate_invite_code, normalize_code, IrohState};
 use tauri::State;
 use uuid::Uuid;
 
@@ -44,15 +45,21 @@ pub async fn team_create(
 
     let db = state.0.lock().map_err(|e| e.to_string())?;
     db.execute(
-        "INSERT INTO invite_codes (id, code, topic_id, host_ticket, expires_at) VALUES (?1, ?2, ?3, ?4, datetime('now', '+1 hour'))",
+        "INSERT INTO invite_codes (id, code, topic_id, host_ticket, expires_at) VALUES (?1, ?2, ?3, ?4, datetime('now', 'localtime', '+1 hour'))",
         rusqlite::params![id, code, topic_id_hex, host_ticket],
     )
     .map_err(|e| e.to_string())?;
+
+    let expires_at = chrono::Local::now() + chrono::Duration::hours(1);
+    let expires_at_str = expires_at.format("%Y-%m-%d %H:%M:%S").to_string();
+    let invite_payload = format!("{}::{}::{}", topic_id_hex, host_ticket, expires_at_str);
+    let invite_string = format!("KASTRIX-{}", URL_SAFE_NO_PAD.encode(invite_payload.as_bytes()));
 
     Ok(TeamCreateResult {
         code: code.clone(),
         topic_id: topic_id_hex,
         expires_in_minutes: 60,
+        invite_string: invite_string.clone(),
     })
 }
 
@@ -70,7 +77,7 @@ pub async fn team_issue_invite(
     let db = state.0.lock().map_err(|e| e.to_string())?;
     let expires_modifier = format!("+{} minutes", mins);
     db.execute(
-        "INSERT INTO invite_codes (id, code, topic_id, expires_at) VALUES (?1, ?2, ?3, datetime('now', ?4))",
+        "INSERT INTO invite_codes (id, code, topic_id, expires_at) VALUES (?1, ?2, ?3, datetime('now', 'localtime', ?4))",
         rusqlite::params![id, code, topic_id_hex, expires_modifier],
     )
     .map_err(|e| e.to_string())?;
@@ -82,47 +89,91 @@ pub async fn team_issue_invite(
 }
 
 /// 招待コードでチームに参加申請
+/// 入力: フル招待文字列（KASTRIX-<base64>）または短いコード（KASTRIX-XXXX-XXXX、ホストのDB照合用）
 #[tauri::command]
 pub async fn team_join(
     state: State<'_, DbState>,
     iroh: State<'_, IrohState>,
     code: String,
 ) -> Result<TeamJoinResult, String> {
-    validate_code_format(&code)?;
-    let code = normalize_code(&code);
+    let code = code.trim();
+    if !code.to_uppercase().starts_with("KASTRIX-") {
+        return Err("招待コードは KASTRIX- で始まる必要があります".to_string());
+    }
 
-    let (topic_id, host_ticket_opt): (String, Option<String>) = {
-        let db = state.0.lock().map_err(|e| e.to_string())?;
-        db.query_row(
-            "SELECT topic_id, host_ticket FROM invite_codes WHERE code = ?1 AND (expires_at IS NULL OR expires_at > datetime('now'))",
-            [&code],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .map_err(|_| "招待コードが無効または期限切れです".to_string())?
+    let (topic_id, host_ticket_str) = if let Some(payload) = code.strip_prefix("KASTRIX-").or_else(|| code.strip_prefix("kastrix-")) {
+        let payload = payload.trim();
+        if payload.len() > 80 {
+            // フル招待形式: KASTRIX-<base64(topic_id::host_ticket::expires_at)>
+            match URL_SAFE_NO_PAD.decode(payload) {
+                Ok(decoded) => {
+                    let s = String::from_utf8(decoded).map_err(|_| "招待データの形式が不正です".to_string())?;
+                    let parts: Vec<&str> = s.splitn(3, "::").collect();
+                    if parts.len() != 3 {
+                        return Err("招待データの形式が不正です".to_string());
+                    }
+                    let topic_id = parts[0].to_string();
+                    let host_ticket = parts[1].to_string();
+                    let expires_at = parts[2];
+                    if !is_expired(expires_at) {
+                        (topic_id, Some(host_ticket))
+                    } else {
+                        return Err("招待コードの有効期限が切れています".to_string());
+                    }
+                }
+                Err(_) => try_db_lookup(&state, &normalize_code(code))?,
+            }
+        } else {
+            try_db_lookup(&state, &normalize_code(code))?
+        }
+    } else {
+        return Err("招待コードは KASTRIX- で始まる必要があります".to_string());
     };
 
-    if let Some(host_ticket_str) = host_ticket_opt {
-        let guard = iroh.read().await;
-        if let Some(node) = guard.as_ref() {
-            let ticket: iroh_base::ticket::NodeTicket = host_ticket_str
-                .parse()
-                .map_err(|e| format!("ホスト情報の解析に失敗: {}", e))?;
-            node.add_node_addr(&ticket)
-                .map_err(|e| format!("ホストへの接続設定に失敗: {}", e))?;
-            let topic_id_bytes = hex_to_topic_id(&topic_id)?;
-            let topic_id_iroh = iroh_gossip::proto::TopicId::from_bytes(topic_id_bytes);
-            let host_node_id = ticket.node_addr().node_id;
-            node.subscribe(topic_id_iroh, &topic_id, vec![host_node_id])
-                .await
-                .map_err(|e| format!("トピック参加に失敗: {}", e))?;
-        }
-    }
+    let host_ticket_str = host_ticket_str
+        .ok_or_else(|| "この招待コードでは参加できません。ホストから共有された招待リンクを貼り付けてください。".to_string())?;
+
+    let guard = iroh.read().await;
+    let node = guard
+        .as_ref()
+        .ok_or_else(|| "iroh が初期化されていません".to_string())?;
+    let ticket: iroh_base::ticket::NodeTicket = host_ticket_str
+        .parse()
+        .map_err(|e| format!("ホスト情報の解析に失敗: {}", e))?;
+    node.add_node_addr(&ticket)
+        .map_err(|e| format!("ホストへの接続設定に失敗: {}", e))?;
+    let topic_id_bytes = hex_to_topic_id(&topic_id)?;
+    let topic_id_iroh = iroh_gossip::proto::TopicId::from_bytes(topic_id_bytes);
+    let host_node_id = ticket.node_addr().node_id;
+    node.subscribe(topic_id_iroh, &topic_id, vec![host_node_id])
+        .await
+        .map_err(|e| format!("トピック参加に失敗: {}", e))?;
 
     Ok(TeamJoinResult {
         topic_id: topic_id.clone(),
         status: "pending".to_string(),
         message: "参加申請を送信しました。ホストの承認をお待ちください。".to_string(),
     })
+}
+
+fn is_expired(expires_at: &str) -> bool {
+    chrono::NaiveDateTime::parse_from_str(expires_at, "%Y-%m-%d %H:%M:%S")
+        .ok()
+        .map(|exp_naive| exp_naive < chrono::Local::now().naive_local())
+        .unwrap_or(true)
+}
+
+fn try_db_lookup(
+    state: &State<'_, DbState>,
+    code: &str,
+) -> Result<(String, Option<String>), String> {
+    let db = state.0.lock().map_err(|e| e.to_string())?;
+    db.query_row(
+        "SELECT topic_id, host_ticket FROM invite_codes WHERE code = ?1 AND (expires_at IS NULL OR expires_at > datetime('now', 'localtime'))",
+        [code],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
+    )
+    .map_err(|_| "招待コードが無効または期限切れです".to_string())
 }
 
 fn hex_to_topic_id(hex: &str) -> Result<[u8; 32], String> {
@@ -143,18 +194,30 @@ pub async fn team_list_invite_codes(
     let db = state.0.lock().map_err(|e| e.to_string())?;
     let mut stmt = db
         .prepare(
-            "SELECT id, code, topic_id, expires_at, created_at FROM invite_codes ORDER BY created_at DESC",
+            "SELECT id, code, topic_id, host_ticket, expires_at, created_at FROM invite_codes ORDER BY created_at DESC",
         )
         .map_err(|e| e.to_string())?;
 
     let rows = stmt
         .query_map([], |row| {
+            let id: String = row.get(0)?;
+            let code: String = row.get(1)?;
+            let topic_id: String = row.get(2)?;
+            let host_ticket: Option<String> = row.get(3)?;
+            let expires_at: Option<String> = row.get(4)?;
+            let created_at: Option<String> = row.get(5)?;
+            let invite_string = host_ticket.as_ref().and_then(|ht| {
+                let exp = expires_at.as_deref().unwrap_or("");
+                let payload = format!("{}::{}::{}", topic_id, ht, exp);
+                Some(format!("KASTRIX-{}", URL_SAFE_NO_PAD.encode(payload.as_bytes())))
+            });
             Ok(InviteCodeInfo {
-                id: row.get(0)?,
-                code: row.get(1)?,
-                topic_id: row.get(2)?,
-                expires_at: row.get(3)?,
-                created_at: row.get(4)?,
+                id,
+                code,
+                topic_id,
+                expires_at,
+                created_at,
+                invite_string,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -190,6 +253,8 @@ pub struct TeamCreateResult {
     code: String,
     topic_id: String,
     expires_in_minutes: u32,
+    /// 参加側が貼り付けるフル招待文字列（topic_id + host_ticket をエンコード）
+    invite_string: String,
 }
 
 #[derive(serde::Serialize)]
@@ -212,4 +277,6 @@ pub struct InviteCodeInfo {
     topic_id: String,
     expires_at: Option<String>,
     created_at: Option<String>,
+    /// 参加側が貼り付けるフル招待文字列（host_ticket がある場合のみ）
+    invite_string: Option<String>,
 }

@@ -29,6 +29,7 @@ tokio = { version = "1", features = ["full"] }
 opener = "0.7"
 rand = "0.9"
 hex = "0.4"
+base64 = "0.22"
 # iroh: Tauri の windows 0.61 に合わせて 0.92 を使用（netwatch 0.9 → windows 0.61）
 iroh = { version = "0.92", default-features = false, features = ["discovery-pkarr-dht"] }
 iroh-base = "0.92"
