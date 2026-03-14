@@ -2,11 +2,14 @@
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use crate::db::DbState;
-use crate::team::{generate_invite_code, normalize_code, IrohState};
+use crate::team::{
+    apply_task_update, generate_invite_code, normalize_code, IrohState, TaskUpdatePayload,
+};
 use futures::StreamExt;
 use iroh_gossip::api::Event;
+use iroh_gossip::api::Message;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -34,16 +37,17 @@ fn topic_id_to_hex(id: &[u8; 32]) -> String {
     id.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
-/// ホスト用: GossipReceiver から NeighborUp を受信し、参加申請として保存・通知
-async fn spawn_join_listener(
+/// トピックのイベントをリッスン（NeighborUp=参加申請[ホストのみ]、Received=task_update）
+async fn spawn_topic_listener(
     mut receiver: iroh_gossip::api::GossipReceiver,
     pending_joins: PendingJoinsState,
     app: AppHandle,
     topic_id: String,
+    is_host: bool,
 ) {
     while let Some(event) = receiver.next().await {
         match event {
-            Ok(Event::NeighborUp(node_id)) => {
+            Ok(Event::NeighborUp(node_id)) if is_host => {
                 let endpoint_id = node_id.to_string();
                 let requested_at = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
                 let info = PendingJoinInfo {
@@ -58,6 +62,13 @@ async fn spawn_join_listener(
                     }
                 }
                 let _ = app.emit("team-pending-join", &info);
+            }
+            Ok(Event::Received(Message { content, .. })) => {
+                if let Ok(payload) = serde_json::from_slice::<TaskUpdatePayload>(content.as_ref()) {
+                    if let Some(state) = app.try_state::<DbState>() {
+                        let _ = apply_task_update(&state, &payload, Some(&app));
+                    }
+                }
             }
             _ => {}
         }
@@ -92,7 +103,7 @@ pub async fn team_create(
         let pending_joins = pending_joins.inner().clone();
         let topic_id_for_listener = topic_id_hex.clone();
         tauri::async_runtime::spawn(async move {
-            spawn_join_listener(receiver, pending_joins, app, topic_id_for_listener).await;
+            spawn_topic_listener(receiver, pending_joins, app, topic_id_for_listener, true).await;
         });
 
         ticket.to_string()
@@ -147,8 +158,10 @@ pub async fn team_issue_invite(
 /// 入力: フル招待文字列（KASTRIX-<base64>）または短いコード（KASTRIX-XXXX-XXXX、ホストのDB照合用）
 #[tauri::command]
 pub async fn team_join(
+    app: AppHandle,
     state: State<'_, DbState>,
     iroh: State<'_, IrohState>,
+    pending_joins: State<'_, PendingJoinsState>,
     code: String,
 ) -> Result<TeamJoinResult, String> {
     let code = code.trim();
@@ -200,9 +213,17 @@ pub async fn team_join(
     let topic_id_bytes = hex_to_topic_id(&topic_id)?;
     let topic_id_iroh = iroh_gossip::proto::TopicId::from_bytes(topic_id_bytes);
     let host_node_id = ticket.node_addr().node_id;
-    node.subscribe(topic_id_iroh, &topic_id, vec![host_node_id])
+    let receiver = node
+        .subscribe(topic_id_iroh, &topic_id, vec![host_node_id])
         .await
         .map_err(|e| format!("トピック参加に失敗: {}", e))?;
+
+    // メンバー: task_update を受信してローカル DB に適用
+    let pending_joins = pending_joins.inner().clone();
+    let topic_id_for_listener = topic_id.clone();
+    tauri::async_runtime::spawn(async move {
+        spawn_topic_listener(receiver, pending_joins, app, topic_id_for_listener, false).await;
+    });
 
     Ok(TeamJoinResult {
         topic_id: topic_id.clone(),

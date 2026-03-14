@@ -1,5 +1,6 @@
 use crate::db::DbState;
 use crate::models::{CreateTaskInput, Task, UpdateTaskInput};
+use crate::team::{broadcast_task_update, IrohState, TaskUpdatePayload};
 use tauri::State;
 use uuid::Uuid;
 
@@ -97,124 +98,164 @@ pub fn get_tasks(
 }
 
 #[tauri::command]
-pub fn create_task(input: CreateTaskInput, state: State<DbState>) -> Result<Task, String> {
-    let db = state.0.lock().map_err(|e| e.to_string())?;
-    let id = Uuid::new_v4().to_string();
-    let priority = input.priority.as_deref().unwrap_or("medium");
-
-    db.execute(
-        "INSERT INTO tasks (id, project_id, title, priority, due_date, assignee, description)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        rusqlite::params![
-            id,
-            input.project_id,
-            input.title,
-            priority,
-            input.due_date,
-            input.assignee,
-            input.description,
-        ],
-    )
-    .map_err(|e| e.to_string())?;
-
-    let project_name = get_project_name(&db, input.project_id.as_deref());
-    record_activity(
-        &db,
-        &id,
-        input.project_id.as_deref(),
-        "created",
-        &input.title,
-        project_name.as_deref(),
-    );
-
-    query_task(&db, &id)
-}
-
-#[tauri::command]
-pub fn update_task(
-    id: String,
-    input: UpdateTaskInput,
-    state: State<DbState>,
+pub async fn create_task(
+    input: CreateTaskInput,
+    state: State<'_, DbState>,
+    iroh: State<'_, IrohState>,
 ) -> Result<Task, String> {
-    let db = state.0.lock().map_err(|e| e.to_string())?;
+    let task = {
+        let db = state.0.lock().map_err(|e| e.to_string())?;
+        let id = Uuid::new_v4().to_string();
+        let priority = input.priority.as_deref().unwrap_or("medium");
 
-    // 現在のタスクを取得
-    let current = query_task(&db, &id)?;
-
-    let title = input.title.as_deref().unwrap_or(&current.title);
-    let project_id = input.project_id.as_ref().or(current.project_id.as_ref());
-    let priority = input.priority.as_deref().unwrap_or(&current.priority);
-    let due_date = input.due_date.as_ref().or(current.due_date.as_ref());
-    let assignee = input.assignee.as_ref().or(current.assignee.as_ref());
-    let description = input.description.as_ref().or(current.description.as_ref());
-
-    db.execute(
-        "UPDATE tasks SET title = ?1, project_id = ?2, priority = ?3,
-         due_date = ?4, assignee = ?5, description = ?6, updated_at = datetime('now')
-         WHERE id = ?7",
-        rusqlite::params![title, project_id, priority, due_date, assignee, description, id],
-    )
-    .map_err(|e| e.to_string())?;
-
-    let project_name = get_project_name(&db, project_id.map(|s| s.as_str()));
-    record_activity(
-        &db,
-        &id,
-        project_id.map(|s| s.as_str()),
-        "updated",
-        title,
-        project_name.as_deref(),
-    );
-
-    query_task(&db, &id)
-}
-
-#[tauri::command]
-pub fn delete_task(id: String, state: State<DbState>) -> Result<(), String> {
-    let db = state.0.lock().map_err(|e| e.to_string())?;
-
-    db.execute("DELETE FROM tasks WHERE id = ?1", [&id])
+        db.execute(
+            "INSERT INTO tasks (id, project_id, title, priority, due_date, assignee, description)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![
+                id,
+                input.project_id,
+                input.title,
+                priority,
+                input.due_date,
+                input.assignee,
+                input.description,
+            ],
+        )
         .map_err(|e| e.to_string())?;
 
+        let project_name = get_project_name(&db, input.project_id.as_deref());
+        record_activity(
+            &db,
+            &id,
+            input.project_id.as_deref(),
+            "created",
+            &input.title,
+            project_name.as_deref(),
+        );
+
+        query_task(&db, &id)?
+    };
+    let payload = TaskUpdatePayload {
+        action: "create".to_string(),
+        task: Some(task.clone()),
+        task_id: None,
+    };
+    let _ = broadcast_task_update(&iroh, &payload).await;
+    Ok(task)
+}
+
+#[tauri::command]
+pub async fn update_task(
+    id: String,
+    input: UpdateTaskInput,
+    state: State<'_, DbState>,
+    iroh: State<'_, IrohState>,
+) -> Result<Task, String> {
+    let task = {
+        let db = state.0.lock().map_err(|e| e.to_string())?;
+        let current = query_task(&db, &id)?;
+
+        let title = input.title.as_deref().unwrap_or(&current.title);
+        let project_id = input.project_id.as_ref().or(current.project_id.as_ref());
+        let priority = input.priority.as_deref().unwrap_or(&current.priority);
+        let due_date = input.due_date.as_ref().or(current.due_date.as_ref());
+        let assignee = input.assignee.as_ref().or(current.assignee.as_ref());
+        let description = input.description.as_ref().or(current.description.as_ref());
+
+        db.execute(
+            "UPDATE tasks SET title = ?1, project_id = ?2, priority = ?3,
+             due_date = ?4, assignee = ?5, description = ?6, updated_at = datetime('now')
+             WHERE id = ?7",
+            rusqlite::params![title, project_id, priority, due_date, assignee, description, id.clone()],
+        )
+        .map_err(|e| e.to_string())?;
+
+        let project_name = get_project_name(&db, project_id.map(|s| s.as_str()));
+        record_activity(
+            &db,
+            &id,
+            project_id.map(|s| s.as_str()),
+            "updated",
+            title,
+            project_name.as_deref(),
+        );
+
+        query_task(&db, &id)?
+    };
+    let payload = TaskUpdatePayload {
+        action: "update".to_string(),
+        task: Some(task.clone()),
+        task_id: None,
+    };
+    let _ = broadcast_task_update(&iroh, &payload).await;
+    Ok(task)
+}
+
+#[tauri::command]
+pub async fn delete_task(
+    id: String,
+    state: State<'_, DbState>,
+    iroh: State<'_, IrohState>,
+) -> Result<(), String> {
+    {
+        let db = state.0.lock().map_err(|e| e.to_string())?;
+        db.execute("DELETE FROM tasks WHERE id = ?1", [&id])
+            .map_err(|e| e.to_string())?;
+    }
+    let payload = TaskUpdatePayload {
+        action: "delete".to_string(),
+        task: None,
+        task_id: Some(id),
+    };
+    let _ = broadcast_task_update(&iroh, &payload).await;
     Ok(())
 }
 
 #[tauri::command]
-pub fn update_task_status(
+pub async fn update_task_status(
     id: String,
     status: String,
-    state: State<DbState>,
+    state: State<'_, DbState>,
+    iroh: State<'_, IrohState>,
 ) -> Result<Task, String> {
     let valid_statuses = ["todo", "in-progress", "done"];
     if !valid_statuses.contains(&status.as_str()) {
         return Err(format!("Invalid status: {}", status));
     }
 
-    let db = state.0.lock().map_err(|e| e.to_string())?;
+    let task = {
+        let db = state.0.lock().map_err(|e| e.to_string())?;
+        let current = query_task(&db, &id)?;
 
-    let current = query_task(&db, &id)?;
+        db.execute(
+            "UPDATE tasks SET status = ?1, updated_at = datetime('now') WHERE id = ?2",
+            rusqlite::params![status, id],
+        )
+        .map_err(|e| e.to_string())?;
 
-    db.execute(
-        "UPDATE tasks SET status = ?1, updated_at = datetime('now') WHERE id = ?2",
-        rusqlite::params![status, id],
-    )
-    .map_err(|e| e.to_string())?;
+        let action = match status.as_str() {
+            "in-progress" => "started",
+            "done" => "completed",
+            _ => "updated",
+        };
 
-    let action = match status.as_str() {
-        "in-progress" => "started",
-        "done" => "completed",
-        _ => "updated",
+        let project_name = get_project_name(&db, current.project_id.as_deref());
+        record_activity(
+            &db,
+            &id,
+            current.project_id.as_deref(),
+            action,
+            &current.title,
+            project_name.as_deref(),
+        );
+
+        query_task(&db, &id)?
     };
-
-    let project_name = get_project_name(&db, current.project_id.as_deref());
-    record_activity(
-        &db,
-        &id,
-        current.project_id.as_deref(),
-        action,
-        &current.title,
-        project_name.as_deref(),
-    );
-
-    query_task(&db, &id)
+    let payload = TaskUpdatePayload {
+        action: "update".to_string(),
+        task: Some(task.clone()),
+        task_id: None,
+    };
+    let _ = broadcast_task_update(&iroh, &payload).await;
+    Ok(task)
 }
