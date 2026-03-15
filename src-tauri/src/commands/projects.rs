@@ -7,6 +7,25 @@ use std::path::Path;
 use tauri::State;
 use uuid::Uuid;
 
+/// プロジェクトとして除外するディレクトリ名（隠しフォルダ・ビルド成果物・依存関係など）
+fn is_excluded_project_dir(name: &str) -> bool {
+    let excluded = [
+        "node_modules",
+        ".venv",
+        "venv",
+        "__pycache__",
+        "target",
+        ".git",
+        ".next",
+        ".nuxt",
+        "dist",
+        "build",
+        ".idea",
+        ".vscode",
+    ];
+    name.starts_with('.') || excluded.contains(&name)
+}
+
 #[tauri::command]
 pub fn scan_directory(path: String, state: State<DbState>) -> Result<Vec<Project>, String> {
     let root = Path::new(&path);
@@ -22,15 +41,15 @@ pub fn scan_directory(path: String, state: State<DbState>) -> Result<Vec<Project
         if !entry_path.is_dir() {
             continue;
         }
-        if !entry_path.join(".git").is_dir() {
+        let dir_name = entry_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown");
+        if is_excluded_project_dir(dir_name) {
             continue;
         }
 
-        let name = entry_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("unknown")
-            .to_string();
+        let name = dir_name.to_string();
 
         let language = lang_detect::detect_language(&entry_path);
         let has_readme = entry_path.join("README.md").exists();

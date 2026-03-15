@@ -31,7 +31,7 @@ fn get_project_name(db: &rusqlite::Connection, project_id: Option<&str>) -> Opti
 
 fn query_task(db: &rusqlite::Connection, id: &str) -> Result<Task, String> {
     db.query_row(
-        "SELECT id, project_id, title, status, priority, due_date, assignee, description, created_at, updated_at
+        "SELECT id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at
          FROM tasks WHERE id = ?1",
         [id],
         |row| {
@@ -44,8 +44,9 @@ fn query_task(db: &rusqlite::Connection, id: &str) -> Result<Task, String> {
                 due_date: row.get(5)?,
                 assignee: row.get(6)?,
                 description: row.get(7)?,
-                created_at: row.get::<_, Option<String>>(8)?.unwrap_or_default(),
-                updated_at: row.get::<_, Option<String>>(9)?.unwrap_or_default(),
+                is_public: row.get::<_, Option<i32>>(8)?.unwrap_or(1) != 0,
+                created_at: row.get::<_, Option<String>>(9)?.unwrap_or_default(),
+                updated_at: row.get::<_, Option<String>>(10)?.unwrap_or_default(),
             })
         },
     )
@@ -61,12 +62,12 @@ pub fn get_tasks(
 
     let (sql, params): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = match &project_id {
         Some(pid) => (
-            "SELECT id, project_id, title, status, priority, due_date, assignee, description, created_at, updated_at
+            "SELECT id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at
              FROM tasks WHERE project_id = ?1 ORDER BY created_at DESC",
             vec![Box::new(pid.clone())],
         ),
         None => (
-            "SELECT id, project_id, title, status, priority, due_date, assignee, description, created_at, updated_at
+            "SELECT id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at
              FROM tasks ORDER BY created_at DESC",
             vec![],
         ),
@@ -86,8 +87,9 @@ pub fn get_tasks(
                 due_date: row.get(5)?,
                 assignee: row.get(6)?,
                 description: row.get(7)?,
-                created_at: row.get::<_, Option<String>>(8)?.unwrap_or_default(),
-                updated_at: row.get::<_, Option<String>>(9)?.unwrap_or_default(),
+                is_public: row.get::<_, Option<i32>>(8)?.unwrap_or(1) != 0,
+                created_at: row.get::<_, Option<String>>(9)?.unwrap_or_default(),
+                updated_at: row.get::<_, Option<String>>(10)?.unwrap_or_default(),
             })
         })
         .map_err(|e| e.to_string())?
@@ -107,10 +109,11 @@ pub async fn create_task(
         let db = state.0.lock().map_err(|e| e.to_string())?;
         let id = Uuid::new_v4().to_string();
         let priority = input.priority.as_deref().unwrap_or("medium");
+        let is_public = if input.is_public { 1 } else { 0 };
 
         db.execute(
-            "INSERT INTO tasks (id, project_id, title, priority, due_date, assignee, description)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO tasks (id, project_id, title, priority, due_date, assignee, description, is_public)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             rusqlite::params![
                 id,
                 input.project_id,
@@ -119,6 +122,7 @@ pub async fn create_task(
                 input.due_date,
                 input.assignee,
                 input.description,
+                is_public,
             ],
         )
         .map_err(|e| e.to_string())?;
@@ -135,12 +139,14 @@ pub async fn create_task(
 
         query_task(&db, &id)?
     };
-    let payload = TaskUpdatePayload {
-        action: "create".to_string(),
-        task: Some(task.clone()),
-        task_id: None,
-    };
-    let _ = broadcast_task_update(&iroh, &payload).await;
+    if task.is_public {
+        let payload = TaskUpdatePayload {
+            action: "create".to_string(),
+            task: Some(task.clone()),
+            task_id: None,
+        };
+        let _ = broadcast_task_update(&iroh, &payload).await;
+    }
     Ok(task)
 }
 
@@ -161,12 +167,14 @@ pub async fn update_task(
         let due_date = input.due_date.as_ref().or(current.due_date.as_ref());
         let assignee = input.assignee.as_ref().or(current.assignee.as_ref());
         let description = input.description.as_ref().or(current.description.as_ref());
+        let is_public = input.is_public.unwrap_or(current.is_public);
+        let is_public_int = if is_public { 1 } else { 0 };
 
         db.execute(
             "UPDATE tasks SET title = ?1, project_id = ?2, priority = ?3,
-             due_date = ?4, assignee = ?5, description = ?6, updated_at = datetime('now')
-             WHERE id = ?7",
-            rusqlite::params![title, project_id, priority, due_date, assignee, description, id.clone()],
+             due_date = ?4, assignee = ?5, description = ?6, is_public = ?7, updated_at = datetime('now')
+             WHERE id = ?8",
+            rusqlite::params![title, project_id, priority, due_date, assignee, description, is_public_int, id.clone()],
         )
         .map_err(|e| e.to_string())?;
 
@@ -182,12 +190,14 @@ pub async fn update_task(
 
         query_task(&db, &id)?
     };
-    let payload = TaskUpdatePayload {
-        action: "update".to_string(),
-        task: Some(task.clone()),
-        task_id: None,
-    };
-    let _ = broadcast_task_update(&iroh, &payload).await;
+    if task.is_public {
+        let payload = TaskUpdatePayload {
+            action: "update".to_string(),
+            task: Some(task.clone()),
+            task_id: None,
+        };
+        let _ = broadcast_task_update(&iroh, &payload).await;
+    }
     Ok(task)
 }
 
@@ -197,17 +207,21 @@ pub async fn delete_task(
     state: State<'_, DbState>,
     iroh: State<'_, IrohState>,
 ) -> Result<(), String> {
-    {
+    let was_public = {
         let db = state.0.lock().map_err(|e| e.to_string())?;
+        let task = query_task(&db, &id).ok();
         db.execute("DELETE FROM tasks WHERE id = ?1", [&id])
             .map_err(|e| e.to_string())?;
-    }
-    let payload = TaskUpdatePayload {
-        action: "delete".to_string(),
-        task: None,
-        task_id: Some(id),
+        task.map(|t| t.is_public).unwrap_or(false)
     };
-    let _ = broadcast_task_update(&iroh, &payload).await;
+    if was_public {
+        let payload = TaskUpdatePayload {
+            action: "delete".to_string(),
+            task: None,
+            task_id: Some(id),
+        };
+        let _ = broadcast_task_update(&iroh, &payload).await;
+    }
     Ok(())
 }
 
@@ -251,11 +265,13 @@ pub async fn update_task_status(
 
         query_task(&db, &id)?
     };
-    let payload = TaskUpdatePayload {
-        action: "update".to_string(),
-        task: Some(task.clone()),
-        task_id: None,
-    };
-    let _ = broadcast_task_update(&iroh, &payload).await;
+    if task.is_public {
+        let payload = TaskUpdatePayload {
+            action: "update".to_string(),
+            task: Some(task.clone()),
+            task_id: None,
+        };
+        let _ = broadcast_task_update(&iroh, &payload).await;
+    }
     Ok(task)
 }

@@ -26,13 +26,14 @@ pub fn init_db(app_data_dir: &std::path::Path) -> SqlResult<Connection> {
 
         CREATE TABLE IF NOT EXISTS tasks (
             id          TEXT PRIMARY KEY,
-            project_id  TEXT REFERENCES projects(id) ON DELETE CASCADE,
+            project_id  TEXT REFERENCES projects(id) ON DELETE SET NULL,
             title       TEXT NOT NULL,
             status      TEXT CHECK(status IN ('todo','in-progress','done')) DEFAULT 'todo',
             priority    TEXT CHECK(priority IN ('high','medium','low')) DEFAULT 'medium',
             due_date    TEXT,
             assignee    TEXT,
             description TEXT,
+            is_public   INTEGER DEFAULT 1,
             created_at  TEXT DEFAULT (datetime('now')),
             updated_at  TEXT DEFAULT (datetime('now'))
         );
@@ -98,6 +99,8 @@ pub fn init_db(app_data_dir: &std::path::Path) -> SqlResult<Connection> {
 
     // マイグレーション: 既存の invite_codes に host_ticket を追加
     let _ = conn.execute("ALTER TABLE invite_codes ADD COLUMN host_ticket TEXT", []);
+    // マイグレーション: tasks に is_public を追加
+    let _ = conn.execute("ALTER TABLE tasks ADD COLUMN is_public INTEGER DEFAULT 1", []);
 
     Ok(conn)
 }

@@ -25,6 +25,8 @@ pub struct Task {
     pub due_date: Option<String>,
     pub assignee: Option<String>,
     pub description: Option<String>,
+    #[serde(default = "default_true")]
+    pub is_public: bool,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -51,6 +53,12 @@ pub struct CreateTaskInput {
     pub due_date: Option<String>,
     pub assignee: Option<String>,
     pub description: Option<String>,
+    #[serde(default = "default_true")]
+    pub is_public: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Deserialize)]
@@ -62,4 +70,5 @@ pub struct UpdateTaskInput {
     pub due_date: Option<String>,
     pub assignee: Option<String>,
     pub description: Option<String>,
+    pub is_public: Option<bool>,
 }

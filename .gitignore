@@ -18,3 +18,7 @@ Thumbs.db
 *.log
 node_modules
 node_modules
+
+# Syncthing
+.stfolder/
+.stignore

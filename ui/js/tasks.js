@@ -152,6 +152,8 @@ function openTaskModal(taskId) {
   document.getElementById('modal-task-title').textContent    = task.title;
   document.getElementById('modal-task-status').textContent   = task.status.toUpperCase();
   document.getElementById('modal-task-priority').textContent = task.priority.toUpperCase();
+  const visEl = document.getElementById('modal-task-visibility');
+  if (visEl) visEl.classList.toggle('hidden', task.isPublic !== false);
   document.getElementById('modal-assignee').textContent      = task.assignee || '-';
   document.getElementById('modal-date').textContent          = task.dueDate || '-';
   document.getElementById('modal-task-desc').textContent     = task.description || '-';
@@ -188,6 +190,7 @@ function openCreateTaskModal() {
   document.getElementById('task-edit-due').value = '';
   document.getElementById('task-edit-assignee').value = '';
   document.getElementById('task-edit-desc').value = '';
+  document.getElementById('task-edit-public').checked = true;
   document.getElementById('task-edit-modal-title').textContent = 'New Task';
   _populateProjectDropdown();
   const modal = document.getElementById('task-edit-modal');
@@ -206,6 +209,7 @@ function openEditTaskModal(taskId) {
   document.getElementById('task-edit-due').value = task.dueDate ? task.dueDate.split(' ')[0] : '';
   document.getElementById('task-edit-assignee').value = task.assignee || '';
   document.getElementById('task-edit-desc').value = task.description || '';
+  document.getElementById('task-edit-public').checked = task.isPublic !== false;
   document.getElementById('task-edit-modal-title').textContent = 'Edit Task';
   _populateProjectDropdown();
   document.getElementById('task-edit-project').value = task.projectId || '';
@@ -246,6 +250,7 @@ async function submitTaskForm() {
     dueDate: document.getElementById('task-edit-due').value || null,
     assignee: document.getElementById('task-edit-assignee').value.trim() || null,
     description: document.getElementById('task-edit-desc').value.trim() || null,
+    isPublic: document.getElementById('task-edit-public').checked,
   };
   if (!input.title) return;
   try {
