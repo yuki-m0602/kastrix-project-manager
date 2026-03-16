@@ -324,26 +324,40 @@ pub async fn team_create(
     })
 }
 
-/// 招待コードを発行（既存チームに追加）
+/// 招待コードを発行（既存チームに追加。チームがなければ新規作成）
 #[tauri::command]
 pub async fn team_issue_invite(
+    app: AppHandle,
     state: State<'_, DbState>,
     iroh: State<'_, IrohState>,
+    pending_joins: State<'_, PendingJoinsState>,
     expires_minutes: Option<u32>,
 ) -> Result<TeamInviteResult, String> {
-    let (code, _) = generate_invite_code();
-    let id = Uuid::new_v4().to_string();
     let mins = expires_minutes.unwrap_or(60);
 
-    let topic_id_hex: String = {
+    let topic_id_hex: Option<String> = {
         let db = state.0.lock().map_err(|e| e.to_string())?;
         db.query_row(
             "SELECT topic_id FROM team_subscriptions WHERE is_host = 1 LIMIT 1",
             [],
             |r| r.get(0),
         )
-        .map_err(|_| "チームが存在しません。先に「チームを作成」してください。".to_string())?
+        .ok()
     };
+
+    // チームがなければ team_create と同様に新規作成
+    if topic_id_hex.is_none() {
+        let create_result = team_create(app, state, iroh, pending_joins, Some(mins)).await?;
+        return Ok(TeamInviteResult {
+            code: create_result.code,
+            expires_in_minutes: create_result.expires_in_minutes,
+            invite_string: Some(create_result.invite_string),
+        });
+    }
+
+    let topic_id_hex = topic_id_hex.unwrap();
+    let (code, _) = generate_invite_code();
+    let id = Uuid::new_v4().to_string();
 
     let host_ticket_str = {
         let guard = iroh.read().await;

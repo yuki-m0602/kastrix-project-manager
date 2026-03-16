@@ -381,7 +381,14 @@ async function teamIssueInvite() {
       renderSettings();
     }
   } catch (e) {
-    alert('エラー: ' + (e?.toString?.() || e));
+    const errStr = e?.toString?.() || String(e);
+    if ((errStr.includes('iroh') || errStr.includes('初期化')) && !window._teamIssueInviteRetried) {
+      window._teamIssueInviteRetried = true;
+      await new Promise((r) => setTimeout(r, 2000));
+      window._teamIssueInviteRetried = false;
+      return teamIssueInvite();
+    }
+    alert('エラー: ' + errStr);
   }
 }
 
