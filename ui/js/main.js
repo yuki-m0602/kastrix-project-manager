@@ -122,6 +122,8 @@ async function loadData() {
     openTabs = ['all'];
     activeTabId = 'all';
     if (typeof renderProjectPicker === 'function') renderProjectPicker();
+    if (typeof filterTasks === 'function') filterTasks();
+    if (typeof renderProjects === 'function') renderProjects();
   } catch (e) {
     console.error('Failed to load data:', e);
   }

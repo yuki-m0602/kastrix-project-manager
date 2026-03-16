@@ -6,7 +6,7 @@ function setTaskView(view) {
   const btnList   = document.getElementById('btn-task-list');
   const btnKanban = document.getElementById('btn-task-kanban');
   if (view === 'list') {
-    listView.style.display = '';
+    listView.style.display = 'block';
     kanbanView.style.display = 'none';
     btnList?.classList.add('bg-[#30363d]', 'text-white');
     btnList?.classList.remove('text-[#8b949e]');
@@ -254,16 +254,32 @@ async function submitTaskForm() {
   };
   if (!input.title) return;
   try {
+    let savedTask;
     if (id) {
-      await apiUpdateTask(id, input);
+      savedTask = await apiUpdateTask(id, input);
     } else {
-      await apiCreateTask(input);
+      savedTask = await apiCreateTask(input);
     }
-    if (_isTauri) await reloadTasks();
+    if (_isTauri) {
+      try {
+        await reloadTasks();
+      } catch (e) {
+        console.error('reloadTasks failed:', e);
+        if (savedTask) {
+          const idx = tasks.findIndex(t => String(t.id) === String(savedTask.id));
+          if (idx >= 0) tasks[idx] = savedTask; else tasks.unshift(savedTask);
+        }
+      }
+    } else if (savedTask) {
+      const idx = tasks.findIndex(t => String(t.id) === String(savedTask.id));
+      if (idx >= 0) tasks[idx] = savedTask; else tasks.unshift(savedTask);
+    }
+    if (typeof switchMainTab === 'function') switchMainTab('tasks');
     closeTaskEditModal();
     filterTasks();
   } catch (e) {
     console.error('Failed to save task:', e);
+    alert('タスクの保存に失敗しました: ' + (e?.message || e));
   }
 }
 

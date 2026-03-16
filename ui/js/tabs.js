@@ -23,7 +23,7 @@ function switchMainTab(tab) {
     taskFilter.style.display = 'flex';
     projectFilter.style.display = 'none';
     if (currentTaskView === 'list') {
-      listView.style.display = '';
+      listView.style.display = 'block';
       kanbanView.style.display = 'none';
     } else {
       listView.style.display = 'none';
