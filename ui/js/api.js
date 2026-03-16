@@ -159,6 +159,25 @@ async function apiAnalyzeLogs(prompt, provider) {
 }
 
 // ── Team ─────────────────────────────────────────────────
+async function apiTeamIsReady() {
+  if (!_isTauri) return false;
+  try {
+    const r = await _invoke('team_is_ready', {});
+    return r === true;
+  } catch {
+    return false;
+  }
+}
+
+async function apiTeamDebugStatus() {
+  if (!_isTauri) return null;
+  try {
+    return await _invoke('team_debug_status', {});
+  } catch (e) {
+    return { step1_iroh_node: 'エラー', step2_node_ticket: '-', step2_error: String(e), endpoint_id: null };
+  }
+}
+
 async function apiTeamCreate(expiresMinutes) {
   return await _invoke('team_create', { expiresMinutes: expiresMinutes ?? null });
 }

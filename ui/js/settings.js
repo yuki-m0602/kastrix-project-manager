@@ -3,15 +3,27 @@
 async function renderSettings() {
   const container = document.getElementById('settings-content');
   if (!container) return;
+  container.innerHTML = '<p class="text-[#8b949e] text-xs">読み込み中...</p>';
 
-  // Load state
-  const [dirs, openaiStatus, anthropicStatus, defaultProvider, syncMode] = await Promise.all([
-    apiGetWatchedDirs(),
-    apiGetApiKeyStatus('openai'),
-    apiGetApiKeyStatus('anthropic'),
-    apiGetSetting('ai_provider'),
-    _isTauri ? apiTeamGetSyncMode() : Promise.resolve('auto'),
-  ]);
+  let dirs = [], openaiStatus = false, anthropicStatus = false, defaultProvider = 'openai', syncMode = 'auto', teamReady = false;
+  try {
+    const loadPromise = Promise.all([
+      apiGetWatchedDirs(),
+      apiGetApiKeyStatus('openai'),
+      apiGetApiKeyStatus('anthropic'),
+      apiGetSetting('ai_provider'),
+      _isTauri ? apiTeamGetSyncMode() : Promise.resolve('auto'),
+      _isTauri ? apiTeamIsReady() : Promise.resolve(false),
+    ]);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('タイムアウト（10秒）')), 10000)
+    );
+    [dirs, openaiStatus, anthropicStatus, defaultProvider, syncMode, teamReady] = await Promise.race([loadPromise, timeoutPromise]);
+  } catch (e) {
+    console.error('renderSettings load failed:', e);
+    container.innerHTML = '<p class="text-red-400 text-xs p-4">設定の読み込みに失敗しました。' + (e?.message || String(e)) + '</p><button onclick="renderSettings()" class="mt-2 px-3 py-1 bg-[#21262d] rounded text-xs text-white">再試行</button>';
+    return;
+  }
 
   container.innerHTML = `
     <!-- Watched Directories -->
@@ -98,18 +110,19 @@ async function renderSettings() {
       <div class="space-y-4">
         <div>
           <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">チーム作成・招待</h3>
+          <div id="team-buttons-status" class="text-[10px] text-[#8b949e] mb-2 min-h-[14px]">${!_isTauri ? '' : teamReady ? '' : '<span class="text-amber-400">チーム機能を準備中...</span>'}</div>
           <div class="flex flex-wrap items-center gap-2 mb-3">
-            <select id="team-invite-expires" class="h-8 px-3 bg-[#0d1117] border border-[#30363d] rounded-xl text-xs text-white outline-none focus:border-indigo-500">
+            <select id="team-invite-expires" class="h-8 px-3 bg-[#0d1117] border border-[#30363d] rounded-xl text-xs text-white outline-none focus:border-indigo-500" ${!teamReady && _isTauri ? 'disabled' : ''}>
               <option value="15">15分</option>
               <option value="60" selected>1時間</option>
               <option value="1440">24時間</option>
               <option value="0">無期限</option>
             </select>
-            <button onclick="teamCreate()" class="h-8 px-4 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white flex items-center gap-2">
+            <button id="btn-team-create" onclick="teamCreate()" class="h-8 px-4 rounded-xl text-xs font-bold text-white flex items-center gap-2 ${teamReady ? 'bg-indigo-600 hover:bg-indigo-500' : 'bg-[#21262d] opacity-60 cursor-not-allowed'}" ${!teamReady && _isTauri ? 'disabled' : ''}>
               <i data-lucide="users" size="14"></i>
               チームを作成
             </button>
-            <button onclick="teamIssueInvite()" class="h-8 px-4 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-xs font-bold text-white flex items-center gap-2">
+            <button id="btn-team-issue-invite" onclick="teamIssueInvite()" class="h-8 px-4 rounded-xl text-xs font-bold text-white flex items-center gap-2 ${teamReady ? 'bg-[#21262d] hover:bg-[#30363d] border border-[#30363d]' : 'bg-[#21262d] opacity-60 cursor-not-allowed border border-[#30363d]'}" ${!teamReady && _isTauri ? 'disabled' : ''}>
               <i data-lucide="link" size="14"></i>
               招待コードを発行
             </button>
@@ -154,6 +167,20 @@ async function renderSettings() {
             <button onclick="teamJoin()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white">参加する</button>
           </div>
         </div>
+
+        <div class="pt-4 border-t border-[#30363d]">
+          <button id="team-debug-toggle" onclick="toggleTeamDebug()" class="flex items-center gap-2 text-[10px] font-bold text-[#8b949e] hover:text-white uppercase tracking-wider">
+            <i data-lucide="bug" size="12"></i>
+            デバッグ（どこで止まってるか確認）
+          </button>
+          <div id="team-debug-panel" class="hidden mt-3 p-3 bg-[#0d1117] border border-[#30363d] rounded-xl font-mono text-[10px]">
+            <div id="team-debug-content" class="space-y-1 text-[#8b949e]">読み込み中...</div>
+            <div class="mt-2 flex gap-2">
+              <button onclick="refreshTeamDebug()" class="px-2 py-1 bg-[#21262d] hover:bg-[#30363d] rounded text-[10px] text-white">更新</button>
+              <span id="team-debug-updated" class="text-[#484f58]"></span>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -169,19 +196,19 @@ async function renderSettings() {
     </section>
   `;
 
-  // Load saved IDE preference
-  const savedIde = await apiGetSetting('default_ide');
-  if (savedIde) {
-    const sel = document.getElementById('settings-default-ide');
-    if (sel) sel.value = savedIde;
+  try {
+    const savedIde = await apiGetSetting('default_ide');
+    if (savedIde) {
+      const sel = document.getElementById('settings-default-ide');
+      if (sel) sel.value = savedIde;
+    }
+    await renderTeamInviteCodes();
+    await renderTeamPendingJoins();
+    await renderTeamMembers();
+  } catch (e) {
+    console.error('renderSettings post-load failed:', e);
   }
-
-  // Load team invite codes, pending joins, members
-  await renderTeamInviteCodes();
-  await renderTeamPendingJoins();
-  await renderTeamMembers();
-
-  lucide.createIcons();
+  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 }
 
 async function renderTeamPendingJoins() {
@@ -348,16 +375,19 @@ async function teamCreate() {
       await renderTeamInviteCodes();
       renderSettings();
       if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
+    } else if (result && result.code) {
+      await navigator.clipboard.writeText(result.code);
+      alert(`チームを作成しました。\n招待コード: ${result.code}\n（クリップボードにコピーしました）`);
+      await renderTeamInviteCodes();
+      renderSettings();
+      if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
+    } else {
+      console.error('teamCreate unexpected result:', result);
+      alert('チーム作成に失敗しました。しばらく待ってから再度お試しください。');
     }
   } catch (e) {
-    const errStr = e?.toString?.() || String(e);
-    if ((errStr.includes('iroh') || errStr.includes('初期化')) && !window._teamCreateRetried) {
-      window._teamCreateRetried = true;
-      await new Promise((r) => setTimeout(r, 2000));
-      window._teamCreateRetried = false;
-      return teamCreate();
-    }
-    alert('エラー: ' + errStr);
+    console.error('teamCreate failed:', e);
+    alert('エラー: ' + (e?.toString?.() || e));
   }
 }
 
@@ -379,16 +409,13 @@ async function teamIssueInvite() {
       alert(msg);
       await renderTeamInviteCodes();
       renderSettings();
+    } else {
+      console.error('teamIssueInvite unexpected result:', result);
+      alert('招待コードの発行に失敗しました。しばらく待ってから再度お試しください。');
     }
   } catch (e) {
-    const errStr = e?.toString?.() || String(e);
-    if ((errStr.includes('iroh') || errStr.includes('初期化')) && !window._teamIssueInviteRetried) {
-      window._teamIssueInviteRetried = true;
-      await new Promise((r) => setTimeout(r, 2000));
-      window._teamIssueInviteRetried = false;
-      return teamIssueInvite();
-    }
-    alert('エラー: ' + errStr);
+    console.error('teamIssueInvite failed:', e);
+    alert('エラー: ' + (e?.toString?.() || e));
   }
 }
 
@@ -507,9 +534,87 @@ async function saveDefaultIde(value) {
   await apiSetSetting('default_ide', value);
 }
 
+// デバッグパネル
+let _teamDebugInterval = null;
+function toggleTeamDebug() {
+  const panel = document.getElementById('team-debug-panel');
+  if (!panel) return;
+  const wasHidden = panel.classList.contains('hidden');
+  panel.classList.toggle('hidden');
+  if (wasHidden) {
+    refreshTeamDebug();
+    _teamDebugInterval = setInterval(refreshTeamDebug, 2000);
+  } else {
+    if (_teamDebugInterval) clearInterval(_teamDebugInterval);
+    _teamDebugInterval = null;
+  }
+}
+async function refreshTeamDebug() {
+  const content = document.getElementById('team-debug-content');
+  const updated = document.getElementById('team-debug-updated');
+  if (!content) return;
+  if (!_isTauri) {
+    content.innerHTML = '<span class="text-[#484f58]">Tauri 環境でのみ利用可能</span>';
+    return;
+  }
+  try {
+    const s = await apiTeamDebugStatus();
+    if (!s) {
+      content.innerHTML = '<span class="text-red-400">取得失敗</span>';
+      return;
+    }
+    const ok = '<span class="text-emerald-400">OK</span>';
+    const wait = '<span class="text-amber-400">待機中</span>';
+    const fail = '<span class="text-red-400">失敗</span>';
+    const step1 = s.step1_iroh_node === 'OK' ? ok : s.step1_iroh_node === '待機中' ? wait : fail;
+    const step2 = s.step2_node_ticket === 'OK' ? ok : s.step2_node_ticket === '待機中' ? wait : fail;
+    const err = s.step2_error ? '<br><span class="text-red-400 text-[9px]">' + s.step2_error + '</span>' : '';
+    const ep = s.endpoint_id ? '<div class="text-[#484f58]">EndpointID: ' + s.endpoint_id.slice(0, 16) + '...</div>' : '';
+    content.innerHTML = '<div>Step1: iroh ノード作成 → ' + step1 + '</div><div>Step2: アドレス発見 (node_ticket) → ' + step2 + err + '</div>' + ep;
+    if (updated) updated.textContent = new Date().toLocaleTimeString('ja-JP');
+  } catch (e) {
+    content.innerHTML = '<span class="text-red-400">' + (e?.toString?.() || e) + '</span>';
+  }
+}
+
+// チーム機能の準備完了時にボタンを有効化
+function updateTeamButtonsState(ready, failed) {
+  const statusEl = document.getElementById('team-buttons-status');
+  const createBtn = document.getElementById('btn-team-create');
+  const inviteBtn = document.getElementById('btn-team-issue-invite');
+  const expiresEl = document.getElementById('team-invite-expires');
+  if (!statusEl || !createBtn || !inviteBtn) return;
+  if (failed) {
+    statusEl.innerHTML = '<span class="text-red-400">チーム機能は利用できません（ネットワーク接続をご確認ください）</span>';
+    createBtn.disabled = true;
+    inviteBtn.disabled = true;
+    if (expiresEl) expiresEl.disabled = true;
+    createBtn.className = 'h-8 px-4 rounded-xl text-xs font-bold text-white flex items-center gap-2 bg-[#21262d] opacity-60 cursor-not-allowed';
+    inviteBtn.className = 'h-8 px-4 rounded-xl text-xs font-bold text-white flex items-center gap-2 bg-[#21262d] opacity-60 cursor-not-allowed border border-[#30363d]';
+  } else if (ready) {
+    statusEl.innerHTML = '';
+    createBtn.disabled = false;
+    inviteBtn.disabled = false;
+    if (expiresEl) expiresEl.disabled = false;
+    createBtn.className = 'h-8 px-4 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white flex items-center gap-2';
+    inviteBtn.className = 'h-8 px-4 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-xs font-bold text-white flex items-center gap-2';
+  } else {
+    statusEl.innerHTML = '<span class="text-amber-400">チーム機能を準備中...</span>';
+    createBtn.disabled = true;
+    inviteBtn.disabled = true;
+    if (expiresEl) expiresEl.disabled = true;
+    createBtn.className = 'h-8 px-4 rounded-xl text-xs font-bold text-white flex items-center gap-2 bg-[#21262d] opacity-60 cursor-not-allowed';
+    inviteBtn.className = 'h-8 px-4 rounded-xl text-xs font-bold text-white flex items-center gap-2 bg-[#21262d] opacity-60 cursor-not-allowed border border-[#30363d]';
+  }
+  if (typeof lucide !== 'undefined') lucide.createIcons?.();
+}
+
 // 参加申請イベントをリッスン（ホストがチーム作成済みの場合）
 if (_isTauri && window.__TAURI__?.event?.listen) {
   window.__TAURI__.event.listen('team-pending-join', () => {
     if (typeof renderTeamPendingJoins === 'function') renderTeamPendingJoins();
+  });
+  window.__TAURI__.event.listen('team-iroh-ready', (e) => {
+    updateTeamButtonsState(e.payload === true, e.payload === false);
   });
 }

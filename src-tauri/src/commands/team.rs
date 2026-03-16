@@ -26,6 +26,55 @@ pub struct PendingJoinInfo {
 
 pub type PendingJoinsState = Arc<RwLock<Vec<PendingJoinInfo>>>;
 
+/// チーム機能（iroh）が利用可能か
+#[tauri::command]
+pub async fn team_is_ready(iroh: State<'_, IrohState>) -> Result<bool, String> {
+    let guard = iroh.read().await;
+    Ok(guard.as_ref().is_some())
+}
+
+/// デバッグ用: チーム機能の各ステップの状態
+#[derive(serde::Serialize)]
+pub struct TeamDebugStatus {
+    pub step1_iroh_node: String,   // "OK" | "待機中" | "失敗"
+    pub step2_node_ticket: String, // "OK" | "待機中" | "失敗"
+    pub step2_error: Option<String>,
+    pub endpoint_id: Option<String>,
+}
+
+#[tauri::command]
+pub async fn team_debug_status(iroh: State<'_, IrohState>) -> Result<TeamDebugStatus, String> {
+    let guard = iroh.read().await;
+    let node = guard.as_ref();
+
+    let (step1, endpoint_id) = match node {
+        Some(n) => ("OK".to_string(), Some(n.node_id().to_string())),
+        None => ("待機中".to_string(), None),
+    };
+
+    let (step2, step2_error) = if let Some(n) = node {
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            n.node_ticket(),
+        )
+        .await
+        {
+            Ok(Ok(_)) => ("OK".to_string(), None),
+            Ok(Err(e)) => ("失敗".to_string(), Some(e)),
+            Err(_) => ("失敗".to_string(), Some("タイムアウト(5秒)".to_string())),
+        }
+    } else {
+        ("待機中".to_string(), None)
+    };
+
+    Ok(TeamDebugStatus {
+        step1_iroh_node: step1,
+        step2_node_ticket: step2,
+        step2_error,
+        endpoint_id,
+    })
+}
+
 /// EndpointID（NodeId）を取得。iroh 未初期化時はエラー
 #[tauri::command]
 pub async fn team_get_endpoint_id(iroh: State<'_, IrohState>) -> Result<String, String> {

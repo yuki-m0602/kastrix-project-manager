@@ -57,7 +57,12 @@ impl IrohNodeState {
     /// このノードの NodeTicket を取得（招待用）
     pub async fn node_ticket(&self) -> Result<NodeTicket, String> {
         let mut watcher = self.endpoint().node_addr();
-        let node_addr = watcher.initialized().await;
+        let node_addr = tokio::time::timeout(
+            std::time::Duration::from_secs(15),
+            watcher.initialized(),
+        )
+        .await
+        .map_err(|_| "ノードの初期化がタイムアウトしました。ネットワーク接続を確認して再度お試しください。".to_string())?;
         Ok(NodeTicket::new(node_addr))
     }
 

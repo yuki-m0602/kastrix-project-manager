@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use std::sync::Mutex;
+use tauri::Emitter;
 use tauri::Manager;
 use tokio::sync::RwLock;
 
@@ -34,14 +35,18 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 match team::IrohNodeState::init().await {
                     Ok(node) => {
-                        let mut guard = iroh_state_clone.write().await;
-                        *guard = Some(node);
+                        {
+                            let mut guard = iroh_state_clone.write().await;
+                            *guard = Some(node);
+                        }
                         if let Err(e) = commands::team::restore_team_subscriptions(&app_handle).await {
                             eprintln!("restore_team_subscriptions failed: {}", e);
                         }
+                        let _ = app_handle.emit("team-iroh-ready", true);
                     }
                     Err(e) => {
                         eprintln!("iroh init failed (team sync disabled): {}", e);
+                        let _ = app_handle.emit("team-iroh-ready", false);
                     }
                 }
             });
@@ -52,6 +57,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::team::team_is_ready,
+            commands::team::team_debug_status,
             commands::team::team_get_endpoint_id,
             commands::team::team_get_current_room,
             commands::projects::scan_directory,
