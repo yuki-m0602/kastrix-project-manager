@@ -1,4 +1,32 @@
 // ── Sidebar ───────────────────────────────────────────────
+async function updateSidebarRoomInfo() {
+  const roomNameEl = document.getElementById('sidebar-room-name');
+  const syncDotEl = document.getElementById('sidebar-sync-dot');
+  const syncLabelEl = document.getElementById('sidebar-sync-label');
+  if (!roomNameEl || !syncDotEl || !syncLabelEl) return;
+  if (!_isTauri || !window.__TAURI__) {
+    roomNameEl.textContent = '未参加';
+    syncLabelEl.textContent = '未参加';
+    syncDotEl.className = 'w-1.5 h-1.5 rounded-full bg-[#484f58]';
+    return;
+  }
+  try {
+    const info = await apiTeamGetCurrentRoom();
+    roomNameEl.textContent = info.room_name || info.roomName || '未参加';
+    syncLabelEl.textContent = info.status || '未参加';
+    syncDotEl.title = info.status || '未参加';
+    if (info.status === '同期中') {
+      syncDotEl.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse';
+    } else {
+      syncDotEl.className = 'w-1.5 h-1.5 rounded-full bg-[#484f58]';
+    }
+  } catch (e) {
+    roomNameEl.textContent = '未参加';
+    syncLabelEl.textContent = '未参加';
+    syncDotEl.className = 'w-1.5 h-1.5 rounded-full bg-[#484f58]';
+  }
+}
+
 function toggleSidebarVisibility() {
   if (window.innerWidth < 1024) {
     const sidebar = document.getElementById('sidebar');
@@ -15,16 +43,19 @@ function toggleSidebar() {
   const sidebar    = document.getElementById('sidebar');
   const mainArea   = document.getElementById('main-area');
   const logoText   = document.getElementById('logo-text');
+  const roomInfo   = document.getElementById('sidebar-room-info');
   const navLabels  = document.querySelectorAll('.nav-label');
   if (isSidebarCollapsed) {
     sidebar.style.width = '64px';
     mainArea.style.paddingLeft = '80px';
     logoText.style.display = 'none';
+    if (roomInfo) roomInfo.style.display = 'none';
     navLabels.forEach(l => l.style.display = 'none');
   } else {
     sidebar.style.width = '224px';
     mainArea.style.paddingLeft = '240px';
     logoText.style.display = '';
+    if (roomInfo) roomInfo.style.display = 'flex';
     navLabels.forEach(l => l.style.display = '');
   }
 }

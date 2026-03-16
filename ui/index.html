@@ -253,11 +253,20 @@
 
   <!-- Sidebar (overlays main content) -->
   <aside id="sidebar" class="glass border border-[#30363d] flex flex-col transition-all duration-300 z-40 rounded-2xl fixed top-8 left-2 bottom-2 overflow-hidden -translate-x-[calc(100%+8px)] lg:translate-x-0" style="width:224px">
-    <div class="h-12 flex items-center justify-between px-3 shrink-0 border-b border-[#30363d]">
-      <span id="logo-text" class="font-black text-[8px] tracking-[0.25em] text-[#484f58] ml-2 uppercase">Kastrix</span>
-      <button onclick="toggleSidebar()" class="hidden lg:block p-2 hover:bg-[#161b22] rounded-xl text-[#484f58] hover:text-white transition-all">
-        <i data-lucide="chevron-left" size="14"></i>
-      </button>
+    <div class="shrink-0 border-b border-[#30363d] px-3 py-2">
+      <div class="flex items-center justify-between">
+        <span id="logo-text" class="font-black text-[8px] tracking-[0.25em] text-[#484f58] ml-2 uppercase">Kastrix</span>
+        <button onclick="toggleSidebar()" class="hidden lg:block p-2 hover:bg-[#161b22] rounded-xl text-[#484f58] hover:text-white transition-all">
+          <i data-lucide="chevron-left" size="14"></i>
+        </button>
+      </div>
+      <div id="sidebar-room-info" class="mt-1.5 ml-2 flex items-center gap-2 min-w-0">
+        <span id="sidebar-room-name" class="text-[9px] text-[#8b949e] truncate nav-label">未参加</span>
+        <span id="sidebar-sync-indicator" class="shrink-0 inline-flex items-center gap-1 text-[8px] text-[#484f58] nav-label">
+          <span id="sidebar-sync-dot" class="w-1.5 h-1.5 rounded-full bg-[#484f58]" title="未参加"></span>
+          <span id="sidebar-sync-label">未参加</span>
+        </span>
+      </div>
     </div>
     <div class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-3">
       <div class="space-y-0.5">

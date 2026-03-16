@@ -257,6 +257,7 @@ async function teamCreate() {
       alert(`チームを作成しました。\n招待コード: ${result.code}\n\n参加する人にこの招待リンクを共有してください（クリップボードにコピー済み）`);
       await renderTeamInviteCodes();
       renderSettings();
+      if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
     }
   } catch (e) {
     alert('エラー: ' + (e?.toString?.() || e));
@@ -297,6 +298,7 @@ async function teamJoin() {
     if (result && result.message) {
       alert(result.message);
       if (input) input.value = '';
+      if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
     }
   } catch (e) {
     alert('エラー: ' + (e?.toString?.() || e));

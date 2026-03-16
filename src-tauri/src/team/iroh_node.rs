@@ -99,6 +99,11 @@ impl IrohNodeState {
     pub async fn get_all_senders(&self) -> Vec<GossipSender> {
         self.subscriptions.read().await.values().cloned().collect()
     }
+
+    /// 購読中のトピックID一覧を取得（ルーム表示用）
+    pub async fn get_subscription_topic_ids(&self) -> Vec<String> {
+        self.subscriptions.read().await.keys().cloned().collect()
+    }
 }
 
 /// アプリ全体で共有する iroh 状態（初期化失敗時は None）

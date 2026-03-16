@@ -33,6 +33,31 @@ pub async fn team_get_endpoint_id(iroh: State<'_, IrohState>) -> Result<String, 
     Ok(node.node_id().to_string())
 }
 
+/// 現在のルーム情報と同期状態を取得（サイドバー表示用）
+#[derive(serde::Serialize)]
+pub struct TeamRoomInfo {
+    pub room_name: String,
+    pub status: String, // "同期中" | "未参加"
+}
+
+#[tauri::command]
+pub async fn team_get_current_room(iroh: State<'_, IrohState>) -> Result<TeamRoomInfo, String> {
+    let guard = iroh.read().await;
+    let topic_ids = match guard.as_ref() {
+        Some(node) => node.get_subscription_topic_ids().await,
+        None => Vec::new(),
+    };
+    let topic_id = topic_ids.first();
+    let (room_name, status) = match topic_id {
+        Some(tid) => {
+            let short = tid.chars().take(8).collect::<String>();
+            (format!("ルーム {}", short), "同期中".to_string())
+        }
+        None => ("未参加".to_string(), "未参加".to_string()),
+    };
+    Ok(TeamRoomInfo { room_name, status })
+}
+
 fn topic_id_to_hex(id: &[u8; 32]) -> String {
     id.iter().map(|b| format!("{:02x}", b)).collect()
 }

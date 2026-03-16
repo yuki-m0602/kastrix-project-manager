@@ -192,3 +192,12 @@ async function apiTeamApproveJoin(endpointId, topicId) {
 async function apiTeamRejectJoin(endpointId, topicId) {
   return await _invoke('team_reject_join', { endpointId, topicId });
 }
+
+async function apiTeamGetCurrentRoom() {
+  try {
+    return await _invoke('team_get_current_room', {});
+  } catch (e) {
+    console.error('apiTeamGetCurrentRoom failed:', e);
+    return { roomName: '未参加', status: '未参加' };
+  }
+}

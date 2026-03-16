@@ -229,6 +229,7 @@ async function init() {
   fixFilterIconSizes();
   setTaskView('list');
   setProjectViewMode('grid');
+  if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
 }
 
 // チーム同期でタスクが更新されたら再読み込み
@@ -236,6 +237,7 @@ if (_isTauri && window.__TAURI__?.event?.listen) {
   window.__TAURI__.event.listen('team-task-updated', async () => {
     await loadData();
     if (typeof filterTasks === 'function') filterTasks();
+    if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
   });
 }
 

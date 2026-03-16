@@ -48,6 +48,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::team::team_get_endpoint_id,
+            commands::team::team_get_current_room,
             commands::projects::scan_directory,
             commands::projects::get_projects,
             commands::projects::get_project,
