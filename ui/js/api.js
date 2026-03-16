@@ -212,6 +212,23 @@ async function apiTeamRejectJoin(endpointId, topicId) {
   return await _invoke('team_reject_join', { endpointId, topicId });
 }
 
+async function apiTeamKick(endpointId) {
+  return await _invoke('team_kick', { endpointId });
+}
+
+async function apiTeamBlock(endpointId) {
+  return await _invoke('team_block', { endpointId });
+}
+
+async function apiTeamUnblock(endpointId) {
+  return await _invoke('team_unblock', { endpointId });
+}
+
+async function apiTeamListBlocked() {
+  const result = await _invoke('team_list_blocked', {});
+  return Array.isArray(result) ? result : [];
+}
+
 async function apiTeamGetCurrentRoom() {
   try {
     return await _invoke('team_get_current_room', {});
@@ -245,12 +262,44 @@ async function apiTeamPushUnsynced() {
   return await _invoke('team_push_unsynced', {});
 }
 
+async function apiTeamGetMyRole() {
+  try {
+    return (await _invoke('team_get_my_role', {})) || 'member';
+  } catch {
+    return 'member';
+  }
+}
+
 async function apiTeamAmIHost() {
   try {
     return (await _invoke('team_am_i_host', {})) || false;
   } catch (e) {
     return false;
   }
+}
+
+async function apiTeamSetMyDisplayName(displayName) {
+  return await _invoke('team_set_my_display_name', { displayName });
+}
+
+async function apiTeamGetMyDisplayName() {
+  try {
+    return (await _invoke('team_get_my_display_name', {})) || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function apiTeamAmIPending() {
+  try {
+    return (await _invoke('team_am_i_pending', {})) || false;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function apiTeamCancelJoin() {
+  return await _invoke('team_cancel_join', {});
 }
 
 async function apiTeamListMembers() {

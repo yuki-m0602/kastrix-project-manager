@@ -129,6 +129,15 @@ async function renderSettings() {
           </div>
         </div>
 
+        <div id="team-display-name-section" class="hidden">
+          <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">自分の表示名</h3>
+          <p class="text-[10px] text-[#8b949e] mb-2">チーム内でメンバー一覧に表示される名前（64文字以内）</p>
+          <div class="flex gap-2">
+            <input id="team-display-name-input" type="text" placeholder="表示名を入力" maxlength="64" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-white placeholder-[#484f58]">
+            <button onclick="teamSaveDisplayName()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white">保存</button>
+          </div>
+        </div>
+
         <div id="team-invite-codes-section" class="hidden">
           <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">発行済みコード一覧</h3>
           <div id="team-invite-codes-list" class="space-y-2"></div>
@@ -142,6 +151,11 @@ async function renderSettings() {
         <div id="team-members-section" class="hidden">
           <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">メンバー一覧</h3>
           <div id="team-members-list" class="space-y-2"></div>
+        </div>
+
+        <div id="team-blocked-section" class="hidden">
+          <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">ブロック済み（HOST のみ表示）</h3>
+          <div id="team-blocked-list" class="space-y-2"></div>
         </div>
 
         <div>
@@ -162,9 +176,13 @@ async function renderSettings() {
 
         <div class="pt-4 border-t border-[#30363d]">
           <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">チームに参加する</h3>
-          <div class="flex gap-2">
+          <div id="team-join-form" class="flex gap-2">
             <input id="team-join-code" type="text" placeholder="招待リンクを貼り付け（ホストから共有された文字列）" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-white placeholder-[#484f58] font-mono">
             <button onclick="teamJoin()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white">参加する</button>
+          </div>
+          <div id="team-pending-status" class="hidden flex items-center justify-between p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+            <span class="text-xs text-amber-200">参加申請中です。ホストの承認をお待ちください。</span>
+            <button onclick="teamCancelJoin()" class="px-3 py-1 text-[10px] font-bold text-amber-400 hover:bg-amber-500/20 rounded-lg">参加申請をキャンセル</button>
           </div>
         </div>
 
@@ -203,12 +221,50 @@ async function renderSettings() {
       if (sel) sel.value = savedIde;
     }
     await renderTeamInviteCodes();
+    await renderTeamDisplayNameSection();
     await renderTeamPendingJoins();
     await renderTeamMembers();
+    await renderTeamBlocked();
+    await renderTeamPendingStatus();
   } catch (e) {
     console.error('renderSettings post-load failed:', e);
   }
   if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+}
+
+async function renderTeamDisplayNameSection() {
+  if (!_isTauri) return;
+  const section = document.getElementById('team-display-name-section');
+  const input = document.getElementById('team-display-name-input');
+  if (!section || !input) return;
+  try {
+    const [ready, displayName] = await Promise.all([
+      apiTeamIsReady(),
+      apiTeamGetMyDisplayName(),
+    ]);
+    if (ready) {
+      section.classList.remove('hidden');
+      input.value = displayName || '';
+    } else {
+      section.classList.add('hidden');
+    }
+  } catch (e) {
+    section.classList.add('hidden');
+  }
+}
+
+async function teamSaveDisplayName() {
+  if (!_isTauri) return;
+  const input = document.getElementById('team-display-name-input');
+  const name = input?.value?.trim() ?? '';
+  try {
+    await apiTeamSetMyDisplayName(name);
+    await renderTeamMembers();
+    if (typeof renderInbox === 'function') await renderInbox();
+    alert('表示名を保存しました。');
+  } catch (e) {
+    alert('保存に失敗しました: ' + (e?.message || e));
+  }
 }
 
 async function renderTeamPendingJoins() {
@@ -247,9 +303,10 @@ async function renderTeamMembers() {
   const list = document.getElementById('team-members-list');
   if (!section || !list) return;
   try {
-    const [members, amIHost] = await Promise.all([
+    const [members, amIHost, myRole] = await Promise.all([
       apiTeamListMembers(),
       apiTeamAmIHost(),
+      apiTeamGetMyRole(),
     ]);
     if (members.length === 0) {
       section.classList.add('hidden');
@@ -257,22 +314,83 @@ async function renderTeamMembers() {
     }
     section.classList.remove('hidden');
     const roleLabel = (r) => ({ host: 'HOST', co_host: 'CO-HOST', member: 'MEMBER' }[r] || r);
+    const canKick = myRole === 'host' || myRole === 'co_host';
     list.innerHTML = members.map((m) => {
-      const promoteBtn = amIHost && m.role === 'member'
-        ? `<button onclick="teamPromoteToCoHost('${escapeHtml(m.endpoint_id)}')" class="px-2 py-1 text-[9px] font-bold text-amber-400 hover:bg-amber-500/10 rounded-lg">CO-HOSTに昇格</button>`
-        : '';
+      let actions = '';
+      if (m.role !== 'host') {
+        if (amIHost && m.role === 'member') {
+          actions += `<button onclick="teamPromoteToCoHost('${escapeHtml(m.endpoint_id)}')" class="px-2 py-1 text-[9px] font-bold text-amber-400 hover:bg-amber-500/10 rounded-lg">CO-HOSTに昇格</button>`;
+        }
+        if (canKick) {
+          actions += `<button onclick="teamKick('${escapeHtml(m.endpoint_id)}')" class="px-2 py-1 text-[9px] font-bold text-amber-400 hover:bg-amber-500/10 rounded-lg">キック</button>`;
+        }
+        if (amIHost) {
+          actions += `<button onclick="teamBlock('${escapeHtml(m.endpoint_id)}')" class="px-2 py-1 text-[9px] font-bold text-red-400 hover:bg-red-500/10 rounded-lg">ブロック</button>`;
+        }
+      }
+      const label = m.display_name || m.endpoint_id.slice(0, 20) + '...';
       return `
         <div class="flex items-center justify-between p-3 bg-[#0d1117] border border-[#30363d] rounded-xl">
           <div class="flex items-center gap-2 min-w-0">
-            <span class="text-xs font-mono text-white truncate" title="${escapeHtml(m.endpoint_id)}">${escapeHtml(m.endpoint_id.slice(0, 20))}...</span>
+            <span class="text-xs text-white truncate" title="${escapeHtml(m.endpoint_id)}">${escapeHtml(label)}</span>
             <span class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 shrink-0">${roleLabel(m.role)}</span>
           </div>
-          ${promoteBtn}
+          <div class="flex items-center gap-1 shrink-0">${actions}</div>
         </div>
       `;
     }).join('');
   } catch (e) {
     console.error('Failed to load members:', e);
+    section.classList.add('hidden');
+  }
+}
+
+async function renderTeamPendingStatus() {
+  if (!_isTauri) return;
+  const form = document.getElementById('team-join-form');
+  const status = document.getElementById('team-pending-status');
+  if (!form || !status) return;
+  try {
+    const pending = await apiTeamAmIPending();
+    if (pending) {
+      form.classList.add('hidden');
+      status.classList.remove('hidden');
+    } else {
+      form.classList.remove('hidden');
+      status.classList.add('hidden');
+    }
+  } catch (e) {
+    form.classList.remove('hidden');
+    status.classList.add('hidden');
+  }
+}
+
+async function renderTeamBlocked() {
+  if (!_isTauri) return;
+  const section = document.getElementById('team-blocked-section');
+  const list = document.getElementById('team-blocked-list');
+  if (!section || !list) return;
+  try {
+    const [blocked, amIHost] = await Promise.all([
+      apiTeamListBlocked(),
+      apiTeamAmIHost(),
+    ]);
+    if (blocked.length === 0 || !amIHost) {
+      section.classList.add('hidden');
+      return;
+    }
+    section.classList.remove('hidden');
+    list.innerHTML = blocked.map((m) => {
+      const label = m.display_name || m.endpoint_id.slice(0, 20) + '...';
+      return `
+      <div class="flex items-center justify-between p-3 bg-[#0d1117] border border-red-500/30 rounded-xl">
+        <span class="text-xs text-[#8b949e] truncate" title="${escapeHtml(m.endpoint_id)}">${escapeHtml(label)}</span>
+        <button onclick="teamUnblock('${escapeHtml(m.endpoint_id)}')" class="px-2 py-1 text-[9px] font-bold text-emerald-400 hover:bg-emerald-500/10 rounded-lg">ブロック解除</button>
+      </div>
+    `;
+    }).join('');
+  } catch (e) {
+    console.error('Failed to load blocked:', e);
     section.classList.add('hidden');
   }
 }
@@ -285,6 +403,43 @@ async function teamPromoteToCoHost(endpointId) {
   } catch (e) {
     console.error('Promote failed:', e);
     alert('昇格に失敗しました: ' + (e?.message || e));
+  }
+}
+
+async function teamKick(endpointId) {
+  if (!_isTauri || !endpointId) return;
+  if (!confirm('このメンバーをキックしますか？')) return;
+  try {
+    await apiTeamKick(endpointId);
+    await renderTeamMembers();
+    await renderTeamBlocked();
+  } catch (e) {
+    console.error('Kick failed:', e);
+    alert('キックに失敗しました: ' + (e?.message || e));
+  }
+}
+
+async function teamBlock(endpointId) {
+  if (!_isTauri || !endpointId) return;
+  if (!confirm('このメンバーをブロックしますか？ブロックされたメンバーは新規招待コードでも参加できなくなります。')) return;
+  try {
+    await apiTeamBlock(endpointId);
+    await renderTeamMembers();
+    await renderTeamBlocked();
+  } catch (e) {
+    console.error('Block failed:', e);
+    alert('ブロックに失敗しました: ' + (e?.message || e));
+  }
+}
+
+async function teamUnblock(endpointId) {
+  if (!_isTauri || !endpointId) return;
+  try {
+    await apiTeamUnblock(endpointId);
+    await renderTeamBlocked();
+  } catch (e) {
+    console.error('Unblock failed:', e);
+    alert('ブロック解除に失敗しました: ' + (e?.message || e));
   }
 }
 
@@ -435,10 +590,24 @@ async function teamJoin() {
     if (result && result.message) {
       alert(result.message);
       if (input) input.value = '';
+      await renderTeamPendingStatus();
       if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
     }
   } catch (e) {
     alert('エラー: ' + (e?.toString?.() || e));
+  }
+}
+
+async function teamCancelJoin() {
+  if (!_isTauri) return;
+  if (!confirm('参加申請をキャンセルしますか？')) return;
+  try {
+    await apiTeamCancelJoin();
+    await renderTeamPendingStatus();
+    if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
+    alert('参加申請をキャンセルしました。');
+  } catch (e) {
+    alert('キャンセルに失敗しました: ' + (e?.message || e));
   }
 }
 

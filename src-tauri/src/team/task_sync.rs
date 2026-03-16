@@ -9,6 +9,8 @@ use uuid::Uuid;
 /// task_update の payload（JSON）
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct TaskUpdatePayload {
+    #[serde(default)]
+    pub version: Option<String>, // "1.0" = サポート対象、それ以外はスキップ
     pub action: String, // "create" | "update" | "delete"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub task: Option<Task>,
@@ -42,6 +44,7 @@ pub fn record_operation(
         .map(|(id, seq)| (id, seq + 1))
         .unwrap_or((None, 1));
 
+    payload.version = Some("1.0".to_string());
     payload.seq = Some(next_seq);
     payload.prev_id = prev_id.clone();
     payload.timestamp = Some(timestamp.to_string());

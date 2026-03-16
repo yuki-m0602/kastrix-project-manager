@@ -5,13 +5,17 @@
 use iroh::protocol::Router;
 use iroh::{Endpoint, NodeId, Watcher};
 use iroh_base::ticket::NodeTicket;
+use iroh_base::SecretKey;
 use iroh_gossip::api::{GossipReceiver, GossipSender};
 use iroh_gossip::net::Gossip;
 use iroh_gossip::proto::TopicId;
 use iroh_gossip::ALPN;
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+
+const SECRET_FILENAME: &str = "iroh_secret.bin";
 
 /// iroh ノードの状態
 pub struct IrohNodeState {
@@ -26,9 +30,32 @@ impl IrohNodeState {
         self.router.endpoint()
     }
 
+    /// 秘密鍵を読み込みまたは生成して永続化（再起動後も同じ EndpointID を維持）
+    fn load_or_create_secret_key(app_data_dir: &Path) -> Result<SecretKey, String> {
+        let path = app_data_dir.join(SECRET_FILENAME);
+        if path.exists() {
+            let bytes: [u8; 32] = std::fs::read(&path)
+                .map_err(|e| format!("iroh secret key read failed: {}", e))?
+                .try_into()
+                .map_err(|_| "iroh secret key invalid length (expected 32 bytes)".to_string())?;
+            Ok(SecretKey::from_bytes(&bytes))
+        } else {
+            let mut bytes = [0u8; 32];
+            getrandom::getrandom(&mut bytes)
+                .map_err(|e| format!("random bytes failed: {}", e))?;
+            let key = SecretKey::from_bytes(&bytes);
+            std::fs::write(&path, &bytes)
+                .map_err(|e| format!("iroh secret key save failed: {}", e))?;
+            Ok(key)
+        }
+    }
+
     /// iroh ノードを初期化（Endpoint, Gossip, Router）
-    pub async fn init() -> Result<Self, String> {
+    /// app_data_dir: 秘密鍵を保存するディレクトリ
+    pub async fn init(app_data_dir: &Path) -> Result<Self, String> {
+        let secret_key = Self::load_or_create_secret_key(app_data_dir)?;
         let endpoint = Endpoint::builder()
+            .secret_key(secret_key)
             .alpns(vec![ALPN.to_vec()])
             .discovery_n0()
             .bind()
@@ -108,6 +135,11 @@ impl IrohNodeState {
     /// 購読中のトピックID一覧を取得（ルーム表示用）
     pub async fn get_subscription_topic_ids(&self) -> Vec<String> {
         self.subscriptions.read().await.keys().cloned().collect()
+    }
+
+    /// トピックの購読を解除（参加申請キャンセル時など）
+    pub async fn unsubscribe(&self, topic_id_hex: &str) -> bool {
+        self.subscriptions.write().await.remove(topic_id_hex).is_some()
     }
 }
 

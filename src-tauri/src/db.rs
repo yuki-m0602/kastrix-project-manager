@@ -110,6 +110,8 @@ pub fn init_db(app_data_dir: &std::path::Path) -> SqlResult<Connection> {
     let _ = conn.execute("ALTER TABLE tasks ADD COLUMN is_public INTEGER DEFAULT 1", []);
     // マイグレーション: 衝突検出用に last_update_source を追加
     let _ = conn.execute("ALTER TABLE tasks ADD COLUMN last_update_source TEXT DEFAULT 'local'", []);
+    // マイグレーション: メンバーの表示名
+    let _ = conn.execute("ALTER TABLE members ADD COLUMN display_name TEXT", []);
 
     Ok(conn)
 }

@@ -297,6 +297,32 @@ if (_isTauri && window.__TAURI__?.event?.listen) {
   window.__TAURI__.event.listen('team-subscriptions-restored', async () => {
     if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
   });
+  window.__TAURI__.event.listen('team-blocked', async () => {
+    if (typeof showAlert === 'function') {
+      showAlert('このチームからブロックされました。', 'error');
+    } else {
+      alert('このチームからブロックされました。');
+    }
+  });
+  window.__TAURI__.event.listen('team-members-updated', async () => {
+    if (typeof renderTeamMembers === 'function') await renderTeamMembers();
+    if (typeof renderTeamBlocked === 'function') await renderTeamBlocked();
+  });
+  window.__TAURI__.event.listen('team-pending-join-cancelled', async () => {
+    if (typeof renderTeamPendingJoins === 'function') await renderTeamPendingJoins();
+    if (typeof renderInbox === 'function') await renderInbox();
+  });
+  window.__TAURI__.event.listen('team-pending-join', async () => {
+    if (typeof renderTeamPendingJoins === 'function') await renderTeamPendingJoins();
+    if (typeof renderInbox === 'function') await renderInbox();
+  });
+  window.__TAURI__.event.listen('team-cancelled', async () => {
+    if (typeof renderTeamPendingStatus === 'function') await renderTeamPendingStatus();
+    if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
+  });
+  window.__TAURI__.event.listen('team-update-required', () => {
+    alert('アプリのアップデートが必要です。最新版をインストールしてください。');
+  });
 }
 
 if (document.readyState === 'loading') {

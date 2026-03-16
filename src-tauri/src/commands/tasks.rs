@@ -143,6 +143,7 @@ pub async fn create_task(
     if task.is_public {
         let (timestamp, ts_source) = crate::ntp_util::get_timestamp_with_source().await;
         let mut payload = TaskUpdatePayload {
+            version: None,
             action: "create".to_string(),
             task: Some(task.clone()),
             task_id: None,
@@ -213,6 +214,7 @@ pub async fn update_task(
     if task.is_public {
         let (timestamp, ts_source) = crate::ntp_util::get_timestamp_with_source().await;
         let mut payload = TaskUpdatePayload {
+            version: None,
             action: "update".to_string(),
             task: Some(task.clone()),
             task_id: None,
@@ -256,6 +258,7 @@ pub async fn delete_task(
     if was_public {
         let (timestamp, ts_source) = crate::ntp_util::get_timestamp_with_source().await;
         let mut payload = TaskUpdatePayload {
+            version: None,
             action: "delete".to_string(),
             task: None,
             task_id: Some(id),
@@ -326,6 +329,7 @@ pub async fn update_task_status(
     if task.is_public {
         let (timestamp, ts_source) = crate::ntp_util::get_timestamp_with_source().await;
         let mut payload = TaskUpdatePayload {
+            version: None,
             action: "update".to_string(),
             task: Some(task.clone()),
             task_id: None,

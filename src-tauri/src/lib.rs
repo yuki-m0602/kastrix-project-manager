@@ -33,7 +33,11 @@ pub fn run() {
             app.manage(pending_joins);
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                match team::IrohNodeState::init().await {
+                let app_data_dir = app_handle
+                    .path()
+                    .app_data_dir()
+                    .expect("Failed to get app data dir");
+                match team::IrohNodeState::init(&app_data_dir).await {
                     Ok(node) => {
                         {
                             let mut guard = iroh_state_clone.write().await;
@@ -90,15 +94,24 @@ pub fn run() {
             commands::team::team_list_invite_codes,
             commands::team::team_revoke_invite_code,
             commands::team::team_list_pending_joins,
+            commands::team::team_am_i_pending,
+            commands::team::team_cancel_join,
             commands::team::team_approve_join,
             commands::team::team_reject_join,
+            commands::team::team_kick,
+            commands::team::team_block,
+            commands::team::team_unblock,
             commands::team::team_get_sync_mode,
             commands::team::team_set_sync_mode,
             commands::team::team_get_unsynced_count,
             commands::team::team_push_unsynced,
             commands::team::team_promote_to_co_host,
             commands::team::team_list_members,
+            commands::team::team_list_blocked,
+            commands::team::team_get_my_role,
             commands::team::team_am_i_host,
+            commands::team::team_set_my_display_name,
+            commands::team::team_get_my_display_name,
             commands::team::team_resolve_conflict,
         ])
         .run(tauri::generate_context!())
