@@ -159,8 +159,8 @@ async function apiAnalyzeLogs(prompt, provider) {
 }
 
 // ── Team ─────────────────────────────────────────────────
-async function apiTeamCreate() {
-  return await _invoke('team_create', {});
+async function apiTeamCreate(expiresMinutes) {
+  return await _invoke('team_create', { expiresMinutes: expiresMinutes ?? null });
 }
 
 async function apiTeamIssueInvite(expiresMinutes) {
@@ -200,4 +200,28 @@ async function apiTeamGetCurrentRoom() {
     console.error('apiTeamGetCurrentRoom failed:', e);
     return { roomName: '未参加', status: '未参加' };
   }
+}
+
+async function apiTeamGetSyncMode() {
+  try {
+    return (await _invoke('team_get_sync_mode', {})) || 'auto';
+  } catch (e) {
+    return 'auto';
+  }
+}
+
+async function apiTeamSetSyncMode(mode) {
+  return await _invoke('team_set_sync_mode', { mode });
+}
+
+async function apiTeamGetUnsyncedCount() {
+  try {
+    return (await _invoke('team_get_unsynced_count', {})) || 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
+async function apiTeamPushUnsynced() {
+  return await _invoke('team_push_unsynced', {});
 }

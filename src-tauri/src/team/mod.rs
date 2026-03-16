@@ -8,4 +8,6 @@ mod task_sync;
 
 pub use invite_code::{generate_invite_code, normalize_code};
 pub use iroh_node::{IrohNodeState, IrohState};
-pub use task_sync::{apply_task_update, broadcast_task_update, TaskUpdatePayload};
+pub use task_sync::{
+    apply_task_update, broadcast_task_update, record_operation, TaskUpdatePayload,
+};

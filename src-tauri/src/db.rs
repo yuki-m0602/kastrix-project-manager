@@ -94,6 +94,13 @@ pub fn init_db(app_data_dir: &std::path::Path) -> SqlResult<Connection> {
             expires_at  TEXT,
             created_at  TEXT DEFAULT (datetime('now'))
         );
+
+        CREATE TABLE IF NOT EXISTS team_subscriptions (
+            topic_id    TEXT PRIMARY KEY,
+            host_ticket  TEXT,
+            is_host     INTEGER NOT NULL DEFAULT 0,
+            created_at  TEXT DEFAULT (datetime('now'))
+        );
         ",
     )?;
 

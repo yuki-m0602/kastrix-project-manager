@@ -1,4 +1,51 @@
 // ── Sidebar ───────────────────────────────────────────────
+async function updateSidebarUnsyncedBadge() {
+  const badge = document.getElementById('sidebar-unsynced-badge');
+  const pushSection = document.getElementById('sidebar-push-section');
+  const pushCount = document.getElementById('sidebar-push-count');
+  if (!badge || !pushSection || !pushCount) return;
+  if (!_isTauri || !window.__TAURI__) {
+    badge.classList.add('hidden');
+    pushSection.classList.add('hidden');
+    return;
+  }
+  try {
+    const [syncMode, count] = await Promise.all([
+      apiTeamGetSyncMode(),
+      apiTeamGetUnsyncedCount(),
+    ]);
+    const isManual = syncMode === 'manual';
+    if (isManual && count > 0) {
+      badge.textContent = String(count);
+      badge.classList.remove('hidden');
+      pushSection.classList.remove('hidden');
+      pushCount.textContent = String(count);
+    } else {
+      badge.classList.add('hidden');
+      if (isManual) {
+        pushSection.classList.remove('hidden');
+        pushCount.textContent = '0';
+      } else {
+        pushSection.classList.add('hidden');
+      }
+    }
+  } catch (e) {
+    badge.classList.add('hidden');
+    pushSection.classList.add('hidden');
+  }
+}
+
+async function teamPushUnsynced() {
+  if (!_isTauri || !window.__TAURI__) return;
+  try {
+    await apiTeamPushUnsynced();
+    await updateSidebarUnsyncedBadge();
+  } catch (e) {
+    console.error('Push failed:', e);
+    alert('送信に失敗しました: ' + (e?.message || e));
+  }
+}
+
 async function updateSidebarRoomInfo() {
   const roomNameEl = document.getElementById('sidebar-room-name');
   const syncDotEl = document.getElementById('sidebar-sync-dot');
@@ -25,6 +72,7 @@ async function updateSidebarRoomInfo() {
     syncLabelEl.textContent = '未参加';
     syncDotEl.className = 'w-1.5 h-1.5 rounded-full bg-[#484f58]';
   }
+  await updateSidebarUnsyncedBadge();
 }
 
 function toggleSidebarVisibility() {

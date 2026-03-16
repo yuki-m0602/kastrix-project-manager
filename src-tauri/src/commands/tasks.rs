@@ -1,7 +1,7 @@
 use crate::db::DbState;
 use crate::models::{CreateTaskInput, Task, UpdateTaskInput};
-use crate::team::{broadcast_task_update, IrohState, TaskUpdatePayload};
-use tauri::State;
+use crate::team::{broadcast_task_update, record_operation, IrohState, TaskUpdatePayload};
+use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 fn record_activity(
@@ -104,6 +104,7 @@ pub async fn create_task(
     input: CreateTaskInput,
     state: State<'_, DbState>,
     iroh: State<'_, IrohState>,
+    app: AppHandle,
 ) -> Result<Task, String> {
     let task = {
         let db = state.0.lock().map_err(|e| e.to_string())?;
@@ -140,12 +141,30 @@ pub async fn create_task(
         query_task(&db, &id)?
     };
     if task.is_public {
-        let payload = TaskUpdatePayload {
+        let (timestamp, ts_source) = crate::ntp_util::get_timestamp_with_source().await;
+        let mut payload = TaskUpdatePayload {
             action: "create".to_string(),
             task: Some(task.clone()),
             task_id: None,
+            timestamp: None,
+            ts_source: None,
+            seq: None,
+            prev_id: None,
         };
-        let _ = broadcast_task_update(&iroh, &payload).await;
+        let should_broadcast = {
+            let db = state.0.lock().map_err(|e| e.to_string())?;
+            let sync_mode: String = db
+                .query_row("SELECT value FROM settings WHERE key = 'sync_mode'", [], |r| r.get(0))
+                .unwrap_or_else(|_| "auto".to_string());
+            let is_manual = sync_mode == "manual";
+            record_operation(&db, &mut payload, &timestamp, &ts_source, !is_manual)?;
+            !is_manual
+        };
+        if should_broadcast {
+            let _ = broadcast_task_update(&iroh, &payload).await;
+        } else {
+            let _ = app.emit("team-unsynced-updated", ());
+        }
     }
     Ok(task)
 }
@@ -156,6 +175,7 @@ pub async fn update_task(
     input: UpdateTaskInput,
     state: State<'_, DbState>,
     iroh: State<'_, IrohState>,
+    app: AppHandle,
 ) -> Result<Task, String> {
     let task = {
         let db = state.0.lock().map_err(|e| e.to_string())?;
@@ -191,12 +211,30 @@ pub async fn update_task(
         query_task(&db, &id)?
     };
     if task.is_public {
-        let payload = TaskUpdatePayload {
+        let (timestamp, ts_source) = crate::ntp_util::get_timestamp_with_source().await;
+        let mut payload = TaskUpdatePayload {
             action: "update".to_string(),
             task: Some(task.clone()),
             task_id: None,
+            timestamp: None,
+            ts_source: None,
+            seq: None,
+            prev_id: None,
         };
-        let _ = broadcast_task_update(&iroh, &payload).await;
+        let should_broadcast = {
+            let db = state.0.lock().map_err(|e| e.to_string())?;
+            let sync_mode: String = db
+                .query_row("SELECT value FROM settings WHERE key = 'sync_mode'", [], |r| r.get(0))
+                .unwrap_or_else(|_| "auto".to_string());
+            let is_manual = sync_mode == "manual";
+            record_operation(&db, &mut payload, &timestamp, &ts_source, !is_manual)?;
+            !is_manual
+        };
+        if should_broadcast {
+            let _ = broadcast_task_update(&iroh, &payload).await;
+        } else {
+            let _ = app.emit("team-unsynced-updated", ());
+        }
     }
     Ok(task)
 }
@@ -206,6 +244,7 @@ pub async fn delete_task(
     id: String,
     state: State<'_, DbState>,
     iroh: State<'_, IrohState>,
+    app: AppHandle,
 ) -> Result<(), String> {
     let was_public = {
         let db = state.0.lock().map_err(|e| e.to_string())?;
@@ -215,12 +254,30 @@ pub async fn delete_task(
         task.map(|t| t.is_public).unwrap_or(false)
     };
     if was_public {
-        let payload = TaskUpdatePayload {
+        let (timestamp, ts_source) = crate::ntp_util::get_timestamp_with_source().await;
+        let mut payload = TaskUpdatePayload {
             action: "delete".to_string(),
             task: None,
             task_id: Some(id),
+            timestamp: None,
+            ts_source: None,
+            seq: None,
+            prev_id: None,
         };
-        let _ = broadcast_task_update(&iroh, &payload).await;
+        let should_broadcast = {
+            let db = state.0.lock().map_err(|e| e.to_string())?;
+            let sync_mode: String = db
+                .query_row("SELECT value FROM settings WHERE key = 'sync_mode'", [], |r| r.get(0))
+                .unwrap_or_else(|_| "auto".to_string());
+            let is_manual = sync_mode == "manual";
+            record_operation(&db, &mut payload, &timestamp, &ts_source, !is_manual)?;
+            !is_manual
+        };
+        if should_broadcast {
+            let _ = broadcast_task_update(&iroh, &payload).await;
+        } else {
+            let _ = app.emit("team-unsynced-updated", ());
+        }
     }
     Ok(())
 }
@@ -231,6 +288,7 @@ pub async fn update_task_status(
     status: String,
     state: State<'_, DbState>,
     iroh: State<'_, IrohState>,
+    app: AppHandle,
 ) -> Result<Task, String> {
     let valid_statuses = ["todo", "in-progress", "done"];
     if !valid_statuses.contains(&status.as_str()) {
@@ -266,12 +324,30 @@ pub async fn update_task_status(
         query_task(&db, &id)?
     };
     if task.is_public {
-        let payload = TaskUpdatePayload {
+        let (timestamp, ts_source) = crate::ntp_util::get_timestamp_with_source().await;
+        let mut payload = TaskUpdatePayload {
             action: "update".to_string(),
             task: Some(task.clone()),
             task_id: None,
+            timestamp: None,
+            ts_source: None,
+            seq: None,
+            prev_id: None,
         };
-        let _ = broadcast_task_update(&iroh, &payload).await;
+        let should_broadcast = {
+            let db = state.0.lock().map_err(|e| e.to_string())?;
+            let sync_mode: String = db
+                .query_row("SELECT value FROM settings WHERE key = 'sync_mode'", [], |r| r.get(0))
+                .unwrap_or_else(|_| "auto".to_string());
+            let is_manual = sync_mode == "manual";
+            record_operation(&db, &mut payload, &timestamp, &ts_source, !is_manual)?;
+            !is_manual
+        };
+        if should_broadcast {
+            let _ = broadcast_task_update(&iroh, &payload).await;
+        } else {
+            let _ = app.emit("team-unsynced-updated", ());
+        }
     }
     Ok(task)
 }

@@ -3,7 +3,8 @@
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use crate::db::DbState;
 use crate::team::{
-    apply_task_update, generate_invite_code, normalize_code, IrohState, TaskUpdatePayload,
+    apply_task_update, broadcast_task_update, generate_invite_code, normalize_code, IrohState,
+    TaskUpdatePayload,
 };
 use futures::StreamExt;
 use iroh_gossip::api::Event;
@@ -58,6 +59,73 @@ pub async fn team_get_current_room(iroh: State<'_, IrohState>) -> Result<TeamRoo
     Ok(TeamRoomInfo { room_name, status })
 }
 
+/// 同期モードを取得（"auto" | "manual"、デフォルト "auto"）
+#[tauri::command]
+pub fn team_get_sync_mode(db: State<'_, DbState>) -> Result<String, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let mode: String = conn
+        .query_row("SELECT value FROM settings WHERE key = 'sync_mode'", [], |r| r.get(0))
+        .unwrap_or_else(|_| "auto".to_string());
+    Ok(mode)
+}
+
+/// 同期モードを設定（"auto" | "manual"）
+#[tauri::command]
+pub fn team_set_sync_mode(mode: String, db: State<'_, DbState>) -> Result<(), String> {
+    if mode != "auto" && mode != "manual" {
+        return Err("sync_mode must be 'auto' or 'manual'".to_string());
+    }
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES ('sync_mode', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1",
+        [&mode],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// 未配信の Operation 数を取得（手動同期モード時用）
+#[tauri::command]
+pub fn team_get_unsynced_count(db: State<'_, DbState>) -> Result<i64, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM operations WHERE synced = 0 AND type = 'task_update'", [], |r| r.get(0))
+        .map_err(|e| e.to_string())?;
+    Ok(count)
+}
+
+/// 未配信の Operation を一括送信
+#[tauri::command]
+pub async fn team_push_unsynced(
+    db: State<'_, DbState>,
+    iroh: State<'_, IrohState>,
+    app: AppHandle,
+) -> Result<i64, String> {
+    let rows: Vec<(String, String)> = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn
+            .prepare("SELECT id, payload FROM operations WHERE synced = 0 AND type = 'task_update' ORDER BY seq")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        rows
+    };
+    let count = rows.len() as i64;
+    for (id, payload_json) in rows {
+        if let Ok(payload) = serde_json::from_str::<TaskUpdatePayload>(&payload_json) {
+            let _ = broadcast_task_update(&iroh, &payload).await;
+        }
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        conn.execute("UPDATE operations SET synced = 1 WHERE id = ?1", [&id])
+            .map_err(|e| e.to_string())?;
+    }
+    let _ = app.emit("team-unsynced-updated", ());
+    Ok(count)
+}
+
 fn topic_id_to_hex(id: &[u8; 32]) -> String {
     id.iter().map(|b| format!("{:02x}", b)).collect()
 }
@@ -107,6 +175,7 @@ pub async fn team_create(
     state: State<'_, DbState>,
     iroh: State<'_, IrohState>,
     pending_joins: State<'_, PendingJoinsState>,
+    expires_minutes: Option<u32>,
 ) -> Result<TeamCreateResult, String> {
     let (code, topic_id) = generate_invite_code();
     let topic_id_hex = topic_id_to_hex(&topic_id);
@@ -134,22 +203,42 @@ pub async fn team_create(
         ticket.to_string()
     };
 
+    let mins = expires_minutes.unwrap_or(60);
+
     let db = state.0.lock().map_err(|e| e.to_string())?;
+    if mins == 0 {
+        db.execute(
+            "INSERT INTO invite_codes (id, code, topic_id, host_ticket, expires_at) VALUES (?1, ?2, ?3, ?4, NULL)",
+            rusqlite::params![id, code, topic_id_hex, host_ticket],
+        )
+        .map_err(|e| e.to_string())?;
+    } else {
+        let modifier = format!("+{} minutes", mins);
+        db.execute(
+            "INSERT INTO invite_codes (id, code, topic_id, host_ticket, expires_at) VALUES (?1, ?2, ?3, ?4, datetime('now', 'localtime', ?5))",
+            rusqlite::params![id, code, topic_id_hex, host_ticket, modifier],
+        )
+        .map_err(|e| e.to_string())?;
+    }
     db.execute(
-        "INSERT INTO invite_codes (id, code, topic_id, host_ticket, expires_at) VALUES (?1, ?2, ?3, ?4, datetime('now', 'localtime', '+1 hour'))",
-        rusqlite::params![id, code, topic_id_hex, host_ticket],
+        "INSERT OR REPLACE INTO team_subscriptions (topic_id, host_ticket, is_host) VALUES (?1, NULL, 1)",
+        rusqlite::params![topic_id_hex],
     )
     .map_err(|e| e.to_string())?;
 
-    let expires_at = chrono::Local::now() + chrono::Duration::hours(1);
-    let expires_at_str = expires_at.format("%Y-%m-%d %H:%M:%S").to_string();
+    let expires_at_str = if mins == 0 {
+        "9999-12-31 23:59:59".to_string()
+    } else {
+        let expires_at = chrono::Local::now() + chrono::Duration::minutes(mins as i64);
+        expires_at.format("%Y-%m-%d %H:%M:%S").to_string()
+    };
     let invite_payload = format!("{}::{}::{}", topic_id_hex, host_ticket, expires_at_str);
     let invite_string = format!("KASTRIX-{}", URL_SAFE_NO_PAD.encode(invite_payload.as_bytes()));
 
     Ok(TeamCreateResult {
         code: code.clone(),
         topic_id: topic_id_hex,
-        expires_in_minutes: 60,
+        expires_in_minutes: mins,
         invite_string: invite_string.clone(),
     })
 }
@@ -166,12 +255,20 @@ pub async fn team_issue_invite(
     let mins = expires_minutes.unwrap_or(60);
 
     let db = state.0.lock().map_err(|e| e.to_string())?;
-    let expires_modifier = format!("+{} minutes", mins);
-    db.execute(
-        "INSERT INTO invite_codes (id, code, topic_id, expires_at) VALUES (?1, ?2, ?3, datetime('now', 'localtime', ?4))",
-        rusqlite::params![id, code, topic_id_hex, expires_modifier],
-    )
-    .map_err(|e| e.to_string())?;
+    if mins == 0 {
+        db.execute(
+            "INSERT INTO invite_codes (id, code, topic_id, expires_at) VALUES (?1, ?2, ?3, NULL)",
+            rusqlite::params![id, code, topic_id_hex],
+        )
+        .map_err(|e| e.to_string())?;
+    } else {
+        let expires_modifier = format!("+{} minutes", mins);
+        db.execute(
+            "INSERT INTO invite_codes (id, code, topic_id, expires_at) VALUES (?1, ?2, ?3, datetime('now', 'localtime', ?4))",
+            rusqlite::params![id, code, topic_id_hex, expires_modifier],
+        )
+        .map_err(|e| e.to_string())?;
+    }
 
     Ok(TeamInviteResult {
         code: code.clone(),
@@ -243,6 +340,14 @@ pub async fn team_join(
         .await
         .map_err(|e| format!("トピック参加に失敗: {}", e))?;
 
+    // メンバー: 参加情報をDBに保存（再起動時復元用）
+    let db = state.0.lock().map_err(|e| e.to_string())?;
+    db.execute(
+        "INSERT OR REPLACE INTO team_subscriptions (topic_id, host_ticket, is_host) VALUES (?1, ?2, 0)",
+        rusqlite::params![topic_id, host_ticket_str],
+    )
+    .map_err(|e| e.to_string())?;
+
     // メンバー: task_update を受信してローカル DB に適用
     let pending_joins = pending_joins.inner().clone();
     let topic_id_for_listener = topic_id.clone();
@@ -285,6 +390,74 @@ fn hex_to_topic_id(hex: &str) -> Result<[u8; 32], String> {
     let mut arr = [0u8; 32];
     arr.copy_from_slice(&bytes);
     Ok(arr)
+}
+
+/// 起動時に DB から参加情報を復元し、subscribe を再開
+pub async fn restore_team_subscriptions(app: &tauri::AppHandle) -> Result<(), String> {
+    let db_state = app
+        .try_state::<DbState>()
+        .ok_or_else(|| "DbState not found".to_string())?;
+    let iroh = app
+        .try_state::<IrohState>()
+        .ok_or_else(|| "IrohState not found".to_string())?;
+    let pending_joins = app
+        .try_state::<PendingJoinsState>()
+        .ok_or_else(|| "PendingJoinsState not found".to_string())?;
+
+    let subs: Vec<(String, Option<String>, i32)> = {
+        let db = db_state.0.lock().map_err(|e| e.to_string())?;
+        let mut stmt = db
+            .prepare("SELECT topic_id, host_ticket, is_host FROM team_subscriptions")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?, row.get::<_, i32>(2)?))
+            })
+            .map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+    };
+
+    if subs.is_empty() {
+        return Ok(());
+    }
+
+    let guard = iroh.read().await;
+    let node = guard
+        .as_ref()
+        .ok_or_else(|| "iroh が初期化されていません".to_string())?;
+
+    for (topic_id, host_ticket, is_host) in subs {
+        let topic_id_bytes = hex_to_topic_id(&topic_id)?;
+        let topic_id_iroh = iroh_gossip::proto::TopicId::from_bytes(topic_id_bytes);
+        let bootstrap: Vec<iroh::NodeId> = if is_host != 0 {
+            vec![]
+        } else {
+            let ht = host_ticket
+                .as_ref()
+                .ok_or_else(|| format!("メンバーとして topic {} の host_ticket がありません", topic_id))?;
+            let ticket: iroh_base::ticket::NodeTicket = ht
+                .parse()
+                .map_err(|e| format!("host_ticket 解析失敗: {}", e))?;
+            node.add_node_addr(&ticket)
+                .map_err(|e| format!("ホスト接続設定失敗: {}", e))?;
+            vec![ticket.node_addr().node_id]
+        };
+
+        let receiver = node
+            .subscribe(topic_id_iroh, &topic_id, bootstrap)
+            .await
+            .map_err(|e| format!("topic {} の subscribe 復元失敗: {}", topic_id, e))?;
+
+        let pending_joins = pending_joins.inner().clone();
+        let app = app.clone();
+        let topic_id_for_listener = topic_id.clone();
+        let is_host_bool = is_host != 0;
+        tauri::async_runtime::spawn(async move {
+            spawn_topic_listener(receiver, pending_joins, app, topic_id_for_listener, is_host_bool).await;
+        });
+    }
+
+    Ok(())
 }
 
 /// 発行済み招待コード一覧を取得

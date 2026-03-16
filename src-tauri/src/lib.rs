@@ -6,6 +6,7 @@ use tokio::sync::RwLock;
 mod commands;
 mod db;
 mod git_util;
+mod ntp_util;
 mod lang_detect;
 mod models;
 mod team;
@@ -29,11 +30,15 @@ pub fn run() {
             let iroh_state_clone = iroh_state.clone();
             let pending_joins: commands::team::PendingJoinsState = Arc::new(RwLock::new(Vec::new()));
             app.manage(pending_joins);
+            let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 match team::IrohNodeState::init().await {
                     Ok(node) => {
                         let mut guard = iroh_state_clone.write().await;
                         *guard = Some(node);
+                        if let Err(e) = commands::team::restore_team_subscriptions(&app_handle).await {
+                            eprintln!("restore_team_subscriptions failed: {}", e);
+                        }
                     }
                     Err(e) => {
                         eprintln!("iroh init failed (team sync disabled): {}", e);
@@ -80,6 +85,10 @@ pub fn run() {
             commands::team::team_list_pending_joins,
             commands::team::team_approve_join,
             commands::team::team_reject_join,
+            commands::team::team_get_sync_mode,
+            commands::team::team_set_sync_mode,
+            commands::team::team_get_unsynced_count,
+            commands::team::team_push_unsynced,
         ])
         .run(tauri::generate_context!())
         .expect("Error while running Tauri application");

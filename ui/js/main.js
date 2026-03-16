@@ -239,6 +239,9 @@ if (_isTauri && window.__TAURI__?.event?.listen) {
     if (typeof filterTasks === 'function') filterTasks();
     if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
   });
+  window.__TAURI__.event.listen('team-unsynced-updated', async () => {
+    if (typeof updateSidebarUnsyncedBadge === 'function') await updateSidebarUnsyncedBadge();
+  });
 }
 
 if (document.readyState === 'loading') {

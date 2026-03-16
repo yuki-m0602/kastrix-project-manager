@@ -4,6 +4,7 @@ use crate::db::DbState;
 use crate::models::Task;
 use bytes::Bytes;
 use tauri::Emitter;
+use uuid::Uuid;
 
 /// task_update の payload（JSON）
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -13,6 +14,50 @@ pub struct TaskUpdatePayload {
     pub task: Option<Task>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub task_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ts_source: Option<String>, // "ntp" | "local"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seq: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prev_id: Option<String>,
+}
+
+/// operations テーブルに記録し、payload に seq / prev_id を設定
+/// synced: true=即配信済み, false=手動同期待ち
+pub fn record_operation(
+    db: &rusqlite::Connection,
+    payload: &mut TaskUpdatePayload,
+    timestamp: &str,
+    ts_source: &str,
+    synced: bool,
+) -> Result<(), String> {
+    let (prev_id, next_seq): (Option<String>, i64) = db
+        .query_row(
+            "SELECT id, seq FROM operations ORDER BY seq DESC LIMIT 1",
+            [],
+            |row| Ok((row.get::<_, Option<String>>(0)?, row.get::<_, i64>(1)?)),
+        )
+        .map(|(id, seq)| (id, seq + 1))
+        .unwrap_or((None, 1));
+
+    payload.seq = Some(next_seq);
+    payload.prev_id = prev_id.clone();
+    payload.timestamp = Some(timestamp.to_string());
+    payload.ts_source = Some(ts_source.to_string());
+
+    let payload_json = serde_json::to_string(payload).map_err(|e| e.to_string())?;
+    let id = Uuid::new_v4().to_string();
+    let synced_int = if synced { 1 } else { 0 };
+    db.execute(
+        "INSERT INTO operations (id, seq, prev_id, type, payload, timestamp, ts_source, synced)
+         VALUES (?1, ?2, ?3, 'task_update', ?4, ?5, ?6, ?7)",
+        rusqlite::params![id, next_seq, prev_id, payload_json, timestamp, ts_source, synced_int],
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 /// 全トピックに task_update を broadcast

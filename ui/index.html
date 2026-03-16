@@ -278,9 +278,16 @@
             <i data-lucide="activity" size="16"></i>
             <span class="nav-label font-bold tracking-wide">Activity Logs</span>
           </button>
-          <button onclick="setActiveMenu('inbox')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="inbox">
+          <button onclick="setActiveMenu('inbox')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent relative" data-menu="inbox">
             <i data-lucide="inbox" size="16"></i>
             <span class="nav-label font-bold tracking-wide">Inbox</span>
+            <span id="sidebar-unsynced-badge" class="hidden ml-auto w-5 h-5 rounded-full bg-amber-500 text-[9px] font-black flex items-center justify-center text-black nav-label">0</span>
+          </button>
+        </div>
+        <div id="sidebar-push-section" class="hidden pt-3 border-t border-[#30363d]/50">
+          <button id="sidebar-push-btn" onclick="teamPushUnsynced()" class="flex items-center justify-center w-full p-3 rounded-xl gap-2 text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-all">
+            <i data-lucide="upload" size="14"></i>
+            <span>Push (<span id="sidebar-push-count">0</span>)</span>
           </button>
         </div>
         <div class="pt-3 border-t border-[#30363d]/50 space-y-0.5">

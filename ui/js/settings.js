@@ -5,11 +5,12 @@ async function renderSettings() {
   if (!container) return;
 
   // Load state
-  const [dirs, openaiStatus, anthropicStatus, defaultProvider] = await Promise.all([
+  const [dirs, openaiStatus, anthropicStatus, defaultProvider, syncMode] = await Promise.all([
     apiGetWatchedDirs(),
     apiGetApiKeyStatus('openai'),
     apiGetApiKeyStatus('anthropic'),
     apiGetSetting('ai_provider'),
+    _isTauri ? apiTeamGetSyncMode() : Promise.resolve('auto'),
   ]);
 
   container.innerHTML = `
@@ -97,7 +98,13 @@ async function renderSettings() {
       <div class="space-y-4">
         <div>
           <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">チーム作成・招待</h3>
-          <div class="flex flex-wrap gap-2 mb-3">
+          <div class="flex flex-wrap items-center gap-2 mb-3">
+            <select id="team-invite-expires" class="h-8 px-3 bg-[#0d1117] border border-[#30363d] rounded-xl text-xs text-white outline-none focus:border-indigo-500">
+              <option value="15">15分</option>
+              <option value="60" selected>1時間</option>
+              <option value="1440">24時間</option>
+              <option value="0">無期限</option>
+            </select>
             <button onclick="teamCreate()" class="h-8 px-4 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white flex items-center gap-2">
               <i data-lucide="users" size="14"></i>
               チームを作成
@@ -117,6 +124,22 @@ async function renderSettings() {
         <div id="team-pending-joins-section" class="hidden">
           <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">参加申請</h3>
           <div id="team-pending-joins-list" class="space-y-2"></div>
+        </div>
+
+        <div>
+          <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">同期モード</h3>
+          <p class="text-[10px] text-[#8b949e] mb-2">変更をチームに配信するタイミングを選択（ローカルのみ保存）</p>
+          <div class="flex gap-4">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="sync-mode" value="auto" class="accent-indigo-500" ${(syncMode || 'auto') === 'auto' ? 'checked' : ''} onchange="saveSyncMode(this.value)">
+              <span class="text-xs">自動同期（デフォルト）</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="sync-mode" value="manual" class="accent-indigo-500" ${syncMode === 'manual' ? 'checked' : ''} onchange="saveSyncMode(this.value)">
+              <span class="text-xs">手動同期</span>
+            </label>
+          </div>
+          <p class="text-[9px] text-[#484f58] mt-1">手動同期時はサイドバーに未配信数を表示し、Pushボタンで一括送信</p>
         </div>
 
         <div class="pt-4 border-t border-[#30363d]">
@@ -199,6 +222,8 @@ async function renderTeamInviteCodes() {
     section.classList.remove('hidden');
     list.innerHTML = codes.map(c => {
       const expiresText = c.expires_at ? formatExpiresAt(c.expires_at) : '無期限';
+      const isExpired = c.expires_at && formatExpiresAt(c.expires_at) === '期限切れ';
+      const expiresClass = isExpired ? 'text-red-400' : 'text-[#8b949e]';
       const copyBtn = c.invite_string
         ? `<button onclick="teamCopyInviteLink(this)" data-invite="${escapeHtml(c.invite_string)}" class="px-2 py-1 text-[9px] font-bold text-indigo-400 hover:bg-indigo-500/10 rounded-lg shrink-0">リンクをコピー</button>`
         : '';
@@ -206,7 +231,7 @@ async function renderTeamInviteCodes() {
         <div class="flex items-center justify-between p-3 bg-[#0d1117] border border-[#30363d] rounded-xl">
           <div class="flex items-center gap-2 min-w-0">
             <span class="text-xs font-mono text-white truncate">${escapeHtml(c.code)}</span>
-            <span class="text-[9px] text-[#8b949e] shrink-0">${expiresText}</span>
+            <span class="text-[9px] font-bold shrink-0 ${expiresClass}">${expiresText}</span>
           </div>
           <div class="flex items-center gap-1 shrink-0">
             ${copyBtn}
@@ -245,13 +270,25 @@ function escapeHtml(s) {
   return div.innerHTML;
 }
 
+async function saveSyncMode(mode) {
+  if (!_isTauri || !mode) return;
+  try {
+    await apiTeamSetSyncMode(mode);
+    if (typeof updateSidebarUnsyncedBadge === 'function') updateSidebarUnsyncedBadge();
+  } catch (e) {
+    console.error('Failed to save sync mode:', e);
+  }
+}
+
 async function teamCreate() {
   if (!_isTauri) {
     alert('チーム機能は Tauri 環境で動作します');
     return;
   }
   try {
-    const result = await apiTeamCreate();
+    const expiresEl = document.getElementById('team-invite-expires');
+    const expiresMinutes = expiresEl ? parseInt(expiresEl.value, 10) : 60;
+    const result = await apiTeamCreate(expiresMinutes);
     if (result && result.invite_string) {
       await navigator.clipboard.writeText(result.invite_string);
       alert(`チームを作成しました。\n招待コード: ${result.code}\n\n参加する人にこの招待リンクを共有してください（クリップボードにコピー済み）`);
@@ -270,7 +307,9 @@ async function teamIssueInvite() {
     return;
   }
   try {
-    const result = await apiTeamIssueInvite(60);
+    const expiresEl = document.getElementById('team-invite-expires');
+    const expiresMinutes = expiresEl ? parseInt(expiresEl.value, 10) : 60;
+    const result = await apiTeamIssueInvite(expiresMinutes);
     if (result && result.code) {
       await navigator.clipboard.writeText(result.code);
       alert(`招待コードを発行しました。\n${result.code}\n（クリップボードにコピーしました）`);
