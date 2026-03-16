@@ -93,6 +93,49 @@ document.addEventListener('click', e => {
   }
 });
 
+// ── 衝突ダイアログ (local vs local) ───────────────────────
+let _pendingConflict = null;
+
+function showConflictDialog(payload) {
+  if (!payload || !(payload.taskId || payload.task_id)) return;
+  _pendingConflict = payload;
+  const modal = document.getElementById('conflict-modal');
+  const localTitle = document.getElementById('conflict-local-title');
+  const localStatus = document.getElementById('conflict-local-status');
+  const incomingTitle = document.getElementById('conflict-incoming-title');
+  const incomingStatus = document.getElementById('conflict-incoming-status');
+  if (!modal || !localTitle) return;
+  const local = payload.local || {};
+  const incoming = payload.incoming || {};
+  localTitle.textContent = local.title || '-';
+  localStatus.textContent = [local.status, local.priority].filter(Boolean).join(' / ') || '-';
+  incomingTitle.textContent = incoming.title || '-';
+  incomingStatus.textContent = [incoming.status, incoming.priority].filter(Boolean).join(' / ') || '-';
+  modal.style.display = 'flex';
+  document.getElementById('conflict-keep-local').onclick = () => resolveConflict('local');
+  document.getElementById('conflict-use-incoming').onclick = () => resolveConflict('incoming');
+}
+
+function closeConflictModal() {
+  _pendingConflict = null;
+  const modal = document.getElementById('conflict-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function resolveConflict(choice) {
+  if (!_pendingConflict || !_isTauri) return;
+  try {
+    if (choice === 'incoming' && _pendingConflict.incoming) {
+      await apiTeamResolveConflict('incoming', _pendingConflict.incoming);
+    }
+    closeConflictModal();
+    await loadData();
+    if (typeof filterTasks === 'function') filterTasks();
+  } catch (e) {
+    console.error('Conflict resolve failed:', e);
+  }
+}
+
 // ── Data Loading ─────────────────────────────────────────
 async function reloadTasks() {
   const tasksData = await apiGetTasks();
@@ -230,6 +273,12 @@ async function init() {
   setTaskView('list');
   setProjectViewMode('grid');
   if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
+  // iroh 復元が遅い場合のリトライ（1s, 2s, 3s 後）
+  if (_isTauri && typeof updateSidebarRoomInfo === 'function') {
+    [1000, 2000, 3000].forEach((ms) => {
+      setTimeout(() => updateSidebarRoomInfo(), ms);
+    });
+  }
 }
 
 // チーム同期でタスクが更新されたら再読み込み
@@ -241,6 +290,12 @@ if (_isTauri && window.__TAURI__?.event?.listen) {
   });
   window.__TAURI__.event.listen('team-unsynced-updated', async () => {
     if (typeof updateSidebarUnsyncedBadge === 'function') await updateSidebarUnsyncedBadge();
+  });
+  window.__TAURI__.event.listen('team-conflict', (e) => {
+    if (typeof showConflictDialog === 'function') showConflictDialog(e.payload);
+  });
+  window.__TAURI__.event.listen('team-subscriptions-restored', async () => {
+    if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
   });
 }
 

@@ -82,6 +82,31 @@ pub async fn broadcast_task_update(
     Ok(())
 }
 
+/// 衝突用にローカルタスクを取得
+fn query_local_task(db: &rusqlite::Connection, id: &str) -> Result<Task, String> {
+    db.query_row(
+        "SELECT id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at
+         FROM tasks WHERE id = ?1",
+        [id],
+        |row| {
+            Ok(Task {
+                id: row.get(0)?,
+                project_id: row.get(1)?,
+                title: row.get(2)?,
+                status: row.get(3)?,
+                priority: row.get(4)?,
+                due_date: row.get(5)?,
+                assignee: row.get(6)?,
+                description: row.get(7)?,
+                is_public: row.get::<_, Option<i32>>(8)?.unwrap_or(1) != 0,
+                created_at: row.get::<_, Option<String>>(9)?.unwrap_or_default(),
+                updated_at: row.get::<_, Option<String>>(10)?.unwrap_or_default(),
+            })
+        },
+    )
+    .map_err(|e| e.to_string())
+}
+
 /// project_id が存在しない場合、仮プロジェクトを挿入（同期タスク用）
 fn ensure_project_exists(db: &rusqlite::Connection, project_id: &str) -> Result<(), String> {
     let exists: bool = db
@@ -99,7 +124,16 @@ fn ensure_project_exists(db: &rusqlite::Connection, project_id: &str) -> Result<
     Ok(())
 }
 
+/// 衝突情報（local vs local 時にフロントへ送る）
+#[derive(serde::Serialize)]
+pub struct ConflictInfo {
+    pub task_id: String,
+    pub incoming: Task,
+    pub local: Task,
+}
+
 /// 受信した payload をローカル DB に適用
+/// local vs local の衝突時は適用せず team-conflict イベントを発火
 pub fn apply_task_update(
     state: &DbState,
     payload: &TaskUpdatePayload,
@@ -112,13 +146,38 @@ pub fn apply_task_update(
                 .task
                 .as_ref()
                 .ok_or_else(|| "task_update: task is required for create/update".to_string())?;
+            let incoming_ts_local = payload.ts_source.as_deref() == Some("local");
+            let local_source: Option<String> = db
+                .query_row(
+                    "SELECT last_update_source FROM tasks WHERE id = ?1",
+                    [&task.id],
+                    |r| r.get(0),
+                )
+                .ok();
+            let is_local_vs_local =
+                incoming_ts_local && local_source.as_deref() == Some("local");
+            if is_local_vs_local {
+                if let Some(app) = app {
+                    let local_task = query_local_task(&db, &task.id);
+                    if let Ok(local) = local_task {
+                        let info = ConflictInfo {
+                            task_id: task.id.clone(),
+                            incoming: task.clone(),
+                            local,
+                        };
+                        let _ = app.emit("team-conflict", &info);
+                    }
+                }
+                return Ok(());
+            }
             if let Some(ref pid) = task.project_id {
                 ensure_project_exists(&db, pid)?;
             }
             let is_public = if task.is_public { 1 } else { 0 };
+            let ts_src = payload.ts_source.as_deref().unwrap_or("local");
             db.execute(
-                "INSERT INTO tasks (id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                "INSERT INTO tasks (id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at, last_update_source)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
                  ON CONFLICT(id) DO UPDATE SET
                    project_id=excluded.project_id,
                    title=excluded.title,
@@ -128,7 +187,8 @@ pub fn apply_task_update(
                    assignee=excluded.assignee,
                    description=excluded.description,
                    is_public=excluded.is_public,
-                   updated_at=excluded.updated_at",
+                   updated_at=excluded.updated_at,
+                   last_update_source=excluded.last_update_source",
                 rusqlite::params![
                     task.id,
                     task.project_id,
@@ -141,6 +201,7 @@ pub fn apply_task_update(
                     is_public,
                     task.created_at,
                     task.updated_at,
+                    ts_src,
                 ],
             )
             .map_err(|e| e.to_string())?;

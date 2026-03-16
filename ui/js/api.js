@@ -225,3 +225,28 @@ async function apiTeamGetUnsyncedCount() {
 async function apiTeamPushUnsynced() {
   return await _invoke('team_push_unsynced', {});
 }
+
+async function apiTeamAmIHost() {
+  try {
+    return (await _invoke('team_am_i_host', {})) || false;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function apiTeamListMembers() {
+  try {
+    const result = await _invoke('team_list_members', {});
+    return Array.isArray(result) ? result : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+async function apiTeamPromoteToCoHost(endpointId) {
+  return await _invoke('team_promote_to_co_host', { endpointId });
+}
+
+async function apiTeamResolveConflict(choice, incoming) {
+  return await _invoke('team_resolve_conflict', { choice, incoming });
+}

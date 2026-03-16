@@ -6,6 +6,8 @@ use crate::team::{
     apply_task_update, broadcast_task_update, generate_invite_code, normalize_code, IrohState,
     TaskUpdatePayload,
 };
+use crate::models::Task;
+use bytes::Bytes;
 use futures::StreamExt;
 use iroh_gossip::api::Event;
 use iroh_gossip::api::Message;
@@ -38,11 +40,14 @@ pub async fn team_get_endpoint_id(iroh: State<'_, IrohState>) -> Result<String, 
 #[derive(serde::Serialize)]
 pub struct TeamRoomInfo {
     pub room_name: String,
-    pub status: String, // "同期中" | "未参加"
+    pub status: String, // "同期中" | "接続中" | "未参加"
 }
 
 #[tauri::command]
-pub async fn team_get_current_room(iroh: State<'_, IrohState>) -> Result<TeamRoomInfo, String> {
+pub async fn team_get_current_room(
+    iroh: State<'_, IrohState>,
+    db: State<'_, DbState>,
+) -> Result<TeamRoomInfo, String> {
     let guard = iroh.read().await;
     let topic_ids = match guard.as_ref() {
         Some(node) => node.get_subscription_topic_ids().await,
@@ -54,7 +59,24 @@ pub async fn team_get_current_room(iroh: State<'_, IrohState>) -> Result<TeamRoo
             let short = tid.chars().take(8).collect::<String>();
             (format!("ルーム {}", short), "同期中".to_string())
         }
-        None => ("未参加".to_string(), "未参加".to_string()),
+        None => {
+            // iroh 未初期化 or 復元前: DB から参加情報を取得して表示
+            let conn = db.0.lock().map_err(|e| e.to_string())?;
+            let stored: Option<String> = conn
+                .query_row(
+                    "SELECT topic_id FROM team_subscriptions ORDER BY topic_id LIMIT 1",
+                    [],
+                    |r| r.get(0),
+                )
+                .ok();
+            match stored {
+                Some(tid) => {
+                    let short = tid.chars().take(8).collect::<String>();
+                    (format!("ルーム {}", short), "接続中".to_string())
+                }
+                None => ("未参加".to_string(), "未参加".to_string()),
+            }
+        }
     };
     Ok(TeamRoomInfo { room_name, status })
 }
@@ -130,7 +152,16 @@ fn topic_id_to_hex(id: &[u8; 32]) -> String {
     id.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
-/// トピックのイベントをリッスン（NeighborUp=参加申請[ホストのみ]、Received=task_update）
+/// join_request ブロードキャスト用（CO-HOST が参加申請を見れるようにする）
+#[derive(serde::Serialize, serde::Deserialize)]
+struct JoinRequestPayload {
+    r#type: String,
+    endpoint_id: String,
+    topic_id: String,
+    requested_at: String,
+}
+
+/// トピックのイベントをリッスン（NeighborUp=参加申請[ホストのみ]、Received=task_update/join_request）
 async fn spawn_topic_listener(
     mut receiver: iroh_gossip::api::GossipReceiver,
     pending_joins: PendingJoinsState,
@@ -146,7 +177,7 @@ async fn spawn_topic_listener(
                 let info = PendingJoinInfo {
                     endpoint_id: endpoint_id.clone(),
                     topic_id: topic_id.clone(),
-                    requested_at,
+                    requested_at: requested_at.clone(),
                 };
                 {
                     let mut guard = pending_joins.write().await;
@@ -155,11 +186,46 @@ async fn spawn_topic_listener(
                     }
                 }
                 let _ = app.emit("team-pending-join", &info);
+                // CO-HOST が参加申請を見れるよう broadcast
+                if let Some(iroh) = app.try_state::<IrohState>() {
+                    let guard = iroh.read().await;
+                    if let Some(node) = guard.as_ref() {
+                        let senders = node.get_all_senders().await;
+                        if !senders.is_empty() {
+                            let payload = JoinRequestPayload {
+                                r#type: "join_request".to_string(),
+                                endpoint_id: endpoint_id.clone(),
+                                topic_id: topic_id.clone(),
+                                requested_at: requested_at.clone(),
+                            };
+                            if let Ok(json) = serde_json::to_string(&payload) {
+                                let bytes = Bytes::from(json.into_bytes());
+                                for sender in senders {
+                                    let _ = sender.broadcast(bytes.clone()).await;
+                                }
+                            }
+                        }
+                    }
+                }
             }
             Ok(Event::Received(Message { content, .. })) => {
-                if let Ok(payload) = serde_json::from_slice::<TaskUpdatePayload>(content.as_ref()) {
+                let slice = content.as_ref();
+                if let Ok(payload) = serde_json::from_slice::<TaskUpdatePayload>(slice) {
                     if let Some(state) = app.try_state::<DbState>() {
                         let _ = apply_task_update(&state, &payload, Some(&app));
+                    }
+                } else if let Ok(join_req) = serde_json::from_slice::<JoinRequestPayload>(slice) {
+                    if join_req.r#type == "join_request" && join_req.topic_id == topic_id {
+                        let info = PendingJoinInfo {
+                            endpoint_id: join_req.endpoint_id,
+                            topic_id: join_req.topic_id,
+                            requested_at: join_req.requested_at,
+                        };
+                        let mut guard = pending_joins.write().await;
+                        if !guard.iter().any(|p| p.endpoint_id == info.endpoint_id && p.topic_id == info.topic_id) {
+                            guard.push(info.clone());
+                        }
+                        let _ = app.emit("team-pending-join", &info);
                     }
                 }
             }
@@ -204,6 +270,13 @@ pub async fn team_create(
     };
 
     let mins = expires_minutes.unwrap_or(60);
+    let host_endpoint_id = {
+        let guard = iroh.read().await;
+        guard
+            .as_ref()
+            .map(|n| n.node_id().to_string())
+            .unwrap_or_default()
+    };
 
     let db = state.0.lock().map_err(|e| e.to_string())?;
     if mins == 0 {
@@ -225,6 +298,14 @@ pub async fn team_create(
         rusqlite::params![topic_id_hex],
     )
     .map_err(|e| e.to_string())?;
+
+    // ホストを members に登録（CO-HOST 権限チェック用）
+    if !host_endpoint_id.is_empty() {
+        let _ = db.execute(
+            "INSERT OR REPLACE INTO members (id, endpoint_id, role, status) VALUES (?1, ?2, 'host', 'active')",
+            rusqlite::params![Uuid::new_v4().to_string(), host_endpoint_id],
+        );
+    }
 
     let expires_at_str = if mins == 0 {
         "9999-12-31 23:59:59".to_string()
@@ -457,6 +538,7 @@ pub async fn restore_team_subscriptions(app: &tauri::AppHandle) -> Result<(), St
         });
     }
 
+    let _ = app.emit("team-subscriptions-restored", ());
     Ok(())
 }
 
@@ -503,6 +585,50 @@ pub async fn team_list_invite_codes(
     Ok(result)
 }
 
+/// 現在のユーザーが HOST かどうか
+#[tauri::command]
+pub fn team_am_i_host(state: State<'_, DbState>) -> Result<bool, String> {
+    let db = state.0.lock().map_err(|e| e.to_string())?;
+    let is_host: bool = db
+        .query_row(
+            "SELECT 1 FROM team_subscriptions WHERE is_host = 1 LIMIT 1",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(false);
+    Ok(is_host)
+}
+
+/// メンバー一覧を取得（HOST/CO-HOST 用）
+#[derive(serde::Serialize)]
+pub struct MemberInfo {
+    pub id: String,
+    pub endpoint_id: String,
+    pub role: String,
+    pub status: String,
+}
+
+#[tauri::command]
+pub fn team_list_members(state: State<'_, DbState>) -> Result<Vec<MemberInfo>, String> {
+    let db = state.0.lock().map_err(|e| e.to_string())?;
+    let mut stmt = db
+        .prepare("SELECT id, endpoint_id, role, status FROM members WHERE status = 'active' ORDER BY role DESC, joined_at ASC")
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(MemberInfo {
+                id: row.get(0)?,
+                endpoint_id: row.get(1)?,
+                role: row.get(2)?,
+                status: row.get(3)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
 /// 参加申請一覧を取得（ホスト用）
 #[tauri::command]
 pub async fn team_list_pending_joins(
@@ -512,14 +638,46 @@ pub async fn team_list_pending_joins(
     Ok(guard.clone())
 }
 
-/// 参加申請を承認（ホスト用）
+/// 参加申請を承認（HOST または CO-HOST 用）
 #[tauri::command]
 pub async fn team_approve_join(
     state: State<'_, DbState>,
+    iroh: State<'_, IrohState>,
     pending_joins: State<'_, PendingJoinsState>,
     endpoint_id: String,
     topic_id: String,
 ) -> Result<(), String> {
+    let my_endpoint_id = {
+        let guard = iroh.read().await;
+        guard
+            .as_ref()
+            .map(|n| n.node_id().to_string())
+            .unwrap_or_default()
+    };
+    let can_approve = {
+        let db = state.0.lock().map_err(|e| e.to_string())?;
+        let is_host: bool = db
+            .query_row(
+                "SELECT 1 FROM team_subscriptions WHERE topic_id = ?1 AND is_host = 1",
+                [&topic_id],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        let is_co_host_or_host: bool = if is_host {
+            true
+        } else {
+            db.query_row(
+                "SELECT 1 FROM members WHERE endpoint_id = ?1 AND role IN ('host','co_host') AND status = 'active'",
+                [&my_endpoint_id],
+                |r| r.get(0),
+            )
+            .unwrap_or(false)
+        };
+        is_co_host_or_host
+    };
+    if !can_approve {
+        return Err("承認する権限がありません（HOST または CO-HOST のみ）".to_string());
+    }
     {
         let mut guard = pending_joins.write().await;
         guard.retain(|p| !(p.endpoint_id == endpoint_id && p.topic_id == topic_id));
@@ -533,15 +691,100 @@ pub async fn team_approve_join(
     Ok(())
 }
 
-/// 参加申請を拒否（ホスト用）
+/// 参加申請を拒否（HOST または CO-HOST 用）
 #[tauri::command]
 pub async fn team_reject_join(
+    state: State<'_, DbState>,
+    iroh: State<'_, IrohState>,
     pending_joins: State<'_, PendingJoinsState>,
     endpoint_id: String,
     topic_id: String,
 ) -> Result<(), String> {
+    let my_endpoint_id = {
+        let guard = iroh.read().await;
+        guard
+            .as_ref()
+            .map(|n| n.node_id().to_string())
+            .unwrap_or_default()
+    };
+    let can_reject = {
+        let db = state.0.lock().map_err(|e| e.to_string())?;
+        let is_host: bool = db
+            .query_row(
+                "SELECT 1 FROM team_subscriptions WHERE topic_id = ?1 AND is_host = 1",
+                [&topic_id],
+                |r| r.get(0),
+            )
+            .unwrap_or(false);
+        let is_co_host_or_host: bool = if is_host {
+            true
+        } else {
+            db.query_row(
+                "SELECT 1 FROM members WHERE endpoint_id = ?1 AND role IN ('host','co_host') AND status = 'active'",
+                [&my_endpoint_id],
+                |r| r.get(0),
+            )
+            .unwrap_or(false)
+        };
+        is_co_host_or_host
+    };
+    if !can_reject {
+        return Err("拒否する権限がありません（HOST または CO-HOST のみ）".to_string());
+    }
     let mut guard = pending_joins.write().await;
     guard.retain(|p| !(p.endpoint_id == endpoint_id && p.topic_id == topic_id));
+    Ok(())
+}
+
+/// メンバーを CO-HOST に昇格（HOST のみ）
+#[tauri::command]
+pub async fn team_promote_to_co_host(
+    state: State<'_, DbState>,
+    endpoint_id: String,
+) -> Result<(), String> {
+    let db = state.0.lock().map_err(|e| e.to_string())?;
+    let is_host: bool = db
+        .query_row(
+            "SELECT 1 FROM team_subscriptions WHERE is_host = 1 LIMIT 1",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(false);
+    if !is_host {
+        return Err("CO-HOST の昇格は HOST のみ可能です".to_string());
+    }
+    db.execute(
+        "UPDATE members SET role = 'co_host' WHERE endpoint_id = ?1 AND status = 'active'",
+        [&endpoint_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// 衝突解決（local vs local 時にユーザーが選択）
+#[tauri::command]
+pub async fn team_resolve_conflict(
+    state: State<'_, DbState>,
+    app: AppHandle,
+    choice: String,
+    incoming: Task,
+) -> Result<(), String> {
+    if choice != "incoming" && choice != "local" {
+        return Err("choice must be 'incoming' or 'local'".to_string());
+    }
+    if choice == "local" {
+        return Ok(());
+    }
+    let payload = TaskUpdatePayload {
+        action: "update".to_string(),
+        task: Some(incoming),
+        task_id: None,
+        timestamp: None,
+        ts_source: None,
+        seq: None,
+        prev_id: None,
+    };
+    let _ = apply_task_update(&state, &payload, Some(&app));
     Ok(())
 }
 

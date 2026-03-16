@@ -818,6 +818,31 @@
       </div>
     </div>
 
+<!-- 衝突解決ダイアログ (local vs local) -->
+<div id="conflict-modal" class="fixed inset-0 z-[60] flex items-center justify-center p-4" style="display: none;">
+  <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeConflictModal()"></div>
+  <div class="relative bg-[#161b22] border border-[#30363d] rounded-2xl shadow-2xl max-w-lg w-full p-6">
+    <h3 class="text-sm font-bold text-white mb-2">タスクの競合</h3>
+    <p class="text-[10px] text-[#8b949e] mb-4">同じタスクが別の端末でも変更されています。どちらを採用しますか？</p>
+    <div class="grid grid-cols-2 gap-3 mb-4">
+      <div id="conflict-local-card" class="p-3 bg-[#0d1117] border border-[#30363d] rounded-xl">
+        <p class="text-[9px] text-[#484f58] font-bold uppercase mb-1">ローカル（この端末）</p>
+        <p id="conflict-local-title" class="text-xs font-bold text-white truncate">-</p>
+        <p id="conflict-local-status" class="text-[9px] text-[#8b949e] mt-0.5">-</p>
+      </div>
+      <div id="conflict-incoming-card" class="p-3 bg-[#0d1117] border border-[#30363d] rounded-xl">
+        <p class="text-[9px] text-[#484f58] font-bold uppercase mb-1">受信（他端末）</p>
+        <p id="conflict-incoming-title" class="text-xs font-bold text-white truncate">-</p>
+        <p id="conflict-incoming-status" class="text-[9px] text-[#8b949e] mt-0.5">-</p>
+      </div>
+    </div>
+    <div class="flex gap-2 justify-end">
+      <button id="conflict-keep-local" class="px-4 py-2 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-xs font-bold text-white">ローカルを保持</button>
+      <button id="conflict-use-incoming" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white">受信を採用</button>
+    </div>
+  </div>
+</div>
+
 <!-- Hidden selects for state (used by filterTasks / renderProjects) -->
 <select id="task-status-filter" class="hidden"><option value="all" selected>all</option><option value="todo">todo</option><option value="in-progress">in-progress</option><option value="done">done</option></select>
 <select id="task-sort" class="hidden"><option value="date" selected>date</option><option value="priority">priority</option><option value="title">title</option></select>

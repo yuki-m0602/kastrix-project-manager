@@ -126,6 +126,11 @@ async function renderSettings() {
           <div id="team-pending-joins-list" class="space-y-2"></div>
         </div>
 
+        <div id="team-members-section" class="hidden">
+          <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">メンバー一覧</h3>
+          <div id="team-members-list" class="space-y-2"></div>
+        </div>
+
         <div>
           <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">同期モード</h3>
           <p class="text-[10px] text-[#8b949e] mb-2">変更をチームに配信するタイミングを選択（ローカルのみ保存）</p>
@@ -171,9 +176,10 @@ async function renderSettings() {
     if (sel) sel.value = savedIde;
   }
 
-  // Load team invite codes and pending joins
+  // Load team invite codes, pending joins, members
   await renderTeamInviteCodes();
   await renderTeamPendingJoins();
+  await renderTeamMembers();
 
   lucide.createIcons();
 }
@@ -205,6 +211,53 @@ async function renderTeamPendingJoins() {
   } catch (e) {
     console.error('Failed to load pending joins:', e);
     section.classList.add('hidden');
+  }
+}
+
+async function renderTeamMembers() {
+  if (!_isTauri) return;
+  const section = document.getElementById('team-members-section');
+  const list = document.getElementById('team-members-list');
+  if (!section || !list) return;
+  try {
+    const [members, amIHost] = await Promise.all([
+      apiTeamListMembers(),
+      apiTeamAmIHost(),
+    ]);
+    if (members.length === 0) {
+      section.classList.add('hidden');
+      return;
+    }
+    section.classList.remove('hidden');
+    const roleLabel = (r) => ({ host: 'HOST', co_host: 'CO-HOST', member: 'MEMBER' }[r] || r);
+    list.innerHTML = members.map((m) => {
+      const promoteBtn = amIHost && m.role === 'member'
+        ? `<button onclick="teamPromoteToCoHost('${escapeHtml(m.endpoint_id)}')" class="px-2 py-1 text-[9px] font-bold text-amber-400 hover:bg-amber-500/10 rounded-lg">CO-HOSTに昇格</button>`
+        : '';
+      return `
+        <div class="flex items-center justify-between p-3 bg-[#0d1117] border border-[#30363d] rounded-xl">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-xs font-mono text-white truncate" title="${escapeHtml(m.endpoint_id)}">${escapeHtml(m.endpoint_id.slice(0, 20))}...</span>
+            <span class="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 shrink-0">${roleLabel(m.role)}</span>
+          </div>
+          ${promoteBtn}
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    console.error('Failed to load members:', e);
+    section.classList.add('hidden');
+  }
+}
+
+async function teamPromoteToCoHost(endpointId) {
+  if (!_isTauri || !endpointId) return;
+  try {
+    await apiTeamPromoteToCoHost(endpointId);
+    await renderTeamMembers();
+  } catch (e) {
+    console.error('Promote failed:', e);
+    alert('昇格に失敗しました: ' + (e?.message || e));
   }
 }
 

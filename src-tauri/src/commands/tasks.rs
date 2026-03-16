@@ -113,8 +113,8 @@ pub async fn create_task(
         let is_public = if input.is_public { 1 } else { 0 };
 
         db.execute(
-            "INSERT INTO tasks (id, project_id, title, priority, due_date, assignee, description, is_public)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO tasks (id, project_id, title, priority, due_date, assignee, description, is_public, last_update_source)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'local')",
             rusqlite::params![
                 id,
                 input.project_id,
@@ -192,7 +192,7 @@ pub async fn update_task(
 
         db.execute(
             "UPDATE tasks SET title = ?1, project_id = ?2, priority = ?3,
-             due_date = ?4, assignee = ?5, description = ?6, is_public = ?7, updated_at = datetime('now')
+             due_date = ?4, assignee = ?5, description = ?6, is_public = ?7, updated_at = datetime('now'), last_update_source = 'local'
              WHERE id = ?8",
             rusqlite::params![title, project_id, priority, due_date, assignee, description, is_public_int, id.clone()],
         )
@@ -300,7 +300,7 @@ pub async fn update_task_status(
         let current = query_task(&db, &id)?;
 
         db.execute(
-            "UPDATE tasks SET status = ?1, updated_at = datetime('now') WHERE id = ?2",
+            "UPDATE tasks SET status = ?1, updated_at = datetime('now'), last_update_source = 'local' WHERE id = ?2",
             rusqlite::params![status, id],
         )
         .map_err(|e| e.to_string())?;

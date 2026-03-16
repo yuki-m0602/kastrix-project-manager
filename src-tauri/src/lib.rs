@@ -89,6 +89,10 @@ pub fn run() {
             commands::team::team_set_sync_mode,
             commands::team::team_get_unsynced_count,
             commands::team::team_push_unsynced,
+            commands::team::team_promote_to_co_host,
+            commands::team::team_list_members,
+            commands::team::team_am_i_host,
+            commands::team::team_resolve_conflict,
         ])
         .run(tauri::generate_context!())
         .expect("Error while running Tauri application");

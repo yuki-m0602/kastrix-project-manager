@@ -64,6 +64,8 @@ async function updateSidebarRoomInfo() {
     syncDotEl.title = info.status || '未参加';
     if (info.status === '同期中') {
       syncDotEl.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse';
+    } else if (info.status === '接続中') {
+      syncDotEl.className = 'w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse';
     } else {
       syncDotEl.className = 'w-1.5 h-1.5 rounded-full bg-[#484f58]';
     }
