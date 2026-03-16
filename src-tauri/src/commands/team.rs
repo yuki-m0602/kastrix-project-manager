@@ -328,32 +328,60 @@ pub async fn team_create(
 #[tauri::command]
 pub async fn team_issue_invite(
     state: State<'_, DbState>,
+    iroh: State<'_, IrohState>,
     expires_minutes: Option<u32>,
 ) -> Result<TeamInviteResult, String> {
-    let (code, topic_id) = generate_invite_code();
-    let topic_id_hex = topic_id_to_hex(&topic_id);
+    let (code, _) = generate_invite_code();
     let id = Uuid::new_v4().to_string();
     let mins = expires_minutes.unwrap_or(60);
+
+    let topic_id_hex: String = {
+        let db = state.0.lock().map_err(|e| e.to_string())?;
+        db.query_row(
+            "SELECT topic_id FROM team_subscriptions WHERE is_host = 1 LIMIT 1",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(|_| "チームが存在しません。先に「チームを作成」してください。".to_string())?
+    };
+
+    let host_ticket_str = {
+        let guard = iroh.read().await;
+        let node = guard
+            .as_ref()
+            .ok_or_else(|| "iroh が初期化されていません。少々お待ちください。".to_string())?;
+        node.node_ticket().await.map_err(|e| e.to_string())?.to_string()
+    };
 
     let db = state.0.lock().map_err(|e| e.to_string())?;
     if mins == 0 {
         db.execute(
-            "INSERT INTO invite_codes (id, code, topic_id, expires_at) VALUES (?1, ?2, ?3, NULL)",
-            rusqlite::params![id, code, topic_id_hex],
+            "INSERT INTO invite_codes (id, code, topic_id, host_ticket, expires_at) VALUES (?1, ?2, ?3, ?4, NULL)",
+            rusqlite::params![id, code, topic_id_hex, host_ticket_str],
         )
         .map_err(|e| e.to_string())?;
     } else {
         let expires_modifier = format!("+{} minutes", mins);
         db.execute(
-            "INSERT INTO invite_codes (id, code, topic_id, expires_at) VALUES (?1, ?2, ?3, datetime('now', 'localtime', ?4))",
-            rusqlite::params![id, code, topic_id_hex, expires_modifier],
+            "INSERT INTO invite_codes (id, code, topic_id, host_ticket, expires_at) VALUES (?1, ?2, ?3, ?4, datetime('now', 'localtime', ?5))",
+            rusqlite::params![id, code, topic_id_hex, host_ticket_str, expires_modifier],
         )
         .map_err(|e| e.to_string())?;
     }
 
+    let expires_at_str = if mins == 0 {
+        "9999-12-31 23:59:59".to_string()
+    } else {
+        let expires_at = chrono::Local::now() + chrono::Duration::minutes(mins as i64);
+        expires_at.format("%Y-%m-%d %H:%M:%S").to_string()
+    };
+    let invite_payload = format!("{}::{}::{}", topic_id_hex, host_ticket_str, expires_at_str);
+    let invite_string = format!("KASTRIX-{}", URL_SAFE_NO_PAD.encode(invite_payload.as_bytes()));
+
     Ok(TeamInviteResult {
         code: code.clone(),
         expires_in_minutes: mins,
+        invite_string: Some(invite_string),
     })
 }
 
@@ -820,6 +848,8 @@ pub struct TeamCreateResult {
 pub struct TeamInviteResult {
     code: String,
     expires_in_minutes: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    invite_string: Option<String>,
 }
 
 #[derive(serde::Serialize)]

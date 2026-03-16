@@ -350,7 +350,14 @@ async function teamCreate() {
       if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
     }
   } catch (e) {
-    alert('エラー: ' + (e?.toString?.() || e));
+    const errStr = e?.toString?.() || String(e);
+    if ((errStr.includes('iroh') || errStr.includes('初期化')) && !window._teamCreateRetried) {
+      window._teamCreateRetried = true;
+      await new Promise((r) => setTimeout(r, 2000));
+      window._teamCreateRetried = false;
+      return teamCreate();
+    }
+    alert('エラー: ' + errStr);
   }
 }
 
@@ -364,8 +371,12 @@ async function teamIssueInvite() {
     const expiresMinutes = expiresEl ? parseInt(expiresEl.value, 10) : 60;
     const result = await apiTeamIssueInvite(expiresMinutes);
     if (result && result.code) {
-      await navigator.clipboard.writeText(result.code);
-      alert(`招待コードを発行しました。\n${result.code}\n（クリップボードにコピーしました）`);
+      const toCopy = result.invite_string || result.code;
+      await navigator.clipboard.writeText(toCopy);
+      const msg = result.invite_string
+        ? `招待リンクを発行しました。\n参加する人にこのリンクを共有してください（クリップボードにコピー済み）`
+        : `招待コードを発行しました。\n${result.code}\n（クリップボードにコピーしました）`;
+      alert(msg);
       await renderTeamInviteCodes();
       renderSettings();
     }
