@@ -14,7 +14,7 @@ async function updateSidebarUnsyncedBadge() {
       apiTeamGetSyncMode(),
       apiTeamGetUnsyncedCount(),
     ]);
-    const isManual = syncMode === 'manual';
+    const isManual = syncMode === SYNC_MODE_MANUAL;
     if (isManual && count > 0) {
       badge.textContent = String(count);
       badge.classList.remove('hidden');
@@ -42,7 +42,7 @@ async function teamPushUnsynced() {
     await updateSidebarUnsyncedBadge();
   } catch (e) {
     console.error('Push failed:', e);
-    alert('送信に失敗しました: ' + (e?.message || e));
+    showAlert('送信に失敗しました: ' + (e?.message || e), 'error');
   }
 }
 

@@ -1,5 +1,9 @@
 {
   "scripts": {
+    "lint": "eslint ui/js/*.js ui/data/*.js",
+    "lint:fix": "eslint ui/js/*.js ui/data/*.js --fix",
+    "rustfmt": "cargo fmt --manifest-path src-tauri/Cargo.toml",
+    "clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml",
     "tauri": "tauri",
     "dev": "npm run css:watch & npx live-server ui --port=1420 --no-browser",
     "css:watch": "npx @tailwindcss/cli -i ./ui/src/styles.css -o ./ui/vendor/tailwind.css --minify --content ./ui/index.html --content ./ui/js/*.js --watch",
@@ -8,6 +12,7 @@
     "start": "npm run dev & npx tauri dev"
   },
   "devDependencies": {
+    "eslint": "^8.57.0",
     "@tailwindcss/cli": "^4.2.1",
     "autoprefixer": "^10.4.27",
     "http-server": "^14.1.1",

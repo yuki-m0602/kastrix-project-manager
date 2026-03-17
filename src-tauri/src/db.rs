@@ -1,16 +1,22 @@
-use rusqlite::{Connection, Result as SqlResult};
+use rusqlite::Connection;
 use std::sync::Mutex;
 
 pub struct DbState(pub Mutex<Connection>);
 
-pub fn init_db(app_data_dir: &std::path::Path) -> SqlResult<Connection> {
-    std::fs::create_dir_all(app_data_dir).expect("Failed to create app data directory");
-    let db_path = app_data_dir.join("kastrix.db");
-    let conn = Connection::open(db_path)?;
+type DbInitError = Box<dyn std::error::Error + Send + Sync>;
 
+fn map_io_err(e: std::io::Error) -> DbInitError {
+    Box::new(e)
+}
+
+fn map_sql_err(e: rusqlite::Error) -> DbInitError {
+    Box::new(e)
+}
+
+/// スキーマを実行（init_db とテストで共用）
+fn run_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
     conn.execute_batch("PRAGMA journal_mode=WAL;")?;
     conn.execute_batch("PRAGMA foreign_keys=ON;")?;
-
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS projects (
             id              TEXT PRIMARY KEY,
@@ -104,14 +110,68 @@ pub fn init_db(app_data_dir: &std::path::Path) -> SqlResult<Connection> {
         ",
     )?;
 
-    // マイグレーション: 既存の invite_codes に host_ticket を追加
-    let _ = conn.execute("ALTER TABLE invite_codes ADD COLUMN host_ticket TEXT", []);
-    // マイグレーション: tasks に is_public を追加
-    let _ = conn.execute("ALTER TABLE tasks ADD COLUMN is_public INTEGER DEFAULT 1", []);
-    // マイグレーション: 衝突検出用に last_update_source を追加
-    let _ = conn.execute("ALTER TABLE tasks ADD COLUMN last_update_source TEXT DEFAULT 'local'", []);
-    // マイグレーション: メンバーの表示名
-    let _ = conn.execute("ALTER TABLE members ADD COLUMN display_name TEXT", []);
+    run_migrations(conn)?;
 
+    Ok(())
+}
+
+/// カラム存在チェック（SQLite pragma_table_info）
+fn column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool, rusqlite::Error> {
+    let count: i32 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info(?) WHERE name=?",
+        [table, column],
+        |r| r.get(0),
+    )?;
+    Ok(count > 0)
+}
+
+/// マイグレーション定義: (テーブル, カラム, SQL)
+const MIGRATIONS: &[(&str, &str, &str)] = &[
+    ("invite_codes", "host_ticket", "ALTER TABLE invite_codes ADD COLUMN host_ticket TEXT"),
+    ("tasks", "is_public", "ALTER TABLE tasks ADD COLUMN is_public INTEGER DEFAULT 1"),
+    (
+        "tasks",
+        "last_update_source",
+        "ALTER TABLE tasks ADD COLUMN last_update_source TEXT DEFAULT 'local'",
+    ),
+    ("members", "display_name", "ALTER TABLE members ADD COLUMN display_name TEXT"),
+];
+
+fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
+    for (table, column, sql) in MIGRATIONS {
+        if !column_exists(conn, table, column)? {
+            conn.execute(sql, [])?;
+        }
+    }
+    Ok(())
+}
+
+pub fn init_db(app_data_dir: &std::path::Path) -> Result<Connection, DbInitError> {
+    std::fs::create_dir_all(app_data_dir).map_err(map_io_err)?;
+    let db_path = app_data_dir.join("kastrix.db");
+    let conn = Connection::open(db_path).map_err(map_sql_err)?;
+    run_schema(&conn).map_err(map_sql_err)?;
     Ok(conn)
+}
+
+#[cfg(test)]
+pub fn create_test_db() -> Result<Connection, rusqlite::Error> {
+    let conn = Connection::open_in_memory()?;
+    run_schema(&conn)?;
+    Ok(conn)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_init_db() {
+        let dir = std::env::temp_dir().join("kastrix_test_db");
+        let _ = std::fs::remove_dir_all(&dir);
+        let conn = init_db(&dir).unwrap();
+        conn.execute("SELECT 1 FROM projects LIMIT 1", []).unwrap();
+        conn.execute("SELECT 1 FROM tasks LIMIT 1", []).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

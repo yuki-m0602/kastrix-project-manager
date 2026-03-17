@@ -3,20 +3,36 @@
 // ブラウザ開発時はダミーデータにフォールバック
 const _isTauri = typeof window !== 'undefined' && window.__TAURI__ !== undefined;
 
+/** XSS対策: ユーザー入力を innerHTML に挿入する前にエスケープ（属性値内の ' も対応） */
+function escapeHtml(s) {
+  if (s == null) return '';
+  const div = document.createElement('div');
+  div.textContent = String(s);
+  return div.innerHTML.replace(/'/g, '&#39;');
+}
+
 async function _invoke(cmd, args) {
   if (!_isTauri) return null;
   return await window.__TAURI__.core.invoke(cmd, args || {});
 }
 
+/** invoke を try-catch でラップし、失敗時に defaultVal を返す */
+async function _invokeWithDefault(cmd, args, defaultVal, options = {}) {
+  const { asArray = false, logLabel } = options;
+  try {
+    const result = await _invoke(cmd, args || {});
+    if (asArray) return Array.isArray(result) ? result : defaultVal;
+    return result ?? defaultVal;
+  } catch (e) {
+    if (logLabel) console.error(logLabel + ' failed:', e);
+    return defaultVal;
+  }
+}
+
 // ── Projects ─────────────────────────────────────────────
 async function apiGetProjects() {
-  try {
-    const result = await _invoke('get_projects');
-    return Array.isArray(result) ? result : [...(localProjects || [])];
-  } catch (e) {
-    console.error('apiGetProjects failed:', e);
-    return [...(localProjects || [])];
-  }
+  const fallback = [...(localProjects || [])];
+  return await _invokeWithDefault('get_projects', {}, fallback, { asArray: true, logLabel: 'apiGetProjects' });
 }
 
 async function apiScanDirectory(path) {
@@ -24,7 +40,7 @@ async function apiScanDirectory(path) {
 }
 
 async function apiScanAllWatchedDirs() {
-  return await _invoke('scan_all_watched_dirs') || [];
+  return await _invokeWithDefault('scan_all_watched_dirs', {}, [], { asArray: true });
 }
 
 async function apiRemoveProject(id) {
@@ -32,8 +48,7 @@ async function apiRemoveProject(id) {
 }
 
 async function apiGetReadme(path) {
-  const result = await _invoke('get_readme', { path });
-  return result || 'No README available';
+  return await _invokeWithDefault('get_readme', { path }, 'No README available');
 }
 
 async function apiOpenInIde(ide, path) {
@@ -42,22 +57,18 @@ async function apiOpenInIde(ide, path) {
       await _invoke('open_in_ide', { ide, path: path || null });
     } catch (e) {
       console.error('Failed to open IDE:', e);
-      alert('Failed to open IDE: ' + e);
+      showAlert('IDE を開けませんでした: ' + e, 'error');
     }
   } else {
-    alert('Open in ' + ide + '\n(Tauri環境で動作)');
+    showAlert(ide + ' で開く\n(Tauri 環境で動作)', 'info');
   }
 }
 
 // ── Tasks ────────────────────────────────────────────────
 async function apiGetTasks(projectId) {
-  try {
-    const result = await _invoke('get_tasks', projectId ? { projectId } : {});
-    return Array.isArray(result) ? result : [...(tasks || [])];
-  } catch (e) {
-    console.error('apiGetTasks failed:', e);
-    return [...(tasks || [])];
-  }
+  const fallback = [...(tasks || [])];
+  const args = projectId ? { projectId } : {};
+  return await _invokeWithDefault('get_tasks', args, fallback, { asArray: true, logLabel: 'apiGetTasks' });
 }
 
 async function apiCreateTask(input) {
@@ -109,8 +120,9 @@ async function apiUpdateTaskStatus(id, status) {
 
 // ── Logs ─────────────────────────────────────────────────
 async function apiGetActivityLogs(projectId) {
-  const result = await _invoke('get_activity_logs', projectId ? { projectId } : {});
-  return result || [...activityLogs];
+  const fallback = [...(activityLogs || [])];
+  const args = projectId ? { projectId } : {};
+  return await _invokeWithDefault('get_activity_logs', args, fallback, { asArray: true });
 }
 
 async function apiExportLogsCsv(projectId) {
@@ -120,7 +132,7 @@ async function apiExportLogsCsv(projectId) {
 
 // ── Settings ─────────────────────────────────────────────
 async function apiGetWatchedDirs() {
-  return (await _invoke('get_watched_dirs')) || [];
+  return await _invokeWithDefault('get_watched_dirs', {}, [], { asArray: true });
 }
 
 async function apiAddWatchedDir(path) {
@@ -145,8 +157,7 @@ async function apiSaveApiKey(provider, key) {
 }
 
 async function apiGetApiKeyStatus(provider) {
-  const result = await _invoke('get_api_key_status', { provider });
-  return result || false;
+  return await _invokeWithDefault('get_api_key_status', { provider }, false);
 }
 
 async function apiDeleteApiKey(provider) {
@@ -161,20 +172,17 @@ async function apiAnalyzeLogs(prompt, provider) {
 // ── Team ─────────────────────────────────────────────────
 async function apiTeamIsReady() {
   if (!_isTauri) return false;
-  try {
-    const r = await _invoke('team_is_ready', {});
-    return r === true;
-  } catch {
-    return false;
-  }
+  const r = await _invokeWithDefault('team_is_ready', {}, false);
+  return r === true;
 }
 
 async function apiTeamDebugStatus() {
   if (!_isTauri) return null;
+  const fallback = { step1_iroh_node: 'エラー', step2_node_ticket: '-', step2_error: null, endpoint_id: null };
   try {
     return await _invoke('team_debug_status', {});
   } catch (e) {
-    return { step1_iroh_node: 'エラー', step2_node_ticket: '-', step2_error: String(e), endpoint_id: null };
+    return { ...fallback, step2_error: String(e) };
   }
 }
 
@@ -191,8 +199,7 @@ async function apiTeamJoin(code) {
 }
 
 async function apiTeamListInviteCodes() {
-  const result = await _invoke('team_list_invite_codes', {});
-  return Array.isArray(result) ? result : [];
+  return await _invokeWithDefault('team_list_invite_codes', {}, [], { asArray: true });
 }
 
 async function apiTeamRevokeInviteCode(code) {
@@ -200,8 +207,7 @@ async function apiTeamRevokeInviteCode(code) {
 }
 
 async function apiTeamListPendingJoins() {
-  const result = await _invoke('team_list_pending_joins', {});
-  return Array.isArray(result) ? result : [];
+  return await _invokeWithDefault('team_list_pending_joins', {}, [], { asArray: true });
 }
 
 async function apiTeamApproveJoin(endpointId, topicId) {
@@ -225,25 +231,16 @@ async function apiTeamUnblock(endpointId) {
 }
 
 async function apiTeamListBlocked() {
-  const result = await _invoke('team_list_blocked', {});
-  return Array.isArray(result) ? result : [];
+  return await _invokeWithDefault('team_list_blocked', {}, [], { asArray: true });
 }
 
 async function apiTeamGetCurrentRoom() {
-  try {
-    return await _invoke('team_get_current_room', {});
-  } catch (e) {
-    console.error('apiTeamGetCurrentRoom failed:', e);
-    return { roomName: '未参加', status: '未参加' };
-  }
+  const fallback = { roomName: '未参加', status: '未参加' };
+  return await _invokeWithDefault('team_get_current_room', {}, fallback, { logLabel: 'apiTeamGetCurrentRoom' });
 }
 
 async function apiTeamGetSyncMode() {
-  try {
-    return (await _invoke('team_get_sync_mode', {})) || 'auto';
-  } catch (e) {
-    return 'auto';
-  }
+  return await _invokeWithDefault('team_get_sync_mode', {}, SYNC_MODE_AUTO);
 }
 
 async function apiTeamSetSyncMode(mode) {
@@ -251,11 +248,7 @@ async function apiTeamSetSyncMode(mode) {
 }
 
 async function apiTeamGetUnsyncedCount() {
-  try {
-    return (await _invoke('team_get_unsynced_count', {})) || 0;
-  } catch (e) {
-    return 0;
-  }
+  return await _invokeWithDefault('team_get_unsynced_count', {}, 0);
 }
 
 async function apiTeamPushUnsynced() {
@@ -263,19 +256,11 @@ async function apiTeamPushUnsynced() {
 }
 
 async function apiTeamGetMyRole() {
-  try {
-    return (await _invoke('team_get_my_role', {})) || 'member';
-  } catch {
-    return 'member';
-  }
+  return await _invokeWithDefault('team_get_my_role', {}, 'member');
 }
 
 async function apiTeamAmIHost() {
-  try {
-    return (await _invoke('team_am_i_host', {})) || false;
-  } catch (e) {
-    return false;
-  }
+  return await _invokeWithDefault('team_am_i_host', {}, false);
 }
 
 async function apiTeamSetMyDisplayName(displayName) {
@@ -283,19 +268,11 @@ async function apiTeamSetMyDisplayName(displayName) {
 }
 
 async function apiTeamGetMyDisplayName() {
-  try {
-    return (await _invoke('team_get_my_display_name', {})) || null;
-  } catch (e) {
-    return null;
-  }
+  return await _invokeWithDefault('team_get_my_display_name', {}, null);
 }
 
 async function apiTeamAmIPending() {
-  try {
-    return (await _invoke('team_am_i_pending', {})) || false;
-  } catch (e) {
-    return false;
-  }
+  return await _invokeWithDefault('team_am_i_pending', {}, false);
 }
 
 async function apiTeamCancelJoin() {
@@ -303,12 +280,7 @@ async function apiTeamCancelJoin() {
 }
 
 async function apiTeamListMembers() {
-  try {
-    const result = await _invoke('team_list_members', {});
-    return Array.isArray(result) ? result : [];
-  } catch (e) {
-    return [];
-  }
+  return await _invokeWithDefault('team_list_members', {}, [], { asArray: true });
 }
 
 async function apiTeamPromoteToCoHost(endpointId) {

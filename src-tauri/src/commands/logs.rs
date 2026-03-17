@@ -52,7 +52,9 @@ pub fn export_logs_csv(
 ) -> Result<String, String> {
     let logs = get_activity_logs(project_id, state)?;
 
-    let mut csv = String::from("id,task_id,project_id,action,task_title,project_name,modified_by,timestamp\n");
+    let mut csv = String::from(
+        "id,task_id,project_id,action,task_title,project_name,modified_by,timestamp\n",
+    );
     for log in &logs {
         csv.push_str(&format!(
             "{},{},{},{},{},{},{},{}\n",

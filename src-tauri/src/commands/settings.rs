@@ -52,11 +52,9 @@ pub fn remove_watched_dir(id: String, db: State<'_, DbState>) -> Result<(), Stri
 #[tauri::command]
 pub fn get_setting(key: String, db: State<'_, DbState>) -> Result<Option<String>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
-    let result = conn.query_row(
-        "SELECT value FROM settings WHERE key = ?1",
-        [&key],
-        |row| row.get(0),
-    );
+    let result = conn.query_row("SELECT value FROM settings WHERE key = ?1", [&key], |row| {
+        row.get(0)
+    });
     match result {
         Ok(v) => Ok(Some(v)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),

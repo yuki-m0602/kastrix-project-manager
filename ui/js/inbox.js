@@ -123,7 +123,7 @@ async function inboxApproveJoin(endpointId, topicId) {
     await apiTeamApproveJoin(endpointId, topicId);
     if (typeof renderInbox === 'function') await renderInbox();
   } catch (e) {
-    alert('承認に失敗しました: ' + (e?.message || e));
+    showAlert('承認に失敗しました: ' + (e?.message || e), 'error');
   }
 }
 
@@ -133,7 +133,7 @@ async function inboxRejectJoin(endpointId, topicId) {
     await apiTeamRejectJoin(endpointId, topicId);
     if (typeof renderInbox === 'function') await renderInbox();
   } catch (e) {
-    alert('拒否に失敗しました: ' + (e?.message || e));
+    showAlert('拒否に失敗しました: ' + (e?.message || e), 'error');
   }
 }
 

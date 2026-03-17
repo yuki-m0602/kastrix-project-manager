@@ -41,8 +41,7 @@ impl IrohNodeState {
             Ok(SecretKey::from_bytes(&bytes))
         } else {
             let mut bytes = [0u8; 32];
-            getrandom::getrandom(&mut bytes)
-                .map_err(|e| format!("random bytes failed: {}", e))?;
+            getrandom::getrandom(&mut bytes).map_err(|e| format!("random bytes failed: {}", e))?;
             let key = SecretKey::from_bytes(&bytes);
             std::fs::write(&path, &bytes)
                 .map_err(|e| format!("iroh secret key save failed: {}", e))?;
@@ -89,7 +88,10 @@ impl IrohNodeState {
             watcher.initialized(),
         )
         .await
-        .map_err(|_| "ノードの初期化がタイムアウトしました。ネットワーク接続を確認して再度お試しください。".to_string())?;
+        .map_err(|_| {
+            "ノードの初期化がタイムアウトしました。ネットワーク接続を確認して再度お試しください。"
+                .to_string()
+        })?;
         Ok(NodeTicket::new(node_addr))
     }
 
@@ -139,7 +141,11 @@ impl IrohNodeState {
 
     /// トピックの購読を解除（参加申請キャンセル時など）
     pub async fn unsubscribe(&self, topic_id_hex: &str) -> bool {
-        self.subscriptions.write().await.remove(topic_id_hex).is_some()
+        self.subscriptions
+            .write()
+            .await
+            .remove(topic_id_hex)
+            .is_some()
     }
 }
 

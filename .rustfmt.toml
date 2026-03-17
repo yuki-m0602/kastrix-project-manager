@@ -1,0 +1,3 @@
+# rustfmt 設定
+edition = "2021"
+max_width = 100

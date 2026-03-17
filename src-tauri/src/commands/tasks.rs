@@ -16,7 +16,14 @@ fn record_activity(
     let _ = db.execute(
         "INSERT INTO activity_logs (id, task_id, project_id, action, task_title, project_name)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        rusqlite::params![log_id, task_id, project_id, action, task_title, project_name],
+        rusqlite::params![
+            log_id,
+            task_id,
+            project_id,
+            action,
+            task_title,
+            project_name
+        ],
     );
 }
 
@@ -27,6 +34,31 @@ fn get_project_name(db: &rusqlite::Connection, project_id: Option<&str>) -> Opti
         })
         .ok()
     })
+}
+
+/// タスク更新を記録し、sync_mode に応じてブロードキャストまたは unsynced イベントを発火
+async fn maybe_broadcast_task_update(
+    state: &State<'_, DbState>,
+    iroh: &IrohState,
+    app: &AppHandle,
+    mut payload: TaskUpdatePayload,
+) -> Result<(), String> {
+    let (timestamp, ts_source) = crate::ntp_util::get_timestamp_with_source().await;
+    let should_broadcast = {
+        let db = state.0.lock().map_err(|e| e.to_string())?;
+        let sync_mode: String = db
+            .query_row("SELECT value FROM settings WHERE key = 'sync_mode'", [], |r| r.get(0))
+            .unwrap_or_else(|_| "auto".to_string());
+        let is_manual = sync_mode == "manual";
+        record_operation(&db, &mut payload, &timestamp, &ts_source, !is_manual)?;
+        !is_manual
+    };
+    if should_broadcast {
+        let _ = broadcast_task_update(iroh, &payload).await;
+    } else {
+        let _ = app.emit("team-unsynced-updated", ());
+    }
+    Ok(())
 }
 
 fn query_task(db: &rusqlite::Connection, id: &str) -> Result<Task, String> {
@@ -53,18 +85,16 @@ fn query_task(db: &rusqlite::Connection, id: &str) -> Result<Task, String> {
     .map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub fn get_tasks(
-    project_id: Option<String>,
-    state: State<DbState>,
+/// DB からタスク一覧を取得（テスト用に Connection を直接受け取る）
+pub fn get_tasks_from_db(
+    db: &rusqlite::Connection,
+    project_id: Option<&str>,
 ) -> Result<Vec<Task>, String> {
-    let db = state.0.lock().map_err(|e| e.to_string())?;
-
-    let (sql, params): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = match &project_id {
+    let (sql, params): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = match project_id {
         Some(pid) => (
             "SELECT id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at
              FROM tasks WHERE project_id = ?1 ORDER BY created_at DESC",
-            vec![Box::new(pid.clone())],
+            vec![Box::new(pid.to_string())],
         ),
         None => (
             "SELECT id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at
@@ -97,6 +127,12 @@ pub fn get_tasks(
         .map_err(|e| e.to_string())?;
 
     Ok(tasks)
+}
+
+#[tauri::command]
+pub fn get_tasks(project_id: Option<String>, state: State<DbState>) -> Result<Vec<Task>, String> {
+    let db = state.0.lock().map_err(|e| e.to_string())?;
+    get_tasks_from_db(&db, project_id.as_deref())
 }
 
 #[tauri::command]
@@ -141,8 +177,7 @@ pub async fn create_task(
         query_task(&db, &id)?
     };
     if task.is_public {
-        let (timestamp, ts_source) = crate::ntp_util::get_timestamp_with_source().await;
-        let mut payload = TaskUpdatePayload {
+        let payload = TaskUpdatePayload {
             version: None,
             action: "create".to_string(),
             task: Some(task.clone()),
@@ -152,20 +187,7 @@ pub async fn create_task(
             seq: None,
             prev_id: None,
         };
-        let should_broadcast = {
-            let db = state.0.lock().map_err(|e| e.to_string())?;
-            let sync_mode: String = db
-                .query_row("SELECT value FROM settings WHERE key = 'sync_mode'", [], |r| r.get(0))
-                .unwrap_or_else(|_| "auto".to_string());
-            let is_manual = sync_mode == "manual";
-            record_operation(&db, &mut payload, &timestamp, &ts_source, !is_manual)?;
-            !is_manual
-        };
-        if should_broadcast {
-            let _ = broadcast_task_update(&iroh, &payload).await;
-        } else {
-            let _ = app.emit("team-unsynced-updated", ());
-        }
+        maybe_broadcast_task_update(&state, &iroh, &app, payload).await?;
     }
     Ok(task)
 }
@@ -212,8 +234,7 @@ pub async fn update_task(
         query_task(&db, &id)?
     };
     if task.is_public {
-        let (timestamp, ts_source) = crate::ntp_util::get_timestamp_with_source().await;
-        let mut payload = TaskUpdatePayload {
+        let payload = TaskUpdatePayload {
             version: None,
             action: "update".to_string(),
             task: Some(task.clone()),
@@ -223,20 +244,7 @@ pub async fn update_task(
             seq: None,
             prev_id: None,
         };
-        let should_broadcast = {
-            let db = state.0.lock().map_err(|e| e.to_string())?;
-            let sync_mode: String = db
-                .query_row("SELECT value FROM settings WHERE key = 'sync_mode'", [], |r| r.get(0))
-                .unwrap_or_else(|_| "auto".to_string());
-            let is_manual = sync_mode == "manual";
-            record_operation(&db, &mut payload, &timestamp, &ts_source, !is_manual)?;
-            !is_manual
-        };
-        if should_broadcast {
-            let _ = broadcast_task_update(&iroh, &payload).await;
-        } else {
-            let _ = app.emit("team-unsynced-updated", ());
-        }
+        maybe_broadcast_task_update(&state, &iroh, &app, payload).await?;
     }
     Ok(task)
 }
@@ -256,8 +264,7 @@ pub async fn delete_task(
         task.map(|t| t.is_public).unwrap_or(false)
     };
     if was_public {
-        let (timestamp, ts_source) = crate::ntp_util::get_timestamp_with_source().await;
-        let mut payload = TaskUpdatePayload {
+        let payload = TaskUpdatePayload {
             version: None,
             action: "delete".to_string(),
             task: None,
@@ -267,20 +274,7 @@ pub async fn delete_task(
             seq: None,
             prev_id: None,
         };
-        let should_broadcast = {
-            let db = state.0.lock().map_err(|e| e.to_string())?;
-            let sync_mode: String = db
-                .query_row("SELECT value FROM settings WHERE key = 'sync_mode'", [], |r| r.get(0))
-                .unwrap_or_else(|_| "auto".to_string());
-            let is_manual = sync_mode == "manual";
-            record_operation(&db, &mut payload, &timestamp, &ts_source, !is_manual)?;
-            !is_manual
-        };
-        if should_broadcast {
-            let _ = broadcast_task_update(&iroh, &payload).await;
-        } else {
-            let _ = app.emit("team-unsynced-updated", ());
-        }
+        maybe_broadcast_task_update(&state, &iroh, &app, payload).await?;
     }
     Ok(())
 }
@@ -327,8 +321,7 @@ pub async fn update_task_status(
         query_task(&db, &id)?
     };
     if task.is_public {
-        let (timestamp, ts_source) = crate::ntp_util::get_timestamp_with_source().await;
-        let mut payload = TaskUpdatePayload {
+        let payload = TaskUpdatePayload {
             version: None,
             action: "update".to_string(),
             task: Some(task.clone()),
@@ -338,20 +331,48 @@ pub async fn update_task_status(
             seq: None,
             prev_id: None,
         };
-        let should_broadcast = {
-            let db = state.0.lock().map_err(|e| e.to_string())?;
-            let sync_mode: String = db
-                .query_row("SELECT value FROM settings WHERE key = 'sync_mode'", [], |r| r.get(0))
-                .unwrap_or_else(|_| "auto".to_string());
-            let is_manual = sync_mode == "manual";
-            record_operation(&db, &mut payload, &timestamp, &ts_source, !is_manual)?;
-            !is_manual
-        };
-        if should_broadcast {
-            let _ = broadcast_task_update(&iroh, &payload).await;
-        } else {
-            let _ = app.emit("team-unsynced-updated", ());
-        }
+        maybe_broadcast_task_update(&state, &iroh, &app, payload).await?;
     }
     Ok(task)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db;
+
+    #[test]
+    fn test_get_tasks_empty() {
+        let conn = db::create_test_db().unwrap();
+        let tasks = get_tasks_from_db(&conn, None).unwrap();
+        assert!(tasks.is_empty());
+    }
+
+    #[test]
+    fn test_get_tasks_with_data() {
+        let conn = db::create_test_db().unwrap();
+        conn.execute(
+            "INSERT INTO projects (id, name, path) VALUES (?1, ?2, ?3)",
+            rusqlite::params!["proj-1", "Test Project", "/path"],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO tasks (id, project_id, title, status, priority) VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params!["t1", "proj-1", "Task One", "todo", "high"],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO tasks (id, project_id, title, status, priority) VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params!["t2", "proj-1", "Task Two", "done", "medium"],
+        )
+        .unwrap();
+
+        let tasks = get_tasks_from_db(&conn, None).unwrap();
+        assert_eq!(tasks.len(), 2);
+        assert_eq!(tasks[0].title, "Task One");
+        assert_eq!(tasks[1].title, "Task Two");
+
+        let filtered = get_tasks_from_db(&conn, Some("proj-1")).unwrap();
+        assert_eq!(filtered.len(), 2);
+    }
 }

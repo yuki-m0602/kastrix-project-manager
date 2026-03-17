@@ -56,7 +56,15 @@ pub fn record_operation(
     db.execute(
         "INSERT INTO operations (id, seq, prev_id, type, payload, timestamp, ts_source, synced)
          VALUES (?1, ?2, ?3, 'task_update', ?4, ?5, ?6, ?7)",
-        rusqlite::params![id, next_seq, prev_id, payload_json, timestamp, ts_source, synced_int],
+        rusqlite::params![
+            id,
+            next_seq,
+            prev_id,
+            payload_json,
+            timestamp,
+            ts_source,
+            synced_int
+        ],
     )
     .map_err(|e| e.to_string())?;
 
@@ -113,7 +121,9 @@ fn query_local_task(db: &rusqlite::Connection, id: &str) -> Result<Task, String>
 /// project_id が存在しない場合、仮プロジェクトを挿入（同期タスク用）
 fn ensure_project_exists(db: &rusqlite::Connection, project_id: &str) -> Result<(), String> {
     let exists: bool = db
-        .query_row("SELECT 1 FROM projects WHERE id = ?1", [project_id], |_| Ok(()))
+        .query_row("SELECT 1 FROM projects WHERE id = ?1", [project_id], |_| {
+            Ok(())
+        })
         .is_ok();
     if exists {
         return Ok(());
@@ -157,8 +167,7 @@ pub fn apply_task_update(
                     |r| r.get(0),
                 )
                 .ok();
-            let is_local_vs_local =
-                incoming_ts_local && local_source.as_deref() == Some("local");
+            let is_local_vs_local = incoming_ts_local && local_source.as_deref() == Some("local");
             if is_local_vs_local {
                 if let Some(app) = app {
                     let local_task = query_local_task(&db, &task.id);
@@ -214,7 +223,8 @@ pub fn apply_task_update(
                 .task_id
                 .as_ref()
                 .ok_or_else(|| "task_update: task_id is required for delete".to_string())?;
-            db.execute("DELETE FROM tasks WHERE id = ?1", [id]).map_err(|e| e.to_string())?;
+            db.execute("DELETE FROM tasks WHERE id = ?1", [id])
+                .map_err(|e| e.to_string())?;
         }
         _ => return Err(format!("unknown task_update action: {}", payload.action)),
     }

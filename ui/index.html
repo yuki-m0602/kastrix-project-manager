@@ -180,11 +180,26 @@
         transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
       }
 
-      /* Ensure the small view controls don't exceed header height */
-      #tasks-view-controls {
+      /* Toast container: fixed top-right, z above modals */
+      #toast-container {
+        position: fixed;
+        top: 16px;
+        right: 16px;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-width: min(360px, calc(100vw - 32px));
+        pointer-events: none;
+      }
+
+      /* Grid/List toggle: same style for tasks and projects */
+      #tasks-view-controls,
+      #projects-view-controls {
         display: flex;
         align-items: center;
-        height: 32px; /* keep compact inside header */
+        height: 28px;
+        padding: 0;
       }
       #tasks-view-controls .view-btn,
       #projects-view-controls .view-btn {
@@ -194,18 +209,12 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
+        border: none;
       }
       #tasks-view-controls [data-lucide],
       #projects-view-controls [data-lucide] {
         width: 14px !important;
         height: 14px !important;
-      }
-      /* Projects grid/list toggle: match h-7 of same-row items */
-      #projects-view-controls {
-        display: flex;
-        align-items: center;
-        height: 28px;
-        padding: 0;
       }
       
       /* Improved spacing */
@@ -255,13 +264,13 @@
   <aside id="sidebar" class="glass border border-[#30363d] flex flex-col transition-all duration-300 z-40 rounded-2xl fixed top-8 left-2 bottom-2 overflow-hidden -translate-x-[calc(100%+8px)] lg:translate-x-0" style="width:224px">
     <div class="shrink-0 border-b border-[#30363d] px-3 py-2">
       <div class="flex items-center justify-between">
-        <span id="logo-text" class="font-black text-[8px] tracking-[0.25em] text-[#484f58] ml-2 uppercase">Kastrix</span>
+        <span id="logo-text" class="font-black text-[11px] tracking-[0.25em] text-[#484f58] ml-2 uppercase">Kastrix</span>
         <button onclick="toggleSidebar()" class="hidden lg:block p-2 hover:bg-[#161b22] rounded-xl text-[#484f58] hover:text-white transition-all">
           <i data-lucide="chevron-left" size="14"></i>
         </button>
       </div>
       <div id="sidebar-room-info" class="mt-1.5 ml-2 flex items-center gap-2 min-w-0">
-        <span id="sidebar-room-name" class="text-[9px] text-[#8b949e] truncate nav-label">未参加</span>
+        <span id="sidebar-room-name" class="text-[11px] text-[#8b949e] truncate nav-label">未参加</span>
         <span id="sidebar-sync-indicator" class="shrink-0 inline-flex items-center gap-1 text-[8px] text-[#484f58] nav-label">
           <span id="sidebar-sync-dot" class="w-1.5 h-1.5 rounded-full bg-[#484f58]" title="未参加"></span>
           <span id="sidebar-sync-label">未参加</span>
@@ -343,13 +352,13 @@
         <!-- Header -->
         <header class="h-14 shrink-0 border-b border-[#30363d] flex items-center justify-between px-3 sm:px-6">
           <div class="flex items-center gap-2 min-w-0">
-            <!-- Tasks View Toggle (List/Board) -->
-            <div id="tasks-view-controls" class="hidden flex bg-[#010409] border border-[#30363d] rounded-xl p-0.5">
-              <button onclick="setTaskView('list')" id="btn-task-list" class="view-btn p-1.5 rounded-lg bg-[#30363d] text-white transition-all" title="List">
-                <i data-lucide="list" size="14" class="w-3.5 h-3.5"></i>
+            <!-- Tasks View Toggle (Board/List) - same as projects -->
+            <div id="tasks-view-controls" class="hidden flex bg-[#010409] border border-[#30363d] rounded-xl p-0.5 overflow-hidden">
+              <button onclick="setTaskView('kanban')" id="btn-task-kanban" class="view-btn p-1.5 rounded-l-xl text-[#8b949e] hover:text-white transition-all" title="Board">
+                <i data-lucide="layout-grid" size="14"></i>
               </button>
-              <button onclick="setTaskView('kanban')" id="btn-task-kanban" class="view-btn p-1.5 rounded-lg text-[#8b949e] hover:text-white transition-all" title="Board">
-                <i data-lucide="columns" size="14" class="w-3.5 h-3.5"></i>
+              <button onclick="setTaskView('list')" id="btn-task-list" class="view-btn p-1.5 rounded-r-xl bg-[#30363d] text-white transition-all" title="List">
+                <i data-lucide="list" size="14"></i>
               </button>
             </div>
 
@@ -388,7 +397,7 @@
             </div>
 
             <!-- Projects View Toggle (Grid/List) -->
-            <div id="projects-view-controls" class="hidden bg-[#010409] border border-[#30363d] rounded-xl p-0.5 overflow-hidden">
+            <div id="projects-view-controls" class="hidden flex bg-[#010409] border border-[#30363d] rounded-xl p-0.5 overflow-hidden">
               <button onclick="setProjectViewMode('grid')" id="btn-project-grid" class="view-btn p-1.5 rounded-l-xl bg-[#30363d] text-white transition-all" title="Grid">
                 <i data-lucide="layout-grid" size="14"></i>
               </button>
@@ -452,12 +461,12 @@
         </header>
 
 <!-- List View -->
-        <div id="list-view" class="view-mode overflow-hidden custom-scrollbar hidden" style="display: none;">
-          <table class="w-full text-left border-separate border-spacing-y-2">
+        <div id="list-view" class="view-mode overflow-hidden custom-scrollbar hidden p-3" style="display: none;">
+          <table class="w-full text-left border-collapse">
             <thead>
-              <tr class="text-[#484f58] text-[9px] uppercase font-black tracking-widest">
-                <th class="px-4">Name</th>
-                <th class="px-4 hidden sm:table-cell">Assignee</th>
+              <tr class="text-[#484f58] text-[8px] sm:text-[9px] uppercase font-black tracking-widest">
+                <th class="px-2 sm:px-4">Name</th>
+                <th class="px-2 sm:px-4 hidden sm:table-cell">Assignee</th>
                 <th class="px-4 text-right">Status</th>
               </tr>
             </thead>
@@ -466,7 +475,7 @@
         </div>
 
         <!-- Kanban View -->
-        <div id="kanban-view" class="view-mode flex-1 overflow-auto custom-scrollbar hidden" style="display: none;">
+        <div id="kanban-view" class="view-mode flex-1 overflow-auto custom-scrollbar hidden p-3" style="display: none;">
           <div class="flex flex-col lg:flex-row gap-4 lg:gap-6 h-full">
             <!-- Todo Column -->
             <div class="flex-1 min-w-0 lg:min-w-[280px] flex flex-col">
@@ -508,7 +517,7 @@
           </div>
 <!-- List View -->
           <div id="projects-list-view" class="hidden">
-            <table class="w-full text-left border-separate border-spacing-y-1 sm:border-spacing-y-2">
+            <table class="w-full text-left border-collapse">
               <thead>
                 <tr class="text-[#484f58] text-[8px] sm:text-[9px] uppercase font-black tracking-widest px-4">
                   <th class="px-2 sm:px-4 w-1/2">Name</th>
@@ -843,6 +852,9 @@
   </div>
 </div>
 
+<!-- Toast container -->
+<div id="toast-container" aria-live="polite"></div>
+
 <!-- Hidden selects for state (used by filterTasks / renderProjects) -->
 <select id="task-status-filter" class="hidden"><option value="all" selected>all</option><option value="todo">todo</option><option value="in-progress">in-progress</option><option value="done">done</option></select>
 <select id="task-sort" class="hidden"><option value="date" selected>date</option><option value="priority">priority</option><option value="title">title</option></select>
@@ -851,12 +863,18 @@
 
 <script src="data/dummy.js"></script>
 <script src="js/state.js"></script>
+<script src="js/constants.js"></script>
 <script src="js/api.js"></script>
+<script src="js/toast.js"></script>
 <script src="js/markdown.js"></script>
 <script src="js/sidebar.js"></script>
 <script src="js/tabs.js"></script>
 <script src="js/tasks.js"></script>
 <script src="js/projects.js"></script>
+<script src="js/settings_watched_dirs.js"></script>
+<script src="js/settings_ai.js"></script>
+<script src="js/settings_team.js"></script>
+<script src="js/settings_ide.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/analytics.js"></script>
 <script src="js/inbox.js"></script>

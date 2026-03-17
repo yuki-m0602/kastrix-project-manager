@@ -46,25 +46,25 @@ function renderProjects() {
   container.innerHTML = sorted.length === 0 ? emptyHtml : sorted.map(p => {
     const lang = langColors[(p.language || '').toLowerCase()] || { bg: 'bg-[#8b949e20]', text: 'text-[#8b949e]', label: '?' };
     return `
-      <div onclick="openProjectDetailModal('${p.id}')" class="bg-[#161b22] border border-[#30363d] rounded-2xl p-3 sm:p-4 hover:border-[#484f58] transition-all cursor-pointer">
+      <div onclick="openProjectDetailModal('${escapeHtml(p.id)}')" class="bg-[#161b22] border border-[#30363d] rounded-2xl p-3 sm:p-4 hover:border-[#484f58] transition-all cursor-pointer">
         <div class="flex items-start justify-between mb-2 sm:mb-3">
           <div class="flex items-center gap-2 sm:gap-3 min-w-0">
             <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-[#21262d] flex items-center justify-center shrink-0">
               <i data-lucide="folder-git-2" size="18" class="text-indigo-400"></i>
             </div>
             <div class="min-w-0">
-              <h3 class="font-bold text-white text-sm sm:text-base truncate">${p.name}</h3>
-              <p class="text-[9px] sm:text-xs text-[#8b949e] truncate">${p.path}</p>
+              <h3 class="font-bold text-white text-sm sm:text-base truncate">${escapeHtml(p.name)}</h3>
+              <p class="text-[9px] sm:text-xs text-[#8b949e] truncate">${escapeHtml(p.path || '')}</p>
             </div>
           </div>
-          <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[8px] sm:text-[10px] font-black ${lang.bg} ${lang.text} shrink-0 ml-2">${lang.label}</span>
+          <span class="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[8px] sm:text-[10px] font-black ${lang.bg} ${lang.text} shrink-0 ml-2">${escapeHtml(lang.label)}</span>
         </div>
         <div class="space-y-0.5 sm:space-y-1 text-[9px] sm:text-xs text-[#8b949e]">
-          <div class="flex justify-between"><span>Local</span><span>${p.localModified}</span></div>
-          <div class="flex justify-between"><span>Git</span><span>${p.gitModified}</span></div>
+          <div class="flex justify-between"><span>Local</span><span>${escapeHtml(p.localModified || '')}</span></div>
+          <div class="flex justify-between"><span>Git</span><span>${escapeHtml(p.gitModified || '')}</span></div>
         </div>
         <div class="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-[#30363d]">
-          <p class="text-[9px] sm:text-xs text-indigo-400 truncate">${p.lastCommit}</p>
+          <p class="text-[9px] sm:text-xs text-indigo-400 truncate">${escapeHtml(p.lastCommit || '')}</p>
         </div>
       </div>`;
   }).join('');
@@ -77,20 +77,20 @@ function renderProjects() {
       : sorted.map(p => {
       const lang = langColors[(p.language || '').toLowerCase()] || { bg: 'bg-[#8b949e20]', text: 'text-[#8b949e]', label: '?' };
       return `
-        <tr onclick="openProjectDetailModal('${p.id}')" class="border-b border-[#30363d] hover:bg-[#161b22] cursor-pointer">
-          <td class="p-2 sm:p-4">
+        <tr onclick="openProjectDetailModal('${escapeHtml(p.id)}')" class="hover:bg-[#161b22] cursor-pointer">
+          <td class="p-2 sm:p-4 border-b border-[#30363d]">
             <div class="flex items-center gap-2 sm:gap-3">
-              <div class="w-5 h-5 rounded-md ${lang.bg} ${lang.text} flex items-center justify-center text-[9px] font-black">${p.name[0]}</div>
+              <div class="w-5 h-5 rounded-md ${lang.bg} ${lang.text} flex items-center justify-center text-[9px] font-black">${escapeHtml(p.name ? p.name[0] : '?')}</div>
               <div>
-                <p class="text-sm font-bold text-white">${p.name}</p>
-                <p class="text-[8px] sm:text-[9px] text-[#8b949e]">${p.path}</p>
+                <p class="text-sm font-bold text-white">${escapeHtml(p.name)}</p>
+                <p class="text-[8px] sm:text-[9px] text-[#8b949e]">${escapeHtml(p.path || '')}</p>
               </div>
             </div>
           </td>
-          <td class="p-2 sm:p-4 text-right">
+          <td class="p-2 sm:p-4 text-right border-b border-[#30363d]">
             <div class="space-y-0.5 sm:space-y-1 text-right">
-              <p class="text-[8px] sm:text-[9px] text-[#8b949e]">Git: ${p.gitModified}</p>
-              <p class="text-[8px] sm:text-[9px] text-[#8b949e]">Local: ${p.localModified}</p>
+              <p class="text-[8px] sm:text-[9px] text-[#8b949e]">Git: ${escapeHtml(p.gitModified || '')}</p>
+              <p class="text-[8px] sm:text-[9px] text-[#8b949e]">Local: ${escapeHtml(p.localModified || '')}</p>
             </div>
           </td>
         </tr>`;
@@ -115,7 +115,7 @@ async function addProjectFolder() {
     }
   } else {
     const p = prompt('Enter projects directory path:');
-    if (p) alert('Folder scan is only available in Tauri environment.');
+    if (p) showAlert('フォルダスキャンは Tauri 環境でのみ利用できます。', 'info');
   }
 }
 
@@ -149,7 +149,7 @@ function openProjectDetailModal(projectId) {
   if (readmeEl) {
     readmeEl.innerHTML = '<p class="text-[#8b949e] text-xs">Loading...</p>';
     apiGetReadme(project.path).then(content => {
-      readmeEl.innerHTML = typeof renderMarkdown === 'function' ? renderMarkdown(content) : `<pre class="text-sm text-[#c9d1d9] whitespace-pre-wrap font-mono">${content}</pre>`;
+      readmeEl.innerHTML = typeof renderMarkdown === 'function' ? renderMarkdown(content) : `<pre class="text-sm text-[#c9d1d9] whitespace-pre-wrap font-mono">${escapeHtml(content || '')}</pre>`;
     }).catch(() => {
       readmeEl.innerHTML = '<p class="text-[#8b949e] text-xs">README not available</p>';
     });
@@ -158,21 +158,21 @@ function openProjectDetailModal(projectId) {
   const content = document.getElementById('project-detail-modal-content');
   if (modal && content) {
     modal.style.display = '';
-    setTimeout(() => content.classList.remove('translate-x-full'), 10);
+    content.classList.remove('translate-x-full');
     _pushModalHistory('project');
   }
 }
 
 function closeProjectDetailModal() {
+  const modal = document.getElementById('project-detail-modal');
+  const content = document.getElementById('project-detail-modal-content');
+  if (content) {
+    modal.style.display = 'none';
+    content.classList.add('translate-x-full');
+  }
   if (_modalHistory === 'project') {
     _modalHistory = null;
     history.back();
-    return;
-  }
-  const content = document.getElementById('project-detail-modal-content');
-  if (content) {
-    content.classList.add('translate-x-full');
-    setTimeout(() => document.getElementById('project-detail-modal').style.display = 'none', 300);
   }
 }
 

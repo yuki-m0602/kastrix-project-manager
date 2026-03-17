@@ -55,10 +55,10 @@ function renderTaskList(filteredTasks) {
     'done':        { border: 'border-emerald-400/20',color: 'text-emerald-400' }
   };
   tbody.innerHTML = filteredTasks.length === 0 ? emptyRow : filteredTasks.map(t => `
-    <tr onclick="openTaskModal('${t.id}')" class="hover:bg-[#161b22] group cursor-pointer transition-all">
-      <td class="px-4 py-4 font-bold text-[#f0f6fc]">${t.title}</td>
-      <td class="px-4 py-4 text-[#8b949e] hidden sm:table-cell">${t.assignee}</td>
-      <td class="px-4 py-4">
+    <tr onclick="openTaskModal('${escapeHtml(t.id)}')" class="hover:bg-[#161b22] group cursor-pointer transition-all">
+      <td class="p-2 sm:p-4 font-bold text-[#f0f6fc] border-b border-[#30363d]">${escapeHtml(t.title)}</td>
+      <td class="p-2 sm:p-4 text-[#8b949e] hidden sm:table-cell border-b border-[#30363d]">${escapeHtml(t.assignee || '')}</td>
+      <td class="p-2 sm:p-4 border-b border-[#30363d]">
         <span class="px-2 py-0.5 rounded-md text-[9px] font-black border whitespace-nowrap ${statusMap[t.status].border} ${statusMap[t.status].color}">${t.status.toUpperCase()}</span>
       </td>
     </tr>
@@ -87,10 +87,10 @@ function renderKanban(filteredTasks) {
     container.ondrop = _kanbanDrop;
 
     container.innerHTML = statusTasks.map(t => `
-      <div draggable="true" ondragstart="_kanbanDragStart(event, '${t.id}')" onclick="openTaskModal('${t.id}')" class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 hover:border-${borderColor}-400/30 transition-all cursor-pointer ${status === 'done' ? 'opacity-60' : ''}">
-        <p class="text-white font-bold text-sm leading-tight mb-3 ${status === 'done' ? 'line-through' : ''}">${t.title}</p>
+      <div draggable="true" ondragstart="_kanbanDragStart(event, '${escapeHtml(t.id)}')" onclick="openTaskModal('${escapeHtml(t.id)}')" class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 hover:border-${borderColor}-400/30 transition-all cursor-pointer ${status === 'done' ? 'opacity-60' : ''}">
+        <p class="text-white font-bold text-sm leading-tight mb-3 ${status === 'done' ? 'line-through' : ''}">${escapeHtml(t.title)}</p>
         <div class="flex items-center justify-between">
-          <div class="w-5 h-5 rounded bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-[9px] font-black">${t.assignee ? t.assignee[0] : '?'}</div>
+          <div class="w-5 h-5 rounded bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-[9px] font-black">${t.assignee ? escapeHtml(t.assignee[0]) : '?'}</div>
           <span class="text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-tighter ${priorityColors[t.priority]}">${t.priority.toUpperCase()}</span>
         </div>
       </div>
@@ -166,29 +166,31 @@ function openTaskModal(taskId) {
   const modal   = document.getElementById('task-modal');
   const content = document.getElementById('task-modal-content');
   modal.style.display = '';
-  setTimeout(() => content.classList.remove('translate-x-full'), 10);
+  content.classList.remove('translate-x-full');
   _pushModalHistory('task');
 }
 
 function closeTaskModal() {
+  const modal = document.getElementById('task-modal');
+  const content = document.getElementById('task-modal-content');
+  modal.style.display = 'none';
+  content.classList.add('translate-x-full');
   if (_modalHistory === 'task') {
     _modalHistory = null;
     history.back();
-    return;
   }
-  const content = document.getElementById('task-modal-content');
-  content.classList.add('translate-x-full');
-  setTimeout(() => document.getElementById('task-modal').style.display = 'none', 300);
 }
 
 // ── Task CRUD ────────────────────────────────────────────────
-function openCreateTaskModal() {
+async function openCreateTaskModal() {
   document.getElementById('task-edit-id').value = '';
   document.getElementById('task-edit-title').value = '';
   document.getElementById('task-edit-project').value = '';
   document.getElementById('task-edit-priority').value = 'medium';
   document.getElementById('task-edit-due').value = '';
-  document.getElementById('task-edit-assignee').value = '';
+  const assigneeEl = document.getElementById('task-edit-assignee');
+  const displayName = typeof apiTeamGetMyDisplayName === 'function' ? await apiTeamGetMyDisplayName() : null;
+  assigneeEl.value = displayName || '';
   document.getElementById('task-edit-desc').value = '';
   document.getElementById('task-edit-public').checked = true;
   document.getElementById('task-edit-modal-title').textContent = 'New Task';
@@ -196,7 +198,7 @@ function openCreateTaskModal() {
   const modal = document.getElementById('task-edit-modal');
   const content = document.getElementById('task-edit-modal-content');
   modal.style.display = '';
-  setTimeout(() => content.classList.remove('translate-x-full'), 10);
+  content.classList.remove('translate-x-full');
   _pushModalHistory('task-edit');
 }
 
@@ -216,7 +218,7 @@ function openEditTaskModal(taskId) {
   const modal = document.getElementById('task-edit-modal');
   const content = document.getElementById('task-edit-modal-content');
   modal.style.display = '';
-  setTimeout(() => content.classList.remove('translate-x-full'), 10);
+  content.classList.remove('translate-x-full');
   _pushModalHistory('task-edit');
 }
 
@@ -224,20 +226,20 @@ function _populateProjectDropdown() {
   const sel = document.getElementById('task-edit-project');
   sel.innerHTML = '<option value="">None</option>';
   projects.forEach(p => {
-    sel.innerHTML += `<option value="${p.id}">${p.name}</option>`;
+    sel.innerHTML += `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`;
   });
 }
 
 function closeTaskEditModal() {
+  const modal = document.getElementById('task-edit-modal');
+  const content = document.getElementById('task-edit-modal-content');
+  if (content) {
+    modal.style.display = 'none';
+    content.classList.add('translate-x-full');
+  }
   if (_modalHistory === 'task-edit') {
     _modalHistory = null;
     history.back();
-    return;
-  }
-  const content = document.getElementById('task-edit-modal-content');
-  if (content) {
-    content.classList.add('translate-x-full');
-    setTimeout(() => document.getElementById('task-edit-modal').style.display = 'none', 300);
   }
 }
 
@@ -279,7 +281,7 @@ async function submitTaskForm() {
     filterTasks();
   } catch (e) {
     console.error('Failed to save task:', e);
-    alert('タスクの保存に失敗しました: ' + (e?.message || e));
+    showAlert('タスクの保存に失敗しました: ' + (e?.message || e), 'error');
   }
 }
 

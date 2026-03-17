@@ -59,22 +59,25 @@ function _pushModalHistory(type) {
 window.addEventListener('popstate', () => {
   if (_modalHistory === 'task') {
     _modalHistory = null;
+    const modal = document.getElementById('task-modal');
     const content = document.getElementById('task-modal-content');
+    modal.style.display = 'none';
     content.classList.add('translate-x-full');
-    setTimeout(() => document.getElementById('task-modal').style.display = 'none', 300);
   } else if (_modalHistory === 'project') {
     _modalHistory = null;
+    const modal = document.getElementById('project-detail-modal');
     const content = document.getElementById('project-detail-modal-content');
     if (content) {
+      modal.style.display = 'none';
       content.classList.add('translate-x-full');
-      setTimeout(() => document.getElementById('project-detail-modal').style.display = 'none', 300);
     }
   } else if (_modalHistory === 'task-edit') {
     _modalHistory = null;
+    const modal = document.getElementById('task-edit-modal');
     const content = document.getElementById('task-edit-modal-content');
     if (content) {
+      modal.style.display = 'none';
       content.classList.add('translate-x-full');
-      setTimeout(() => document.getElementById('task-edit-modal').style.display = 'none', 300);
     }
   }
 });
@@ -248,7 +251,7 @@ async function renderLogs() {
 async function exportLogs() {
   const csv = await apiExportLogsCsv();
   if (!csv) {
-    alert('CSV export is only available in Tauri environment.');
+    showAlert('CSV エクスポートは Tauri 環境でのみ利用できます。', 'info');
     return;
   }
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -267,11 +270,11 @@ async function init() {
   } catch (e) {
     console.error('loadData failed:', e);
   }
+  setTaskView('list');
+  setProjectViewMode('grid');
   switchMainTab('projects');
   lucide.createIcons();
   fixFilterIconSizes();
-  setTaskView('list');
-  setProjectViewMode('grid');
   if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
   // iroh 復元が遅い場合のリトライ（1s, 2s, 3s 後）
   if (_isTauri && typeof updateSidebarRoomInfo === 'function') {
@@ -298,11 +301,7 @@ if (_isTauri && window.__TAURI__?.event?.listen) {
     if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
   });
   window.__TAURI__.event.listen('team-blocked', async () => {
-    if (typeof showAlert === 'function') {
-      showAlert('このチームからブロックされました。', 'error');
-    } else {
-      alert('このチームからブロックされました。');
-    }
+    showAlert('このチームからブロックされました。', 'error');
   });
   window.__TAURI__.event.listen('team-members-updated', async () => {
     if (typeof renderTeamMembers === 'function') await renderTeamMembers();
@@ -321,7 +320,7 @@ if (_isTauri && window.__TAURI__?.event?.listen) {
     if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
   });
   window.__TAURI__.event.listen('team-update-required', () => {
-    alert('アプリのアップデートが必要です。最新版をインストールしてください。');
+    showAlert('アプリのアップデートが必要です。最新版をインストールしてください。', 'error');
   });
 }
 

@@ -56,7 +56,9 @@ pub fn scan_directory(path: String, state: State<DbState>) -> Result<Vec<Project
 
         let git_info = git_util::get_git_info(&entry_path);
         let git_modified = git_info.as_ref().and_then(|g| g.last_commit_date.clone());
-        let last_commit = git_info.as_ref().and_then(|g| g.last_commit_message.clone());
+        let last_commit = git_info
+            .as_ref()
+            .and_then(|g| g.last_commit_message.clone());
 
         let local_modified = fs::metadata(&entry_path)
             .and_then(|m| m.modified())
@@ -121,9 +123,8 @@ pub fn scan_directory(path: String, state: State<DbState>) -> Result<Vec<Project
     Ok(projects)
 }
 
-#[tauri::command]
-pub fn get_projects(state: State<DbState>) -> Result<Vec<Project>, String> {
-    let db = state.0.lock().map_err(|e| e.to_string())?;
+/// DB からプロジェクト一覧を取得（テスト用に Connection を直接受け取る）
+pub fn get_projects_from_db(db: &rusqlite::Connection) -> Result<Vec<Project>, String> {
     let mut stmt = db
         .prepare(
             "SELECT id, name, path, language, local_modified, git_modified, last_commit, has_readme, created_at
@@ -151,6 +152,12 @@ pub fn get_projects(state: State<DbState>) -> Result<Vec<Project>, String> {
         .map_err(|e| e.to_string())?;
 
     Ok(projects)
+}
+
+#[tauri::command]
+pub fn get_projects(state: State<DbState>) -> Result<Vec<Project>, String> {
+    let db = state.0.lock().map_err(|e| e.to_string())?;
+    get_projects_from_db(&db)
 }
 
 #[tauri::command]
@@ -191,7 +198,8 @@ pub fn scan_all_watched_dirs(state: State<DbState>) -> Result<Vec<Project>, Stri
         let mut stmt = conn
             .prepare("SELECT path FROM watched_directories ORDER BY path")
             .map_err(|e| e.to_string())?;
-        let rows: Vec<String> = stmt.query_map([], |row| row.get(0))
+        let rows: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
             .map_err(|e| e.to_string())?
             .filter_map(|r| r.ok())
             .collect();
@@ -256,4 +264,37 @@ pub async fn open_in_ide(
     opener::open(&url).map_err(|e| format!("Failed to open IDE: {}", e))?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db;
+
+    #[test]
+    fn test_get_projects_empty() {
+        let conn = db::create_test_db().unwrap();
+        let projects = get_projects_from_db(&conn).unwrap();
+        assert!(projects.is_empty());
+    }
+
+    #[test]
+    fn test_get_projects_with_data() {
+        let conn = db::create_test_db().unwrap();
+        conn.execute(
+            "INSERT INTO projects (id, name, path, language, has_readme) VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params!["p1", "Project A", "/path/a", "rust", 1i32],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO projects (id, name, path, language, has_readme) VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params!["p2", "Project B", "/path/b", "typescript", 0i32],
+        )
+        .unwrap();
+
+        let projects = get_projects_from_db(&conn).unwrap();
+        assert_eq!(projects.len(), 2);
+        assert_eq!(projects[0].name, "Project A");
+        assert_eq!(projects[1].name, "Project B");
+    }
 }
