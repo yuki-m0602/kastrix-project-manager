@@ -12,30 +12,32 @@ function switchMainTab(tab) {
   const projectsView   = document.getElementById('view-projects');
   if (!btnProjects || !btnTasks) return;
 
+  const setActive = (active, inactive) => {
+    [active, inactive].forEach((el) => {
+      if (!el) return;
+      if (el === active) {
+        el.classList.remove('text-[#8b949e]', 'bg-transparent', 'border-transparent');
+        el.classList.add('bg-[#21262d]', 'text-white', 'border-[#484f58]', 'shadow-sm');
+      } else {
+        el.classList.remove('bg-[#21262d]', 'text-white', 'border-[#484f58]', 'shadow-sm');
+        el.classList.add('text-[#8b949e]', 'bg-transparent', 'border-transparent');
+      }
+    });
+  };
+
   if (tab === 'tasks') {
-    btnTasks.classList.remove('text-[#8b949e]', 'bg-transparent', 'border-transparent');
-    btnTasks.classList.add('bg-[#21262d]', 'text-white', 'border-[#484f58]', 'shadow-sm');
-    btnProjects.classList.remove('bg-[#21262d]', 'text-white', 'border-[#484f58]', 'shadow-sm');
-    btnProjects.classList.add('text-[#8b949e]', 'bg-transparent', 'border-transparent');
+    setActive(btnTasks, btnProjects);
     tasksControls.style.display = 'flex';
     projectsControls.style.display = 'none';
     addFolderBtn.style.display = 'none';
     taskFilter.style.display = 'flex';
     projectFilter.style.display = 'none';
-    if (currentTaskView === 'list') {
-      listView.style.display = 'block';
-      kanbanView.style.display = 'none';
-    } else {
-      listView.style.display = 'none';
-      kanbanView.style.display = 'flex';
-    }
+    listView.style.display = currentTaskView === 'list' ? 'block' : 'none';
+    kanbanView.style.display = currentTaskView === 'list' ? 'none' : 'flex';
     projectsView.style.display = 'none';
     filterTasks();
   } else {
-    btnProjects.classList.remove('text-[#8b949e]', 'bg-transparent', 'border-transparent');
-    btnProjects.classList.add('bg-[#21262d]', 'text-white', 'border-[#484f58]', 'shadow-sm');
-    btnTasks.classList.remove('bg-[#21262d]', 'text-white', 'border-[#484f58]', 'shadow-sm');
-    btnTasks.classList.add('text-[#8b949e]', 'bg-transparent', 'border-transparent');
+    setActive(btnProjects, btnTasks);
     tasksControls.style.display = 'none';
     projectsControls.style.display = 'flex';
     addFolderBtn.style.display = 'flex';

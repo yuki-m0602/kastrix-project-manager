@@ -79,7 +79,7 @@ pub async fn team_am_i_pending(
 ) -> Result<bool, String> {
     let has_sub = {
         let db = state.0.lock().map_err(|e| e.to_string())?;
-        db.query_row("SELECT 1 FROM team_subscriptions LIMIT 1", [], |_| Ok(()))
+        db.query_row("SELECT 1 FROM team_subscriptions WHERE is_host = 0 LIMIT 1", [], |_| Ok(()))
             .is_ok()
     };
     if !has_sub {
@@ -107,20 +107,46 @@ pub async fn team_cancel_join(
     iroh: State<'_, IrohState>,
     app: AppHandle,
 ) -> Result<(), String> {
-    let topic_id: Option<String> = {
-        let db = state.0.lock().map_err(|e| e.to_string())?;
-        db.query_row(
-            "SELECT topic_id FROM team_subscriptions WHERE is_host = 0 LIMIT 1",
-            [],
-            |r| r.get(0),
-        )
-        .ok()
-    };
-    let topic_id = topic_id.ok_or_else(|| "参加申請中のチームがありません".to_string())?;
     let my_id = get_my_endpoint_id(&iroh).await;
     if my_id.is_empty() {
         return Err("ノードIDを取得できません".to_string());
     }
+
+    let (topic_id, is_guest_sub) = {
+        let db = state.0.lock().map_err(|e| e.to_string())?;
+        let guest: Option<String> = db
+            .query_row(
+                "SELECT topic_id FROM team_subscriptions WHERE is_host = 0 LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .ok();
+        if let Some(t) = guest {
+            (t, true)
+        } else {
+            // 参加申請がない場合: ホストの孤立状態（is_host=1 だが members にいない）を解消
+            let host: Option<String> = db
+                .query_row(
+                    "SELECT topic_id FROM team_subscriptions WHERE is_host = 1 LIMIT 1",
+                    [],
+                    |r| r.get(0),
+                )
+                .ok();
+            let topic_id = host.ok_or_else(|| "参加申請中のチームがありません".to_string())?;
+            let is_active = db
+                .query_row(
+                    "SELECT 1 FROM members WHERE endpoint_id = ?1 AND status = 'active'",
+                    [&my_id],
+                    |_| Ok(()),
+                )
+                .is_ok();
+            if is_active {
+                return Err("参加申請中のチームがありません".to_string());
+            }
+            (topic_id, false)
+        }
+    };
+
     let is_active = {
         let db = state.0.lock().map_err(|e| e.to_string())?;
         db.query_row(
@@ -133,11 +159,14 @@ pub async fn team_cancel_join(
     if is_active {
         return Err("すでに承認済みです。キャンセルできません。".to_string());
     }
-    broadcast_member_op(&iroh, "member_cancel", &my_id, None).await?;
+
+    if is_guest_sub {
+        broadcast_member_op(&iroh, "member_cancel", &my_id, None).await?;
+    }
     {
         let db = state.0.lock().map_err(|e| e.to_string())?;
         db.execute(
-            "DELETE FROM team_subscriptions WHERE topic_id = ?1 AND is_host = 0",
+            "DELETE FROM team_subscriptions WHERE topic_id = ?1",
             [&topic_id],
         )
         .map_err(|e| e.to_string())?;

@@ -164,9 +164,46 @@ async function apiDeleteApiKey(provider) {
   return await _invoke('delete_api_key', { provider });
 }
 
+async function apiListAiModels(provider) {
+  if (!_isTauri) return [];
+  return await _invokeWithDefault('list_ai_models', { provider }, [], { asArray: true });
+}
+
+/** モデル一覧（id + is_free）。OpenRouter で無料判定に使用 */
+async function apiListAiModelsExtended(provider) {
+  if (!_isTauri) return [];
+  return await _invokeWithDefault('list_ai_models_extended', { provider }, [], { asArray: true });
+}
+
 async function apiAnalyzeLogs(prompt, provider) {
   if (!_isTauri) return 'AI analysis requires Tauri environment with an API key configured.';
   return await _invoke('analyze_logs', { prompt, provider });
+}
+
+// ── AI Chat Logs (永続化・複数チャット) ────────────────────
+async function apiAiCreateChat() {
+  if (!_isTauri) return null;
+  return await _invokeWithDefault('ai_create_chat', {}, null);
+}
+
+async function apiAiListChats() {
+  if (!_isTauri) return [];
+  return await _invokeWithDefault('ai_list_chats', {}, [], { asArray: true });
+}
+
+async function apiAiGetChatMessages(chatId) {
+  if (!_isTauri) return [];
+  return await _invokeWithDefault('ai_get_chat_messages', { chatId }, [], { asArray: true });
+}
+
+async function apiAiAddChatMessage(chatId, role, content) {
+  if (!_isTauri) return;
+  await _invoke('ai_add_chat_message', { chatId, role, content });
+}
+
+async function apiAiDeleteChat(chatId) {
+  if (!_isTauri) return;
+  await _invoke('ai_delete_chat', { chatId });
 }
 
 // ── Team ─────────────────────────────────────────────────

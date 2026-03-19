@@ -147,16 +147,11 @@ async function renderTeamPendingStatus() {
   if (!form || !status) return;
   try {
     const pending = await apiTeamAmIPending();
-    if (pending) {
-      form.classList.add('hidden');
-      status.classList.remove('hidden');
-    } else {
-      form.classList.remove('hidden');
-      status.classList.add('hidden');
-    }
+    form.style.display = pending ? 'none' : '';
+    status.style.display = pending ? '' : 'none';
   } catch (e) {
-    form.classList.remove('hidden');
-    status.classList.add('hidden');
+    form.style.display = '';
+    status.style.display = 'none';
   }
 }
 
@@ -452,7 +447,12 @@ async function refreshTeamDebug() {
     const step2 = s.step2_node_ticket === 'OK' ? ok : s.step2_node_ticket === '待機中' ? wait : fail;
     const err = s.step2_error ? '<br><span class="text-red-400 text-[9px]">' + s.step2_error + '</span>' : '';
     const ep = s.endpoint_id ? '<div class="text-[#484f58]">EndpointID: ' + s.endpoint_id.slice(0, 16) + '...</div>' : '';
-    content.innerHTML = '<div>Step1: iroh ノード作成 → ' + step1 + '</div><div>Step2: アドレス発見 (node_ticket) → ' + step2 + err + '</div>' + ep;
+    const subs = (s.team_subscriptions || []).map(x => 'topic=' + x.topic_id.slice(0, 8) + '... is_host=' + x.is_host).join(', ') || 'なし';
+    const pending = s.am_i_pending ? '<span class="text-amber-400">true → 参加申請中表示</span>' : '<span class="text-emerald-400">false</span>';
+    const apiPending = await apiTeamAmIPending();
+    const apiPendingStr = apiPending ? '<span class="text-amber-400">true（← これで表示制御）</span>' : '<span class="text-emerald-400">false</span>';
+    content.innerHTML = '<div>Step1: iroh ノード作成 → ' + step1 + '</div><div>Step2: アドレス発見 (node_ticket) → ' + step2 + err + '</div>' + ep +
+      '<div class="mt-2 pt-2 border-t border-[#30363d]"><div class="text-[#484f58]">team_subscriptions: ' + subs + '</div><div class="text-[#484f58]">am_i_pending(debug): ' + pending + '</div><div class="text-[#484f58]">apiTeamAmIPending(): ' + apiPendingStr + '</div></div>';
     if (updated) updated.textContent = new Date().toLocaleTimeString('ja-JP');
   } catch (e) {
     content.innerHTML = '<span class="text-red-400">' + (e?.toString?.() || e) + '</span>';

@@ -41,6 +41,7 @@
     "apiSaveApiKey": "readonly",
     "apiDeleteApiKey": "readonly",
     "apiGetApiKeyStatus": "readonly",
+    "apiListAiModels": "readonly",
     "apiAnalyzeLogs": "readonly",
     "apiTeamIsReady": "readonly",
     "apiTeamDebugStatus": "readonly",

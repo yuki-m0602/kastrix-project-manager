@@ -132,6 +132,7 @@ function setActiveMenu(menu) {
     projects:  'Projects',
     logs:      'Activity Logs',
     inbox:     'Inbox',
+    ai:        'AI',
     analytics: 'Analytics',
     settings:  'Settings'
   };
@@ -148,6 +149,7 @@ function setActiveMenu(menu) {
     overview:  'view-overview',
     logs:      'view-logs',
     inbox:     'view-inbox',
+    ai:        'view-ai',
     analytics: 'view-analytics',
     settings:  'view-settings'
   };
@@ -155,6 +157,7 @@ function setActiveMenu(menu) {
     overview:  'flex',
     logs:      'flex',
     inbox:     'flex',
+    ai:        'flex',
     analytics: 'flex',
     settings:  'flex'
   };
@@ -168,10 +171,11 @@ function setActiveMenu(menu) {
   if (actualView === 'settings' && typeof renderSettings === 'function') renderSettings();
   if (actualView === 'analytics' && typeof renderAnalytics === 'function') renderAnalytics();
   if (actualView === 'inbox' && typeof renderInbox === 'function') renderInbox();
-  // Logs/Inbox/Analytics/Settings ではメインヘッダーを非表示（各ビューにメニューボタンあり）
+  if (actualView === 'ai' && typeof initAiView === 'function') initAiView();
+  // Logs/Inbox/Analytics/Settings/AI ではメインヘッダーを非表示（各ビューにメニューボタンあり）
   const mainHeader = document.getElementById('main-header');
   if (mainHeader) {
-    const hideMainHeader = ['logs', 'inbox', 'analytics', 'settings'].includes(actualView);
+    const hideMainHeader = ['logs', 'inbox', 'ai', 'analytics', 'settings'].includes(actualView);
     mainHeader.style.display = hideMainHeader ? 'none' : '';
   }
   if (window.innerWidth < 1024) {

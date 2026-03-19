@@ -52,15 +52,26 @@ pub async fn team_is_ready(iroh: State<'_, IrohState>) -> Result<bool, String> {
 }
 
 #[derive(serde::Serialize)]
+pub struct TeamDebugSubscription {
+    pub topic_id: String,
+    pub is_host: bool,
+}
+
+#[derive(serde::Serialize)]
 pub struct TeamDebugStatus {
     pub step1_iroh_node: String,
     pub step2_node_ticket: String,
     pub step2_error: Option<String>,
     pub endpoint_id: Option<String>,
+    pub team_subscriptions: Vec<TeamDebugSubscription>,
+    pub am_i_pending: bool,
 }
 
 #[tauri::command]
-pub async fn team_debug_status(iroh: State<'_, IrohState>) -> Result<TeamDebugStatus, String> {
+pub async fn team_debug_status(
+    iroh: State<'_, IrohState>,
+    db: State<'_, DbState>,
+) -> Result<TeamDebugStatus, String> {
     let guard = iroh.read().await;
     let node = guard.as_ref();
 
@@ -79,11 +90,43 @@ pub async fn team_debug_status(iroh: State<'_, IrohState>) -> Result<TeamDebugSt
         ("待機中".to_string(), None)
     };
 
+    let (team_subscriptions, am_i_pending) = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let subs: Vec<TeamDebugSubscription> = conn
+            .prepare("SELECT topic_id, is_host FROM team_subscriptions")
+            .map_err(|e| e.to_string())?
+            .query_map([], |row| {
+                Ok(TeamDebugSubscription {
+                    topic_id: row.get(0)?,
+                    is_host: row.get::<_, i32>(1)? != 0,
+                })
+            })
+            .map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+
+        let has_guest_sub = subs.iter().any(|s| !s.is_host);
+        let my_id = endpoint_id.as_deref().unwrap_or("");
+        let is_active = !my_id.is_empty()
+            && conn
+                .query_row(
+                    "SELECT 1 FROM members WHERE endpoint_id = ?1 AND status = 'active'",
+                    [my_id],
+                    |_| Ok(()),
+                )
+                .is_ok();
+        let am_i_pending = has_guest_sub && !is_active;
+
+        (subs, am_i_pending)
+    };
+
     Ok(TeamDebugStatus {
         step1_iroh_node: step1,
         step2_node_ticket: step2,
         step2_error,
         endpoint_id,
+        team_subscriptions,
+        am_i_pending,
     })
 }
 
