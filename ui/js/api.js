@@ -109,6 +109,12 @@ async function apiDeleteTask(id) {
   return await _invoke('delete_task', { id });
 }
 
+/** ホストまたは作成者のとき true（チーム未参加時は常に true） */
+async function apiTaskCanDelete(id) {
+  if (!_isTauri) return true;
+  return await _invokeWithDefault('task_can_delete', { id }, true, { logLabel: 'apiTaskCanDelete' });
+}
+
 async function apiUpdateTaskStatus(id, status) {
   if (!_isTauri) {
     const task = tasks.find(t => t.id === id);

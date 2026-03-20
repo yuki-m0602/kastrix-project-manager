@@ -86,6 +86,7 @@ pub fn run() {
             commands::tasks::create_task,
             commands::tasks::update_task,
             commands::tasks::delete_task,
+            commands::tasks::task_can_delete,
             commands::tasks::update_task_status,
             commands::logs::get_activity_logs,
             commands::logs::export_logs_csv,

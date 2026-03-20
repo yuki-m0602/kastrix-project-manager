@@ -122,7 +122,7 @@ async function addProjectFolder() {
 // Project filter setters
 function setProjLang(value, label) {
   document.getElementById('label-lang').textContent = label;
-  document.getElementById('dd-lang').style.display = 'none';
+  document.getElementById('dd-lang')?.classList.add('hidden');
   const sel = document.getElementById('project-lang-filter');
   if (sel) sel.value = value;
   renderProjects();
@@ -130,7 +130,7 @@ function setProjLang(value, label) {
 
 function setProjSort(value, label) {
   document.getElementById('label-proj-sort').textContent = label;
-  document.getElementById('dd-proj-sort').style.display = 'none';
+  document.getElementById('dd-proj-sort')?.classList.add('hidden');
   const sel = document.getElementById('project-sort');
   if (sel) sel.value = value;
   renderProjects();

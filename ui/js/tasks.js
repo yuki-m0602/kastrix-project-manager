@@ -36,7 +36,11 @@ function filterTasks() {
   } else if (sortBy === 'title') {
     filtered.sort((a, b) => a.title.localeCompare(b.title));
   } else {
-    filtered.sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate));
+    filtered.sort((a, b) => {
+      const ta = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+      const tb = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+      return tb - ta;
+    });
   }
   renderTaskList(filtered);
   renderKanban(filtered);
@@ -132,7 +136,7 @@ async function _kanbanDrop(e) {
 // Task filter setters
 function setTaskStatus(value, label) {
   document.getElementById('label-status').textContent = label;
-  document.getElementById('dd-status').style.display = 'none';
+  document.getElementById('dd-status')?.classList.add('hidden');
   const sel = document.getElementById('task-status-filter');
   if (sel) sel.value = value;
   filterTasks();
@@ -140,13 +144,13 @@ function setTaskStatus(value, label) {
 
 function setTaskSort(value, label) {
   document.getElementById('label-sort').textContent = label;
-  document.getElementById('dd-sort').style.display = 'none';
+  document.getElementById('dd-sort')?.classList.add('hidden');
   const sel = document.getElementById('task-sort');
   if (sel) sel.value = value;
   filterTasks();
 }
 
-function openTaskModal(taskId) {
+async function openTaskModal(taskId) {
   const task = tasks.find(t => String(t.id) === String(taskId));
   if (!task) return;
   document.getElementById('modal-task-title').textContent    = task.title;
@@ -163,6 +167,18 @@ function openTaskModal(taskId) {
   const iconEl = document.getElementById('modal-project-icon');
   if (iconEl) iconEl.textContent = projName !== '-' ? projName[0].toUpperCase() : '?';
   _currentTaskId = task.id;
+  const delBtn = document.getElementById('btn-delete-task');
+  if (delBtn) {
+    if (_isTauri && typeof apiTaskCanDelete === 'function') {
+      try {
+        delBtn.style.display = (await apiTaskCanDelete(task.id)) ? '' : 'none';
+      } catch {
+        delBtn.style.display = '';
+      }
+    } else {
+      delBtn.style.display = '';
+    }
+  }
   const modal   = document.getElementById('task-modal');
   const content = document.getElementById('task-modal-content');
   modal.style.display = '';
@@ -296,5 +312,8 @@ async function deleteCurrentTask() {
     filterTasks();
   } catch (e) {
     console.error('Failed to delete task:', e);
+    if (typeof showAlert === 'function') {
+      showAlert('削除に失敗しました: ' + (e?.message || e), 'error');
+    }
   }
 }

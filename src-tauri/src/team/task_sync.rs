@@ -2,6 +2,7 @@
 
 use crate::db::DbState;
 use crate::models::Task;
+use crate::team::can_apply_remote_task_delete;
 use bytes::Bytes;
 use tauri::Emitter;
 use uuid::Uuid;
@@ -24,6 +25,9 @@ pub struct TaskUpdatePayload {
     pub seq: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prev_id: Option<String>,
+    /// delete 時: 削除操作を行ったノードの EndpointID（受信側で権限検証）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor_endpoint_id: Option<String>,
 }
 
 /// operations テーブルに記録し、payload に seq / prev_id を設定
@@ -96,7 +100,7 @@ pub async fn broadcast_task_update(
 /// 衝突用にローカルタスクを取得
 fn query_local_task(db: &rusqlite::Connection, id: &str) -> Result<Task, String> {
     db.query_row(
-        "SELECT id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at
+        "SELECT id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at, created_by
          FROM tasks WHERE id = ?1",
         [id],
         |row| {
@@ -112,6 +116,7 @@ fn query_local_task(db: &rusqlite::Connection, id: &str) -> Result<Task, String>
                 is_public: row.get::<_, Option<i32>>(8)?.unwrap_or(1) != 0,
                 created_at: row.get::<_, Option<String>>(9)?.unwrap_or_default(),
                 updated_at: row.get::<_, Option<String>>(10)?.unwrap_or_default(),
+                created_by: row.get(11)?,
             })
         },
     )
@@ -188,8 +193,8 @@ pub fn apply_task_update(
             let is_public = if task.is_public { 1 } else { 0 };
             let ts_src = payload.ts_source.as_deref().unwrap_or("local");
             db.execute(
-                "INSERT INTO tasks (id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at, last_update_source)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                "INSERT INTO tasks (id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at, last_update_source, created_by)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
                  ON CONFLICT(id) DO UPDATE SET
                    project_id=excluded.project_id,
                    title=excluded.title,
@@ -200,7 +205,8 @@ pub fn apply_task_update(
                    description=excluded.description,
                    is_public=excluded.is_public,
                    updated_at=excluded.updated_at,
-                   last_update_source=excluded.last_update_source",
+                   last_update_source=excluded.last_update_source,
+                   created_by=COALESCE(excluded.created_by, tasks.created_by)",
                 rusqlite::params![
                     task.id,
                     task.project_id,
@@ -214,6 +220,7 @@ pub fn apply_task_update(
                     task.created_at,
                     task.updated_at,
                     ts_src,
+                    task.created_by,
                 ],
             )
             .map_err(|e| e.to_string())?;
@@ -223,6 +230,11 @@ pub fn apply_task_update(
                 .task_id
                 .as_ref()
                 .ok_or_else(|| "task_update: task_id is required for delete".to_string())?;
+            if let Ok(task) = query_local_task(&db, id) {
+                if !can_apply_remote_task_delete(&db, &task, payload.actor_endpoint_id.as_deref()) {
+                    return Ok(());
+                }
+            }
             db.execute("DELETE FROM tasks WHERE id = ?1", [id])
                 .map_err(|e| e.to_string())?;
         }

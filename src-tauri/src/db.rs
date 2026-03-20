@@ -149,6 +149,11 @@ const MIGRATIONS: &[(&str, &str, &str)] = &[
         "ALTER TABLE tasks ADD COLUMN last_update_source TEXT DEFAULT 'local'",
     ),
     ("members", "display_name", "ALTER TABLE members ADD COLUMN display_name TEXT"),
+    (
+        "tasks",
+        "created_by",
+        "ALTER TABLE tasks ADD COLUMN created_by TEXT",
+    ),
 ];
 
 fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {

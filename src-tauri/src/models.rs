@@ -29,6 +29,9 @@ pub struct Task {
     pub is_public: bool,
     pub created_at: String,
     pub updated_at: String,
+    /// チーム同期時: タスク作成者の iroh NodeId（端末識別子）
+    #[serde(default)]
+    pub created_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

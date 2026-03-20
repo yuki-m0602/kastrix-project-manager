@@ -1,6 +1,9 @@
 use crate::db::DbState;
 use crate::models::{CreateTaskInput, Task, UpdateTaskInput};
-use crate::team::{broadcast_task_update, record_operation, IrohState, TaskUpdatePayload};
+use crate::team::{
+    broadcast_task_update, can_delete_task_for_user, get_my_endpoint_id, record_operation,
+    IrohState, TaskUpdatePayload,
+};
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
@@ -63,7 +66,7 @@ async fn maybe_broadcast_task_update(
 
 fn query_task(db: &rusqlite::Connection, id: &str) -> Result<Task, String> {
     db.query_row(
-        "SELECT id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at
+        "SELECT id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at, created_by
          FROM tasks WHERE id = ?1",
         [id],
         |row| {
@@ -79,6 +82,7 @@ fn query_task(db: &rusqlite::Connection, id: &str) -> Result<Task, String> {
                 is_public: row.get::<_, Option<i32>>(8)?.unwrap_or(1) != 0,
                 created_at: row.get::<_, Option<String>>(9)?.unwrap_or_default(),
                 updated_at: row.get::<_, Option<String>>(10)?.unwrap_or_default(),
+                created_by: row.get(11)?,
             })
         },
     )
@@ -92,12 +96,12 @@ pub fn get_tasks_from_db(
 ) -> Result<Vec<Task>, String> {
     let (sql, params): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = match project_id {
         Some(pid) => (
-            "SELECT id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at
+            "SELECT id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at, created_by
              FROM tasks WHERE project_id = ?1 ORDER BY created_at DESC",
             vec![Box::new(pid.to_string())],
         ),
         None => (
-            "SELECT id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at
+            "SELECT id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at, created_by
              FROM tasks ORDER BY created_at DESC",
             vec![],
         ),
@@ -120,6 +124,7 @@ pub fn get_tasks_from_db(
                 is_public: row.get::<_, Option<i32>>(8)?.unwrap_or(1) != 0,
                 created_at: row.get::<_, Option<String>>(9)?.unwrap_or_default(),
                 updated_at: row.get::<_, Option<String>>(10)?.unwrap_or_default(),
+                created_by: row.get(11)?,
             })
         })
         .map_err(|e| e.to_string())?
@@ -127,6 +132,19 @@ pub fn get_tasks_from_db(
         .map_err(|e| e.to_string())?;
 
     Ok(tasks)
+}
+
+/// UI 用: このタスクを削除できるか（チーム未参加のときは常に true）
+#[tauri::command]
+pub async fn task_can_delete(
+    id: String,
+    state: State<'_, DbState>,
+    iroh: State<'_, IrohState>,
+) -> Result<bool, String> {
+    let my_id = get_my_endpoint_id(&iroh).await;
+    let db = state.0.lock().map_err(|e| e.to_string())?;
+    let task = query_task(&db, &id)?;
+    Ok(can_delete_task_for_user(&db, &task, &my_id))
 }
 
 #[tauri::command]
@@ -142,6 +160,12 @@ pub async fn create_task(
     iroh: State<'_, IrohState>,
     app: AppHandle,
 ) -> Result<Task, String> {
+    let my_id = get_my_endpoint_id(&iroh).await;
+    let created_by = if my_id.is_empty() {
+        None
+    } else {
+        Some(my_id)
+    };
     let task = {
         let db = state.0.lock().map_err(|e| e.to_string())?;
         let id = Uuid::new_v4().to_string();
@@ -149,8 +173,8 @@ pub async fn create_task(
         let is_public = if input.is_public { 1 } else { 0 };
 
         db.execute(
-            "INSERT INTO tasks (id, project_id, title, priority, due_date, assignee, description, is_public, last_update_source)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'local')",
+            "INSERT INTO tasks (id, project_id, title, priority, due_date, assignee, description, is_public, last_update_source, created_by)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 'local', ?9)",
             rusqlite::params![
                 id,
                 input.project_id,
@@ -160,6 +184,7 @@ pub async fn create_task(
                 input.assignee,
                 input.description,
                 is_public,
+                created_by,
             ],
         )
         .map_err(|e| e.to_string())?;
@@ -186,6 +211,7 @@ pub async fn create_task(
             ts_source: None,
             seq: None,
             prev_id: None,
+            actor_endpoint_id: None,
         };
         maybe_broadcast_task_update(&state, &iroh, &app, payload).await?;
     }
@@ -243,6 +269,7 @@ pub async fn update_task(
             ts_source: None,
             seq: None,
             prev_id: None,
+            actor_endpoint_id: None,
         };
         maybe_broadcast_task_update(&state, &iroh, &app, payload).await?;
     }
@@ -256,12 +283,20 @@ pub async fn delete_task(
     iroh: State<'_, IrohState>,
     app: AppHandle,
 ) -> Result<(), String> {
+    let my_id = get_my_endpoint_id(&iroh).await;
     let was_public = {
         let db = state.0.lock().map_err(|e| e.to_string())?;
-        let task = query_task(&db, &id).ok();
+        let task = query_task(&db, &id)
+            .map_err(|_| "タスクが見つかりません".to_string())?;
+        if !can_delete_task_for_user(&db, &task, &my_id) {
+            return Err(
+                "このタスクを削除する権限がありません（ホストまたは作成者のみ削除できます）"
+                    .to_string(),
+            );
+        }
         db.execute("DELETE FROM tasks WHERE id = ?1", [&id])
             .map_err(|e| e.to_string())?;
-        task.map(|t| t.is_public).unwrap_or(false)
+        task.is_public
     };
     if was_public {
         let payload = TaskUpdatePayload {
@@ -273,6 +308,11 @@ pub async fn delete_task(
             ts_source: None,
             seq: None,
             prev_id: None,
+            actor_endpoint_id: if my_id.is_empty() {
+                None
+            } else {
+                Some(my_id)
+            },
         };
         maybe_broadcast_task_update(&state, &iroh, &app, payload).await?;
     }
@@ -330,6 +370,7 @@ pub async fn update_task_status(
             ts_source: None,
             seq: None,
             prev_id: None,
+            actor_endpoint_id: None,
         };
         maybe_broadcast_task_update(&state, &iroh, &app, payload).await?;
     }

@@ -37,16 +37,25 @@ if (window.innerWidth <= 768) {
 }
 
 // ── Custom Dropdown ───────────────────────────────────────
-function toggleDropdown(id) {
-  const dd = document.getElementById(id);
-  const isHidden = dd.style.display === 'none';
-  document.querySelectorAll('[id^="dd-"]').forEach(el => el.style.display = 'none');
-  if (isHidden) dd.style.display = '';
+// Tailwind の .hidden は display:none。style.display だけでは開閉できないため class で制御する。
+function closeAllDropdowns() {
+  document.querySelectorAll('[id^="dd-"]').forEach((el) => {
+    el.classList.add('hidden');
+    el.style.removeProperty('display');
+  });
 }
 
-document.addEventListener('click', e => {
+function toggleDropdown(id) {
+  const dd = document.getElementById(id);
+  if (!dd) return;
+  const opening = dd.classList.contains('hidden');
+  closeAllDropdowns();
+  if (opening) dd.classList.remove('hidden');
+}
+
+document.addEventListener('click', (e) => {
   if (!e.target.closest('[onclick^="toggleDropdown"]')) {
-    document.querySelectorAll('[id^="dd-"]').forEach(el => el.style.display = 'none');
+    closeAllDropdowns();
   }
 });
 
@@ -92,7 +101,8 @@ document.addEventListener('click', e => {
   const searchResults = document.getElementById('search-results');
   const searchInput = document.getElementById('global-search');
   if (searchResults && searchInput && !searchResults.contains(e.target) && e.target !== searchInput) {
-    searchResults.style.display = 'none';
+    searchResults.classList.add('hidden');
+    searchResults.style.removeProperty('display');
   }
 });
 
@@ -176,26 +186,35 @@ async function loadData() {
 }
 
 // ── Search ───────────────────────────────────────────────
+function _hideSearchResults() {
+  const el = document.getElementById('search-results');
+  if (el) {
+    el.classList.add('hidden');
+    el.style.removeProperty('display');
+  }
+}
+
 function handleSearch(query) {
   const container = document.getElementById('search-results');
   if (!container) return;
   if (!query || query.length < 1) {
-    container.style.display = 'none';
+    _hideSearchResults();
     return;
   }
   const q = query.toLowerCase();
-  const matchedProjects = localProjects.filter(p => p.name.toLowerCase().includes(q)).slice(0, 5);
-  const matchedTasks = tasks.filter(t => t.title.toLowerCase().includes(q)).slice(0, 5);
+  const matchedProjects = localProjects.filter(p => (p.name || '').toLowerCase().includes(q)).slice(0, 5);
+  const matchedTasks = tasks.filter(t => (t.title || '').toLowerCase().includes(q)).slice(0, 5);
   if (matchedProjects.length === 0 && matchedTasks.length === 0) {
     container.innerHTML = '<p class="px-3 py-2 text-xs text-[#8b949e]">No results found</p>';
-    container.style.display = '';
+    container.classList.remove('hidden');
+    container.style.removeProperty('display');
     return;
   }
   let html = '';
   if (matchedProjects.length > 0) {
     html += '<div class="px-3 pt-2 pb-1"><span class="text-[9px] font-bold text-[#484f58] uppercase tracking-wider">Projects</span></div>';
     matchedProjects.forEach(p => {
-      html += `<button onclick="openProjectDetailModal('${p.id}'); document.getElementById('search-results').style.display='none'; document.getElementById('global-search').value='';" class="w-full text-left px-3 py-2 hover:bg-[#21262d] transition-all flex items-center gap-2">
+      html += `<button onclick="openProjectDetailModal('${p.id}'); _hideSearchResults(); document.getElementById('global-search').value='';" class="w-full text-left px-3 py-2 hover:bg-[#21262d] transition-all flex items-center gap-2">
         <i data-lucide="folder-git-2" size="14" class="text-indigo-400 shrink-0"></i>
         <span class="text-xs text-white truncate">${p.name}</span>
       </button>`;
@@ -204,14 +223,15 @@ function handleSearch(query) {
   if (matchedTasks.length > 0) {
     html += '<div class="px-3 pt-2 pb-1"><span class="text-[9px] font-bold text-[#484f58] uppercase tracking-wider">Tasks</span></div>';
     matchedTasks.forEach(t => {
-      html += `<button onclick="openTaskModal('${t.id}'); document.getElementById('search-results').style.display='none'; document.getElementById('global-search').value='';" class="w-full text-left px-3 py-2 hover:bg-[#21262d] transition-all flex items-center gap-2">
+      html += `<button onclick="openTaskModal('${t.id}'); _hideSearchResults(); document.getElementById('global-search').value='';" class="w-full text-left px-3 py-2 hover:bg-[#21262d] transition-all flex items-center gap-2">
         <i data-lucide="check-square" size="14" class="text-emerald-400 shrink-0"></i>
         <span class="text-xs text-white truncate">${t.title}</span>
       </button>`;
     });
   }
   container.innerHTML = html;
-  container.style.display = '';
+  container.classList.remove('hidden');
+  container.style.removeProperty('display');
   lucide.createIcons();
 }
 

@@ -277,6 +277,7 @@ pub async fn team_resolve_conflict(
         ts_source: None,
         seq: None,
         prev_id: None,
+        actor_endpoint_id: None,
     };
     let _ = apply_task_update(&state, &payload, Some(&app));
     Ok(())

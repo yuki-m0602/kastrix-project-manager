@@ -16,7 +16,10 @@ pub use broadcast::{
     broadcast_team_disband,
 };
 pub use event_handler::spawn_topic_listener;
-pub use helpers::{can_approve_or_reject, get_my_endpoint_id, is_current_user_host, topic_id_to_hex};
+pub use helpers::{
+    can_apply_remote_task_delete, can_approve_or_reject, can_delete_task_for_user, get_my_endpoint_id,
+    is_current_user_host, topic_id_to_hex,
+};
 pub use invite_code::{generate_invite_code, normalize_code};
 pub use iroh_node::{IrohNodeState, IrohState};
 pub use pending::{PendingJoinInfo, PendingJoinsState};

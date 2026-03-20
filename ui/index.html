@@ -366,8 +366,8 @@
               </button>
             </div>
 
-            <!-- Task Filter Buttons -->
-            <div id="task-filter" class="hidden sm:flex items-center gap-1.5">
+            <!-- Task Filter Buttons（sm: 未満でもタブ切替後は JS で display 制御） -->
+            <div id="task-filter" class="flex flex-wrap items-center gap-1.5 min-w-0">
 
               <!-- Status filter -->
               <div class="relative">
@@ -411,7 +411,7 @@
             </div>
 
             <!-- Project Filter Buttons -->
-            <div id="project-filter" class="hidden sm:flex items-center gap-1.5">
+            <div id="project-filter" class="flex flex-wrap items-center gap-1.5 min-w-0">
 
               <!-- Language filter -->
               <div class="relative">
@@ -448,9 +448,9 @@
             </div>
           </div>
 
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 shrink-0">
             <!-- Search -->
-            <div class="relative hidden sm:block">
+            <div class="relative max-sm:flex-1 max-sm:min-w-0">
               <input id="global-search" type="text" placeholder="Search..."
                 class="w-40 bg-[#010409] border border-[#30363d] rounded-xl py-1.5 px-3 text-xs text-white outline-none focus:border-indigo-500 focus:w-56 transition-all"
                 oninput="handleSearch(this.value)">
@@ -581,7 +581,7 @@
               </div>
             </div>
             <div class="h-16 border-t border-[#30363d] flex items-center gap-3 px-6 bg-[#010409]">
-              <button onclick="deleteCurrentTask()" class="px-4 py-2 rounded-xl text-xs font-bold text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all">Delete</button>
+              <button type="button" id="btn-delete-task" onclick="deleteCurrentTask()" class="px-4 py-2 rounded-xl text-xs font-bold text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all">Delete</button>
               <span class="flex-1"></span>
               <button onclick="closeTaskModal()" class="px-4 py-2 rounded-xl text-xs font-bold text-[#8b949e] hover:text-white transition-all">Close</button>
               <button onclick="openEditTaskModal(_currentTaskId)" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white transition-all">Edit Task</button>
