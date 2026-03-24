@@ -100,8 +100,8 @@ function renderProjects() {
   lucide.createIcons();
 }
 
-function sortProjects(v)           { renderProjects(); }
-function filterProjectsByLang(v)   { renderProjects(); }
+function sortProjects(_v)           { renderProjects(); }
+function filterProjectsByLang(_v)   { renderProjects(); }
 
 // Add project folder — registers as watched dir and scans
 async function addProjectFolder() {

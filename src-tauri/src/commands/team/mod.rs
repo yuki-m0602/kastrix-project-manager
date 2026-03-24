@@ -7,7 +7,17 @@ pub mod members;
 use crate::db::DbState;
 use crate::models::Task;
 use crate::team::{apply_task_update, broadcast_task_update, IrohState, TaskUpdatePayload};
+use serde::Deserialize;
 use tauri::{AppHandle, Emitter, State};
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamResolveConflictInput {
+    pub choice: String,
+    pub incoming: Task,
+    #[serde(default)]
+    pub seq: Option<i64>,
+}
 
 pub use crate::team::{PendingJoinInfo, PendingJoinsState};
 
@@ -259,13 +269,25 @@ pub async fn team_push_unsynced(
 pub async fn team_resolve_conflict(
     state: State<'_, DbState>,
     app: AppHandle,
-    choice: String,
-    incoming: Task,
+    input: TeamResolveConflictInput,
 ) -> Result<(), String> {
+    let TeamResolveConflictInput {
+        choice,
+        incoming,
+        seq,
+    } = input;
     if choice != "incoming" && choice != "local" {
         return Err("choice must be 'incoming' or 'local'".to_string());
     }
     if choice == "local" {
+        if let Some(s) = seq {
+            let conn = state.0.lock().map_err(|e| e.to_string())?;
+            conn.execute(
+                "INSERT OR IGNORE INTO team_conflict_skip_seq (task_id, seq) VALUES (?1, ?2)",
+                rusqlite::params![incoming.id, s],
+            )
+            .map_err(|e| e.to_string())?;
+        }
         return Ok(());
     }
     let payload = TaskUpdatePayload {

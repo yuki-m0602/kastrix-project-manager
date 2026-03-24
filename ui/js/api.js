@@ -330,6 +330,8 @@ async function apiTeamPromoteToCoHost(endpointId) {
   return await _invoke('team_promote_to_co_host', { endpointId });
 }
 
-async function apiTeamResolveConflict(choice, incoming) {
-  return await _invoke('team_resolve_conflict', { choice, incoming });
+async function apiTeamResolveConflict(choice, incoming, seq) {
+  return await _invoke('team_resolve_conflict', {
+    input: { choice, incoming, seq: seq ?? null },
+  });
 }

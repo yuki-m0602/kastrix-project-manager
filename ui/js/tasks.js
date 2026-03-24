@@ -46,8 +46,8 @@ function filterTasks() {
   renderKanban(filtered);
 }
 
-function filterTasksByStatus(v) { filterTasks(); }
-function sortTasks(v)           { filterTasks(); }
+function filterTasksByStatus(_v) { filterTasks(); }
+function sortTasks(_v)           { filterTasks(); }
 
 function renderTaskList(filteredTasks) {
   const tbody = document.getElementById('list-view-body');

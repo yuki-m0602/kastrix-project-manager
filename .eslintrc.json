@@ -42,7 +42,15 @@
     "apiDeleteApiKey": "readonly",
     "apiGetApiKeyStatus": "readonly",
     "apiListAiModels": "readonly",
+    "apiListAiModelsExtended": "readonly",
     "apiAnalyzeLogs": "readonly",
+    "apiTaskCanDelete": "readonly",
+    "apiAiCreateChat": "readonly",
+    "apiAiListChats": "readonly",
+    "apiAiGetChatMessages": "readonly",
+    "apiAiAddChatMessage": "readonly",
+    "apiAiDeleteChat": "readonly",
+    "initAiView": "readonly",
     "apiTeamIsReady": "readonly",
     "apiTeamDebugStatus": "readonly",
     "apiTeamCreate": "readonly",
@@ -109,5 +117,13 @@
     "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
     "no-console": "off",
     "no-redeclare": "off"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["ui/js/api.js"],
+      "rules": {
+        "no-unused-vars": "off"
+      }
+    }
+  ]
 }

@@ -144,104 +144,152 @@ fn ensure_project_exists(db: &rusqlite::Connection, project_id: &str) -> Result<
 
 /// 衝突情報（local vs local 時にフロントへ送る）
 #[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConflictInfo {
     pub task_id: String,
     pub incoming: Task,
     pub local: Task,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conflict_seq: Option<i64>,
+}
+
+fn task_equal_for_conflict(a: &Task, b: &Task) -> bool {
+    a.id == b.id
+        && a.project_id == b.project_id
+        && a.title == b.title
+        && a.status == b.status
+        && a.priority == b.priority
+        && a.due_date == b.due_date
+        && a.assignee == b.assignee
+        && a.description == b.description
+        && a.is_public == b.is_public
+        && a.created_at == b.created_at
+        && a.updated_at == b.updated_at
+        && a.created_by == b.created_by
+}
+
+fn is_conflict_seq_skipped(db: &rusqlite::Connection, task_id: &str, seq: i64) -> Result<bool, String> {
+    let n: i32 = db
+        .query_row(
+            "SELECT COUNT(*) FROM team_conflict_skip_seq WHERE task_id = ?1 AND seq = ?2",
+            rusqlite::params![task_id, seq],
+            |r| r.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(n > 0)
 }
 
 /// 受信した payload をローカル DB に適用
 /// local vs local の衝突時は適用せず team-conflict イベントを発火
+///
+/// **重要**: `Mutex` を握ったまま `app.emit` すると、WebView 側の `invoke` が同じ DB を待ってデッドロックする
+/// （例: 競合解決ボタン → team_resolve_conflict 内でここが emit しつつロック保持 → loadData が詰まる）。
+/// 必ずロック解放後にのみ emit する。
 pub fn apply_task_update(
     state: &DbState,
     payload: &TaskUpdatePayload,
     app: Option<&tauri::AppHandle>,
 ) -> Result<(), String> {
-    let db = state.0.lock().map_err(|e| e.to_string())?;
-    match payload.action.as_str() {
-        "create" | "update" => {
-            let task = payload
-                .task
-                .as_ref()
-                .ok_or_else(|| "task_update: task is required for create/update".to_string())?;
-            let incoming_ts_local = payload.ts_source.as_deref() == Some("local");
-            let local_source: Option<String> = db
-                .query_row(
-                    "SELECT last_update_source FROM tasks WHERE id = ?1",
-                    [&task.id],
-                    |r| r.get(0),
-                )
-                .ok();
-            let is_local_vs_local = incoming_ts_local && local_source.as_deref() == Some("local");
-            if is_local_vs_local {
-                if let Some(app) = app {
-                    let local_task = query_local_task(&db, &task.id);
-                    if let Ok(local) = local_task {
-                        let info = ConflictInfo {
+    let mut emit_conflict: Option<ConflictInfo> = None;
+    let mut emit_task_updated = false;
+    {
+        let db = state.0.lock().map_err(|e| e.to_string())?;
+        match payload.action.as_str() {
+            "create" | "update" => {
+                let task = payload
+                    .task
+                    .as_ref()
+                    .ok_or_else(|| "task_update: task is required for create/update".to_string())?;
+                let incoming_ts_local = payload.ts_source.as_deref() == Some("local");
+                let local_source: Option<String> = db
+                    .query_row(
+                        "SELECT last_update_source FROM tasks WHERE id = ?1",
+                        [&task.id],
+                        |r| r.get(0),
+                    )
+                    .ok();
+                let is_local_vs_local = incoming_ts_local && local_source.as_deref() == Some("local");
+                if is_local_vs_local {
+                    if let Some(seq) = payload.seq {
+                        if is_conflict_seq_skipped(&db, &task.id, seq)? {
+                            return Ok(());
+                        }
+                    }
+                    if let Ok(local) = query_local_task(&db, &task.id) {
+                        if task_equal_for_conflict(&local, task) {
+                            return Ok(());
+                        }
+                        emit_conflict = Some(ConflictInfo {
                             task_id: task.id.clone(),
                             incoming: task.clone(),
                             local,
-                        };
-                        let _ = app.emit("team-conflict", &info);
+                            conflict_seq: payload.seq,
+                        });
+                    }
+                } else {
+                    if let Some(ref pid) = task.project_id {
+                        ensure_project_exists(&db, pid)?;
+                    }
+                    let is_public = if task.is_public { 1 } else { 0 };
+                    let ts_src = payload.ts_source.as_deref().unwrap_or("local");
+                    db.execute(
+                        "INSERT INTO tasks (id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at, last_update_source, created_by)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                         ON CONFLICT(id) DO UPDATE SET
+                           project_id=excluded.project_id,
+                           title=excluded.title,
+                           status=excluded.status,
+                           priority=excluded.priority,
+                           due_date=excluded.due_date,
+                           assignee=excluded.assignee,
+                           description=excluded.description,
+                           is_public=excluded.is_public,
+                           updated_at=excluded.updated_at,
+                           last_update_source=excluded.last_update_source,
+                           created_by=COALESCE(excluded.created_by, tasks.created_by)",
+                        rusqlite::params![
+                            task.id,
+                            task.project_id,
+                            task.title,
+                            task.status,
+                            task.priority,
+                            task.due_date,
+                            task.assignee,
+                            task.description,
+                            is_public,
+                            task.created_at,
+                            task.updated_at,
+                            ts_src,
+                            task.created_by,
+                        ],
+                    )
+                    .map_err(|e| e.to_string())?;
+                    emit_task_updated = true;
+                }
+            }
+            "delete" => {
+                let id = payload
+                    .task_id
+                    .as_ref()
+                    .ok_or_else(|| "task_update: task_id is required for delete".to_string())?;
+                if let Ok(task) = query_local_task(&db, id) {
+                    if !can_apply_remote_task_delete(&db, &task, payload.actor_endpoint_id.as_deref()) {
+                        return Ok(());
                     }
                 }
-                return Ok(());
+                db.execute("DELETE FROM tasks WHERE id = ?1", [id])
+                    .map_err(|e| e.to_string())?;
+                emit_task_updated = true;
             }
-            if let Some(ref pid) = task.project_id {
-                ensure_project_exists(&db, pid)?;
-            }
-            let is_public = if task.is_public { 1 } else { 0 };
-            let ts_src = payload.ts_source.as_deref().unwrap_or("local");
-            db.execute(
-                "INSERT INTO tasks (id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at, last_update_source, created_by)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
-                 ON CONFLICT(id) DO UPDATE SET
-                   project_id=excluded.project_id,
-                   title=excluded.title,
-                   status=excluded.status,
-                   priority=excluded.priority,
-                   due_date=excluded.due_date,
-                   assignee=excluded.assignee,
-                   description=excluded.description,
-                   is_public=excluded.is_public,
-                   updated_at=excluded.updated_at,
-                   last_update_source=excluded.last_update_source,
-                   created_by=COALESCE(excluded.created_by, tasks.created_by)",
-                rusqlite::params![
-                    task.id,
-                    task.project_id,
-                    task.title,
-                    task.status,
-                    task.priority,
-                    task.due_date,
-                    task.assignee,
-                    task.description,
-                    is_public,
-                    task.created_at,
-                    task.updated_at,
-                    ts_src,
-                    task.created_by,
-                ],
-            )
-            .map_err(|e| e.to_string())?;
+            _ => return Err(format!("unknown task_update action: {}", payload.action)),
         }
-        "delete" => {
-            let id = payload
-                .task_id
-                .as_ref()
-                .ok_or_else(|| "task_update: task_id is required for delete".to_string())?;
-            if let Ok(task) = query_local_task(&db, id) {
-                if !can_apply_remote_task_delete(&db, &task, payload.actor_endpoint_id.as_deref()) {
-                    return Ok(());
-                }
-            }
-            db.execute("DELETE FROM tasks WHERE id = ?1", [id])
-                .map_err(|e| e.to_string())?;
-        }
-        _ => return Err(format!("unknown task_update action: {}", payload.action)),
     }
     if let Some(app) = app {
-        let _ = app.emit("team-task-updated", ());
+        if let Some(info) = emit_conflict {
+            let _ = app.emit("team-conflict", &info);
+        } else if emit_task_updated {
+            let _ = app.emit("team-task-updated", ());
+        }
     }
     Ok(())
 }

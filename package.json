@@ -9,12 +9,13 @@
     "css:watch": "npx @tailwindcss/cli -i ./ui/src/styles.css -o ./ui/vendor/tailwind.css --minify --content ./ui/index.html --content ./ui/js/*.js --watch",
     "css:build": "npx @tailwindcss/cli -i ./ui/src/styles.css -o ./ui/vendor/tailwind.css --minify --content ./ui/index.html --content ./ui/js/*.js",
     "build:ui": "npm run css:build",
+    "build:exe": "npm run build:ui && cargo build --release --manifest-path src-tauri/Cargo.toml",
     "start": "npm run dev & npx tauri dev"
   },
   "devDependencies": {
-    "eslint": "^8.57.0",
     "@tailwindcss/cli": "^4.2.1",
     "autoprefixer": "^10.4.27",
+    "eslint": "^8.57.0",
     "http-server": "^14.1.1",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.1"

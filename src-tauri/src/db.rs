@@ -108,6 +108,12 @@ fn run_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
             created_at  TEXT DEFAULT (datetime('now'))
         );
 
+        CREATE TABLE IF NOT EXISTS team_conflict_skip_seq (
+            task_id TEXT NOT NULL,
+            seq     INTEGER NOT NULL,
+            PRIMARY KEY (task_id, seq)
+        );
+
         CREATE TABLE IF NOT EXISTS ai_chats (
             id          TEXT PRIMARY KEY,
             title       TEXT NOT NULL DEFAULT 'New Chat',

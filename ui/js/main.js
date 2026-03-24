@@ -108,46 +108,75 @@ document.addEventListener('click', e => {
 
 // ── 衝突ダイアログ (local vs local) ───────────────────────
 let _pendingConflict = null;
+const _resolvedConflictTaskIds = new Set();
+let _conflictDebounceUntil = 0;
 
 function showConflictDialog(payload) {
-  if (!payload || !(payload.taskId || payload.task_id)) return;
+  if (!payload) return;
+  const tid = payload.taskId || payload.task_id;
+  if (!tid) return;
+  if (Date.now() < _conflictDebounceUntil) return;
+  if (_resolvedConflictTaskIds.has(tid)) return;
+  if (_pendingConflict) return;
+
   _pendingConflict = payload;
   const modal = document.getElementById('conflict-modal');
-  const localTitle = document.getElementById('conflict-local-title');
-  const localStatus = document.getElementById('conflict-local-status');
-  const incomingTitle = document.getElementById('conflict-incoming-title');
-  const incomingStatus = document.getElementById('conflict-incoming-status');
-  if (!modal || !localTitle) return;
+  if (!modal) return;
   const local = payload.local || {};
   const incoming = payload.incoming || {};
-  localTitle.textContent = local.title || '-';
-  localStatus.textContent = [local.status, local.priority].filter(Boolean).join(' / ') || '-';
-  incomingTitle.textContent = incoming.title || '-';
-  incomingStatus.textContent = [incoming.status, incoming.priority].filter(Boolean).join(' / ') || '-';
+  const el = (id) => document.getElementById(id);
+  const lt = el('conflict-local-title');
+  const ls = el('conflict-local-status');
+  const it = el('conflict-incoming-title');
+  const is2 = el('conflict-incoming-status');
+  if (lt) lt.textContent = local.title || '-';
+  if (ls) ls.textContent = [local.status, local.priority].filter(Boolean).join(' / ') || '-';
+  if (it) it.textContent = incoming.title || '-';
+  if (is2) is2.textContent = [incoming.status, incoming.priority].filter(Boolean).join(' / ') || '-';
   modal.style.display = 'flex';
-  document.getElementById('conflict-keep-local').onclick = () => resolveConflict('local');
-  document.getElementById('conflict-use-incoming').onclick = () => resolveConflict('incoming');
+  try {
+    lucide.createIcons();
+  } catch (err) {
+    void err;
+  }
 }
 
 function closeConflictModal() {
-  _pendingConflict = null;
   const modal = document.getElementById('conflict-modal');
   if (modal) modal.style.display = 'none';
+  if (_pendingConflict) {
+    const tid = _pendingConflict.taskId || _pendingConflict.task_id;
+    if (tid) _resolvedConflictTaskIds.add(tid);
+  }
+  _pendingConflict = null;
+  _conflictDebounceUntil = Date.now() + 3000;
 }
 
 async function resolveConflict(choice) {
-  if (!_pendingConflict || !_isTauri) return;
+  const saved = _pendingConflict;
+  closeConflictModal();
+  if (!saved) return;
   try {
-    if (choice === 'incoming' && _pendingConflict.incoming) {
-      await apiTeamResolveConflict('incoming', _pendingConflict.incoming);
+    if (_isTauri && saved.incoming) {
+      const seq = saved.conflictSeq || saved.conflict_seq || null;
+      await apiTeamResolveConflict(choice, saved.incoming, seq);
     }
-    closeConflictModal();
-    await loadData();
-    if (typeof filterTasks === 'function') filterTasks();
   } catch (e) {
     console.error('Conflict resolve failed:', e);
   }
+  try {
+    await loadData();
+    if (typeof filterTasks === 'function') filterTasks();
+  } catch (err) {
+    void err;
+  }
 }
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && _pendingConflict) {
+    closeConflictModal();
+  }
+});
 
 // ── Data Loading ─────────────────────────────────────────
 async function reloadTasks() {
