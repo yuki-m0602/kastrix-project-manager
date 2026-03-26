@@ -51,111 +51,10 @@ function switchMainTab(tab) {
 }
 
 // ── Project Picker / Tabs ─────────────────────────────────
-function closeProjectPicker() {
-  const p = document.getElementById('project-picker');
-  const b = document.getElementById('project-picker-backdrop');
-  if (p) {
-    p.style.display = 'none';
-    p.style.pointerEvents = 'none';
-  }
-  if (b) {
-    b.style.display = 'none';
-    b.style.pointerEvents = 'none';
-  }
-}
-
-function openProjectPicker() {
-  initProjectPickerDelegation();
-  renderProjectPicker();
-  const p = document.getElementById('project-picker');
-  const b = document.getElementById('project-picker-backdrop');
-  if (b) {
-    b.style.display = 'block';
-    b.style.pointerEvents = 'auto';
-  }
-  if (p) {
-    p.style.display = 'block';
-    p.style.pointerEvents = 'auto';
-  }
-}
-
-function toggleProjectPicker() {
-  const p = document.getElementById('project-picker');
-  if (!p) return;
-  const open = p.style.display === 'block';
-  if (open) {
-    if (typeof window.brieflyBlockMainPointerEvents === 'function') {
-      window.brieflyBlockMainPointerEvents(300);
-    }
-    closeProjectPicker();
-  } else {
-    openProjectPicker();
-  }
-}
-
-let _projectPickerDelegationWired = false;
-
-function initProjectPickerDelegation() {
-  if (_projectPickerDelegationWired) return;
-  const panel = document.getElementById('project-picker');
-  const backdrop = document.getElementById('project-picker-backdrop');
-  if (!panel) return;
-  _projectPickerDelegationWired = true;
-
-  backdrop?.addEventListener(
-    'click',
-    (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (typeof window.brieflyBlockMainPointerEvents === 'function') {
-        window.brieflyBlockMainPointerEvents(300);
-      }
-      closeProjectPicker();
-    },
-    true
-  );
-
-  panel.addEventListener(
-    'click',
-    (e) => {
-      const t = e.target;
-      if (!(t instanceof Element)) return;
-      if (t.closest('.js-project-picker-close')) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (typeof window.brieflyBlockMainPointerEvents === 'function') {
-          window.brieflyBlockMainPointerEvents(300);
-        }
-        closeProjectPicker();
-        return;
-      }
-      const item = t.closest('.js-project-picker-item');
-      const pid = item?.getAttribute('data-project-id');
-      if (item && pid) {
-        e.preventDefault();
-        e.stopPropagation();
-        addProjectTab(pid);
-      }
-    },
-    true
-  );
-
-  const addBtn = document.getElementById('add-tab-btn');
-  addBtn?.addEventListener(
-    'click',
-    (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleProjectPicker();
-    },
-    true
-  );
-}
-
 function addProjectTab(projectId) {
   if (!openTabs.includes(projectId)) openTabs.push(projectId);
   setActiveTab(projectId);
-  closeProjectPicker();
+  document.getElementById('project-picker').style.display = 'none';
 }
 
 function setActiveTab(tabId) {
@@ -181,9 +80,9 @@ function renderProjectPicker() {
   const container = document.getElementById('project-picker-list');
   if (!container) return;
   container.innerHTML = projects.map(p => `
-    <button type="button" data-project-id="${escapeHtml(p.id)}" class="js-project-picker-item w-full flex items-center gap-3 p-2 rounded-xl hover:bg-[#21262d] transition-all text-left">
-      <span class="w-6 h-6 rounded-md bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-[9px] font-black">${escapeHtml(p.icon || (p.name[0] || '?').toUpperCase())}</span>
-      <span class="text-xs font-bold text-white">${escapeHtml(p.name)}</span>
+    <button onclick="addProjectTab('${p.id}')" class="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-[#21262d] transition-all">
+      <span class="w-6 h-6 rounded-md bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-[9px] font-black">${p.icon || (p.name[0] || '?').toUpperCase()}</span>
+      <span class="text-xs font-bold text-white">${p.name}</span>
     </button>
   `).join('');
 }

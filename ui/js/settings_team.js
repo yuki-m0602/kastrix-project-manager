@@ -103,12 +103,11 @@ async function renderTeamMembers() {
       apiTeamAmIHost(),
       apiTeamGetMyRole(),
     ]);
-    section.classList.remove('hidden');
     if (members.length === 0) {
-      list.innerHTML =
-        '<p class="text-xs text-[#484f58] py-2">まだメンバーはいません。チームに参加するとここに表示されます。</p>';
+      section.classList.add('hidden');
       return;
     }
+    section.classList.remove('hidden');
     const roleLabel = (r) => ({ host: 'HOST', co_host: 'CO-HOST', member: 'MEMBER' }[r] || r);
     const canKick = myRole === 'host' || myRole === 'co_host';
     list.innerHTML = members.map((m) => {
@@ -137,8 +136,7 @@ async function renderTeamMembers() {
     }).join('');
   } catch (e) {
     console.error('Failed to load members:', e);
-    section.classList.remove('hidden');
-    list.innerHTML = '<p class="text-xs text-red-400">メンバー一覧の取得に失敗しました。</p>';
+    section.classList.add('hidden');
   }
 }
 
@@ -149,16 +147,11 @@ async function renderTeamPendingStatus() {
   if (!form || !status) return;
   try {
     const pending = await apiTeamAmIPending();
-    if (pending) {
-      form.classList.add('hidden');
-      status.classList.remove('hidden');
-    } else {
-      form.classList.remove('hidden');
-      status.classList.add('hidden');
-    }
+    form.style.display = pending ? 'none' : '';
+    status.style.display = pending ? '' : 'none';
   } catch (e) {
-    form.classList.remove('hidden');
-    status.classList.add('hidden');
+    form.style.display = '';
+    status.style.display = 'none';
   }
 }
 
@@ -291,13 +284,13 @@ async function teamCreate() {
       await navigator.clipboard.writeText(result.invite_string);
       showAlert(`チームを作成しました。\n招待コード: ${result.code}\n\n参加する人にこの招待リンクを共有してください（クリップボードにコピー済み）`, 'success');
       await renderTeamInviteCodes();
-      if (typeof renderTeamPage === 'function') await renderTeamPage();
+      renderSettings();
       if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
     } else if (result && result.code) {
       await navigator.clipboard.writeText(result.code);
       showAlert(`チームを作成しました。\n招待コード: ${result.code}\n（クリップボードにコピーしました）`, 'success');
       await renderTeamInviteCodes();
-      if (typeof renderTeamPage === 'function') await renderTeamPage();
+      renderSettings();
       if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
     } else {
       console.error('teamCreate unexpected result:', result);
@@ -326,7 +319,7 @@ async function teamIssueInvite() {
         : `招待コードを発行しました。\n${result.code}\n（クリップボードにコピーしました）`;
       showAlert(msg, 'success');
       await renderTeamInviteCodes();
-      if (typeof renderTeamPage === 'function') await renderTeamPage();
+      renderSettings();
     } else {
       console.error('teamIssueInvite unexpected result:', result);
       showAlert('招待コードの発行に失敗しました。しばらく待ってから再度お試しください。', 'error');
@@ -379,7 +372,6 @@ async function teamApproveJoin(btn) {
   try {
     await apiTeamApproveJoin(btn.dataset.endpoint, btn.dataset.topic);
     await renderTeamPendingJoins();
-    await renderTeamMembers();
   } catch (e) {
     showAlert('エラー: ' + (e?.toString?.() || e), 'error');
   }
@@ -413,210 +405,10 @@ async function teamRevokeCode(btn) {
   try {
     await apiTeamRevokeInviteCode(code);
     await renderTeamInviteCodes();
-    if (typeof renderTeamPage === 'function') await renderTeamPage();
+    renderSettings();
   } catch (e) {
     showAlert('エラー: ' + (e?.toString?.() || e), 'error');
   }
-}
-
-async function fillTeamPageRoomSummary() {
-  const wrap = document.getElementById('team-page-room-summary');
-  if (!wrap || !_isTauri) return;
-  try {
-    const room = await apiTeamGetCurrentRoom();
-    const name = room.room_name || room.roomName || '未参加';
-    const st = room.status || '—';
-    wrap.innerHTML = `
-      <p class="text-[9px] font-bold uppercase tracking-wider text-[#484f58]">ルーム</p>
-      <p class="text-xs font-bold text-white mt-0.5 truncate max-w-[14rem] sm:max-w-[16rem]">${escapeHtml(String(name))}</p>
-      <p class="text-[10px] text-[#8b949e] mt-0.5">${escapeHtml(String(st))}</p>
-    `;
-  } catch (e) {
-    wrap.innerHTML = `
-      <p class="text-[9px] font-bold uppercase tracking-wider text-[#484f58]">ルーム</p>
-      <p class="text-xs text-[#484f58] mt-0.5">状態を取得できませんでした</p>
-    `;
-  }
-}
-
-/** チーム専用ページ（サイドバー「チーム」）の描画。設定からチーム UI はここへ集約。 */
-async function renderTeamPage() {
-  const container = document.getElementById('team-page-content');
-  if (!container) return;
-  if (!_isTauri) {
-    container.innerHTML =
-      '<p class="text-[#8b949e] text-sm">チーム機能はデスクトップアプリ（Tauri）でのみ利用できます。</p>';
-    return;
-  }
-
-  container.innerHTML = '<p class="text-[#8b949e] text-xs">読み込み中...</p>';
-
-  let syncMode = SYNC_MODE_AUTO;
-  let teamReady = false;
-  try {
-    const loadPromise = Promise.all([apiTeamGetSyncMode(), apiTeamIsReady()]);
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('タイムアウト（10秒）')), SETTINGS_LOAD_TIMEOUT_MS)
-    );
-    [syncMode, teamReady] = await Promise.race([loadPromise, timeoutPromise]);
-  } catch (e) {
-    console.error('renderTeamPage load failed:', e);
-    container.innerHTML =
-      '<p class="text-red-400 text-xs p-4">読み込みに失敗しました。' +
-      (e?.message || String(e)) +
-      '</p><button onclick="renderTeamPage()" class="mt-2 px-3 py-1 bg-[#21262d] rounded text-xs text-white">再試行</button>';
-    return;
-  }
-
-  container.innerHTML = `
-    <div class="max-w-3xl mx-auto space-y-5 pb-8">
-      <!-- メンバー確認をページのベース -->
-      <section class="bg-[#161b22] border border-indigo-500/25 rounded-2xl p-5 sm:p-7 shadow-[0_0_0_1px_rgba(99,102,241,0.08)]">
-        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6 mb-5">
-          <div class="min-w-0">
-            <h2 class="text-lg font-bold text-white tracking-tight">メンバー</h2>
-            <p class="text-[11px] text-[#8b949e] mt-1.5 leading-relaxed">いま参加しているメンバーとロールです。ホスト・CO-HOST は承認・キックなどの操作ができます。</p>
-          </div>
-          <div id="team-page-room-summary" class="shrink-0 rounded-xl border border-[#30363d] bg-[#0d1117] px-3 py-2.5 sm:text-right min-w-[9rem]">
-            <p class="text-[9px] font-bold uppercase tracking-wider text-[#484f58]">ルーム</p>
-            <p class="text-xs font-bold text-white mt-0.5 truncate max-w-[14rem] sm:max-w-[16rem]">読み込み中…</p>
-            <p class="text-[10px] text-[#8b949e] mt-0.5">—</p>
-          </div>
-        </div>
-        <div id="team-members-section" class="rounded-xl border border-[#30363d] bg-[#010409] p-3 sm:p-4 min-h-[4.5rem]">
-          <div id="team-members-list" class="space-y-2"></div>
-        </div>
-      </section>
-
-      <!-- 招待・参加（運用） -->
-      <section class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6">
-        <h2 class="text-sm font-bold text-white mb-1">招待・参加</h2>
-        <p class="text-[10px] text-[#8b949e] mb-4">チームの作成、招待コードの発行、他メンバーの承認、参加リクエストまでをまとめて扱います。</p>
-        <div>
-          <div id="team-buttons-status" class="text-[10px] text-[#8b949e] mb-2 min-h-[14px]">${teamReady ? '' : '<span class="text-amber-400">チーム機能を準備中...</span>'}</div>
-          <div class="flex flex-wrap items-center gap-2 mb-3">
-            <select id="team-invite-expires" class="h-8 px-3 bg-[#0d1117] border border-[#30363d] rounded-xl text-xs text-white outline-none focus:border-indigo-500" ${!teamReady ? 'disabled' : ''}>
-              <option value="15">15分</option>
-              <option value="60" selected>1時間</option>
-              <option value="1440">24時間</option>
-              <option value="0">無期限</option>
-            </select>
-            <button id="btn-team-create" onclick="teamCreate()" class="h-8 px-4 rounded-xl text-xs font-bold text-white flex items-center gap-2 ${teamReady ? 'bg-indigo-600 hover:bg-indigo-500' : 'bg-[#21262d] opacity-60 cursor-not-allowed'}" ${!teamReady ? 'disabled' : ''}>
-              <i data-lucide="users" size="14"></i>
-              チームを作成
-            </button>
-            <button id="btn-team-issue-invite" onclick="teamIssueInvite()" class="h-8 px-4 rounded-xl text-xs font-bold text-white flex items-center gap-2 ${teamReady ? 'bg-[#21262d] hover:bg-[#30363d] border border-[#30363d]' : 'bg-[#21262d] opacity-60 cursor-not-allowed border border-[#30363d]'}" ${!teamReady ? 'disabled' : ''}>
-              <i data-lucide="link" size="14"></i>
-              招待コードを発行
-            </button>
-          </div>
-        </div>
-
-        <div id="team-invite-codes-section" class="hidden mt-4 pt-4 border-t border-[#30363d]">
-          <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">発行済みコード</h3>
-          <div id="team-invite-codes-list" class="space-y-2"></div>
-        </div>
-
-        <div id="team-pending-joins-section" class="hidden mt-4 pt-4 border-t border-[#30363d]">
-          <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">参加申請（承認待ち）</h3>
-          <p class="text-[10px] text-[#8b949e] mb-2">ホスト・CO-HOST が承認または拒否できます。</p>
-          <div id="team-pending-joins-list" class="space-y-2"></div>
-        </div>
-
-        <div id="team-blocked-section" class="hidden mt-4 pt-4 border-t border-[#30363d]">
-          <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">ブロック済み（HOST のみ）</h3>
-          <div id="team-blocked-list" class="space-y-2"></div>
-        </div>
-
-        <div class="mt-4 pt-4 border-t border-[#30363d]">
-          <h3 class="text-[10px] font-bold text-[#484f58] uppercase mb-2">コード・リンクで参加</h3>
-          <p class="text-[10px] text-[#8b949e] mb-2">ホストから共有された招待を貼り付けてください。</p>
-          <div id="team-join-form" class="flex flex-col sm:flex-row gap-2">
-            <input id="team-join-code" type="text" placeholder="招待リンクまたはコード" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-white placeholder-[#484f58] font-mono">
-            <button onclick="teamJoin()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white shrink-0">参加する</button>
-          </div>
-          <div id="team-pending-status" class="hidden mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
-            <span class="text-xs text-amber-200">参加申請中です。ホストの承認をお待ちください。</span>
-            <button onclick="teamCancelJoin()" class="px-3 py-1 text-[10px] font-bold text-amber-400 hover:bg-amber-500/20 rounded-lg shrink-0">申請をキャンセル</button>
-          </div>
-        </div>
-      </section>
-
-      <!-- 設定系を1カードに集約 -->
-      <section class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6">
-        <h2 class="text-sm font-bold text-white mb-1">チーム設定</h2>
-        <p class="text-[10px] text-[#8b949e] mb-5">この端末だけに保存されるオプションです。</p>
-
-        <div class="space-y-5">
-          <div>
-            <h3 class="text-[10px] font-bold text-[#484f58] uppercase tracking-wider mb-2">同期モード</h3>
-            <p class="text-[10px] text-[#8b949e] mb-2">タスクの変更をチームに送るタイミング</p>
-            <div class="flex flex-col sm:flex-row sm:gap-6 gap-3">
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="sync-mode" value="${SYNC_MODE_AUTO}" class="accent-indigo-500" ${(syncMode || SYNC_MODE_AUTO) === SYNC_MODE_AUTO ? 'checked' : ''} onchange="saveSyncMode(this.value)">
-                <span class="text-xs">自動同期（デフォルト）</span>
-              </label>
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="sync-mode" value="${SYNC_MODE_MANUAL}" class="accent-indigo-500" ${syncMode === SYNC_MODE_MANUAL ? 'checked' : ''} onchange="saveSyncMode(this.value)">
-                <span class="text-xs">手動同期</span>
-              </label>
-            </div>
-            <p class="text-[9px] text-[#484f58] mt-2">手動のときはサイドバーに未配信数が出ます。Push で一括送信します。</p>
-          </div>
-
-          <div class="pt-5 border-t border-[#30363d]">
-            <h3 class="text-[10px] font-bold text-[#484f58] uppercase tracking-wider mb-2">自分の表示名</h3>
-            <p class="text-[10px] text-[#8b949e] mb-2">メンバー一覧に出る名前（64文字以内）</p>
-            <div id="team-display-name-section" class="hidden">
-              <div class="flex flex-col sm:flex-row gap-2">
-                <input id="team-display-name-input" type="text" placeholder="表示名を入力" maxlength="64" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-white placeholder-[#484f58]">
-                <button onclick="teamSaveDisplayName()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white shrink-0">保存</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="pt-5 border-t border-[#30363d]">
-            <h3 class="text-[10px] font-bold text-[#484f58] uppercase tracking-wider mb-2">デバッグ</h3>
-            <p class="text-[10px] text-[#8b949e] mb-2">接続・ノードの状態を確認します（開発・トラブル時用）</p>
-            <button type="button" id="team-debug-toggle" onclick="toggleTeamDebug()" class="flex items-center gap-2 text-[10px] font-bold text-[#8b949e] hover:text-white uppercase tracking-wider">
-              <i data-lucide="bug" size="12"></i>
-              詳細を表示
-            </button>
-            <div id="team-debug-panel" class="hidden mt-3 p-3 bg-[#0d1117] border border-[#30363d] rounded-xl font-mono text-[10px]">
-              <div id="team-debug-content" class="space-y-1 text-[#8b949e]">読み込み中...</div>
-              <div class="mt-2 flex gap-2">
-                <button onclick="refreshTeamDebug()" class="px-2 py-1 bg-[#21262d] hover:bg-[#30363d] rounded text-[10px] text-white">更新</button>
-                <span id="team-debug-updated" class="text-[#484f58]"></span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
-  `;
-
-  try {
-    await fillTeamPageRoomSummary();
-    await renderTeamMembers();
-    await renderTeamInviteCodes();
-    await renderTeamDisplayNameSection();
-    await renderTeamPendingJoins();
-    await renderTeamBlocked();
-    await renderTeamPendingStatus();
-    if (teamReady) {
-      updateTeamButtonsState(true, false);
-    } else {
-      try {
-        const ready = await apiTeamIsReady();
-        updateTeamButtonsState(ready, false);
-      } catch (_) {
-        updateTeamButtonsState(false, true);
-      }
-    }
-  } catch (e) {
-    console.error('renderTeamPage post-load failed:', e);
-  }
-  if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
 }
 
 let _teamDebugInterval = null;

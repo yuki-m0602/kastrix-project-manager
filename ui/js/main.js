@@ -115,11 +115,8 @@ function showConflictDialog(payload) {
   if (!payload) return;
   const tid = payload.taskId || payload.task_id;
   if (!tid) return;
-  // 解決直後のデバウンス期間中は無視（バックエンド再送信対策）
   if (Date.now() < _conflictDebounceUntil) return;
-  // 既に解決済みの同一タスクは無視
   if (_resolvedConflictTaskIds.has(tid)) return;
-  // 既に表示中なら無視
   if (_pendingConflict) return;
 
   _pendingConflict = payload;
@@ -136,30 +133,27 @@ function showConflictDialog(payload) {
   if (ls) ls.textContent = [local.status, local.priority].filter(Boolean).join(' / ') || '-';
   if (it) it.textContent = incoming.title || '-';
   if (is2) is2.textContent = [incoming.status, incoming.priority].filter(Boolean).join(' / ') || '-';
-  // 表示: hidden クラス除去 + display:flex
-  modal.classList.remove('hidden');
   modal.style.display = 'flex';
-  try { lucide.createIcons(); } catch (_) {}
+  try {
+    lucide.createIcons();
+  } catch (err) {
+    void err;
+  }
 }
 
 function closeConflictModal() {
   const modal = document.getElementById('conflict-modal');
-  if (modal) {
-    modal.style.display = 'none';
-    modal.classList.add('hidden');
-  }
+  if (modal) modal.style.display = 'none';
   if (_pendingConflict) {
     const tid = _pendingConflict.taskId || _pendingConflict.task_id;
     if (tid) _resolvedConflictTaskIds.add(tid);
   }
   _pendingConflict = null;
-  // 3秒間は同一イベントの再表示を抑止
   _conflictDebounceUntil = Date.now() + 3000;
 }
 
 async function resolveConflict(choice) {
   const saved = _pendingConflict;
-  // 何よりも先にモーダルを閉じる
   closeConflictModal();
   if (!saved) return;
   try {
@@ -173,10 +167,11 @@ async function resolveConflict(choice) {
   try {
     await loadData();
     if (typeof filterTasks === 'function') filterTasks();
-  } catch (_) {}
+  } catch (err) {
+    void err;
+  }
 }
 
-// Escape キーでモーダルを閉じる
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && _pendingConflict) {
     closeConflictModal();

@@ -137,7 +137,6 @@ function setProjSort(value, label) {
 }
 
 function openProjectDetailModal(projectId) {
-  initProjectDetailModalDelegation();
   const project = localProjects.find(p => String(p.id) === String(projectId));
   if (!project) return;
   const lang = langColors[(project.language || '').toLowerCase()] || { label: '?' };
@@ -155,11 +154,10 @@ function openProjectDetailModal(projectId) {
       readmeEl.innerHTML = '<p class="text-[#8b949e] text-xs">README not available</p>';
     });
   }
-  const modal = document.getElementById('project-detail-modal');
+  const modal   = document.getElementById('project-detail-modal');
   const content = document.getElementById('project-detail-modal-content');
   if (modal && content) {
     modal.style.display = '';
-    modal.style.pointerEvents = 'auto';
     content.classList.remove('translate-x-full');
     _pushModalHistory('project');
   }
@@ -168,52 +166,14 @@ function openProjectDetailModal(projectId) {
 function closeProjectDetailModal() {
   const modal = document.getElementById('project-detail-modal');
   const content = document.getElementById('project-detail-modal-content');
-  if (modal) {
-    modal.style.display = 'none';
-    modal.style.pointerEvents = 'none';
-  }
   if (content) {
+    modal.style.display = 'none';
     content.classList.add('translate-x-full');
   }
   if (_modalHistory === 'project') {
     _modalHistory = null;
     history.back();
   }
-}
-
-let _projectDetailModalDelegationWired = false;
-
-/** WebView で onclick が効かない・ゴーストクリック対策: capture で閉じる操作を委譲 */
-function initProjectDetailModalDelegation() {
-  if (_projectDetailModalDelegationWired) return;
-  const modal = document.getElementById('project-detail-modal');
-  if (!modal) return;
-  _projectDetailModalDelegationWired = true;
-  modal.addEventListener(
-    'click',
-    (e) => {
-      const t = e.target;
-      if (!(t instanceof Element)) return;
-      if (t.id === 'project-detail-modal-backdrop') {
-        e.preventDefault();
-        e.stopPropagation();
-        if (typeof window.brieflyBlockMainPointerEvents === 'function') {
-          window.brieflyBlockMainPointerEvents(500);
-        }
-        closeProjectDetailModal();
-        return;
-      }
-      if (t.closest('.js-project-detail-dismiss')) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (typeof window.brieflyBlockMainPointerEvents === 'function') {
-          window.brieflyBlockMainPointerEvents(500);
-        }
-        closeProjectDetailModal();
-      }
-    },
-    true
-  );
 }
 
 function openProjectModal(projectId) {
