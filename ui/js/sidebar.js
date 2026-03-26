@@ -1,125 +1,30 @@
 // ── Sidebar ───────────────────────────────────────────────
-async function updateSidebarUnsyncedBadge() {
-  const badge = document.getElementById('sidebar-unsynced-badge');
-  const pushSection = document.getElementById('sidebar-push-section');
-  const pushCount = document.getElementById('sidebar-push-count');
-  if (!badge || !pushSection || !pushCount) return;
-  if (!_isTauri || !window.__TAURI__) {
-    badge.classList.add('hidden');
-    pushSection.classList.add('hidden');
-    return;
-  }
-  try {
-    const [syncMode, count] = await Promise.all([
-      apiTeamGetSyncMode(),
-      apiTeamGetUnsyncedCount(),
-    ]);
-    const isManual = syncMode === SYNC_MODE_MANUAL;
-    if (isManual && count > 0) {
-      badge.textContent = String(count);
-      badge.classList.remove('hidden');
-      pushSection.classList.remove('hidden');
-      pushCount.textContent = String(count);
-    } else {
-      badge.classList.add('hidden');
-      if (isManual) {
-        pushSection.classList.remove('hidden');
-        pushCount.textContent = '0';
-      } else {
-        pushSection.classList.add('hidden');
-      }
-    }
-  } catch (e) {
-    badge.classList.add('hidden');
-    pushSection.classList.add('hidden');
-  }
-}
-
-async function teamPushUnsynced() {
-  if (!_isTauri || !window.__TAURI__) return;
-  try {
-    await apiTeamPushUnsynced();
-    await updateSidebarUnsyncedBadge();
-  } catch (e) {
-    console.error('Push failed:', e);
-    showAlert('送信に失敗しました: ' + (e?.message || e), 'error');
-  }
-}
-
-async function updateSidebarRoomInfo() {
-  const roomNameEl = document.getElementById('sidebar-room-name');
-  const syncDotEl = document.getElementById('sidebar-sync-dot');
-  const syncLabelEl = document.getElementById('sidebar-sync-label');
-  if (!roomNameEl || !syncDotEl || !syncLabelEl) return;
-  if (!_isTauri || !window.__TAURI__) {
-    roomNameEl.textContent = '未参加';
-    syncLabelEl.textContent = '未参加';
-    syncDotEl.className = 'w-1.5 h-1.5 rounded-full bg-[#484f58]';
-    return;
-  }
-  try {
-    const info = await apiTeamGetCurrentRoom();
-    roomNameEl.textContent = info.room_name || info.roomName || '未参加';
-    syncLabelEl.textContent = info.status || '未参加';
-    syncDotEl.title = info.status || '未参加';
-    if (info.status === '同期中') {
-      syncDotEl.className = 'w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse';
-    } else if (info.status === '接続中') {
-      syncDotEl.className = 'w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse';
-    } else {
-      syncDotEl.className = 'w-1.5 h-1.5 rounded-full bg-[#484f58]';
-    }
-  } catch (e) {
-    roomNameEl.textContent = '未参加';
-    syncLabelEl.textContent = '未参加';
-    syncDotEl.className = 'w-1.5 h-1.5 rounded-full bg-[#484f58]';
-  }
-  await updateSidebarUnsyncedBadge();
-}
-
-function toggleSidebarVisibility() {
-  if (window.innerWidth < 1024) {
-    const sidebar = document.getElementById('sidebar');
-    const isOpen = sidebar && sidebar.style.transform === 'translateX(0)';
-    if (isOpen) closeMobileSidebar();
-    else openMobileSidebar();
-  } else {
-    toggleSidebar();
-  }
-}
-
 function toggleSidebar() {
   isSidebarCollapsed = !isSidebarCollapsed;
   const sidebar    = document.getElementById('sidebar');
-  const mainArea   = document.getElementById('main-area');
   const logoText   = document.getElementById('logo-text');
-  const roomInfo   = document.getElementById('sidebar-room-info');
   const navLabels  = document.querySelectorAll('.nav-label');
   if (isSidebarCollapsed) {
     sidebar.style.width = '64px';
-    mainArea.style.paddingLeft = '80px';
-    logoText.style.display = 'none';
-    if (roomInfo) roomInfo.style.display = 'none';
-    navLabels.forEach(l => l.style.display = 'none');
+    logoText.classList.add('hidden');
+    navLabels.forEach(l => l.classList.add('hidden'));
   } else {
     sidebar.style.width = '224px';
-    mainArea.style.paddingLeft = '240px';
-    logoText.style.display = '';
-    if (roomInfo) roomInfo.style.display = 'flex';
-    navLabels.forEach(l => l.style.display = '');
+    logoText.classList.remove('hidden');
+    navLabels.forEach(l => l.classList.remove('hidden'));
   }
 }
 
 function openMobileSidebar() {
   const sidebar = document.getElementById('sidebar');
   sidebar.style.transform = 'translateX(0)';
-  document.getElementById('mobile-overlay').style.display = '';
+  document.getElementById('mobile-overlay').classList.remove('hidden');
 }
 
 function closeMobileSidebar() {
   const sidebar = document.getElementById('sidebar');
   sidebar.style.transform = 'translateX(calc(-100% - 8px))';
-  document.getElementById('mobile-overlay').style.display = 'none';
+  document.getElementById('mobile-overlay').classList.add('hidden');
 }
 
 function setActiveMenu(menu) {
@@ -132,8 +37,8 @@ function setActiveMenu(menu) {
     projects:  'Projects',
     logs:      'Activity Logs',
     inbox:     'Inbox',
-    ai:        'AI',
     analytics: 'Analytics',
+    team:      'Team',
     settings:  'Settings'
   };
   const titleEl = document.getElementById('mobile-page-title');
@@ -149,39 +54,17 @@ function setActiveMenu(menu) {
     overview:  'view-overview',
     logs:      'view-logs',
     inbox:     'view-inbox',
-    ai:        'view-ai',
     analytics: 'view-analytics',
+    team:      'view-team',
     settings:  'view-settings'
   };
-  const displayMap = {
-    overview:  'flex',
-    logs:      'flex',
-    inbox:     'flex',
-    ai:        'flex',
-    analytics: 'flex',
-    settings:  'flex'
-  };
-  document.querySelectorAll('.view-section').forEach(s => s.style.display = 'none');
-  const targetView = document.getElementById(viewMap[actualView]);
-  if (targetView) {
-    targetView.style.display = displayMap[actualView] || 'flex';
-  }
-  if (actualView === 'overview' || isProjects) switchMainTab('projects');
+  document.querySelectorAll('.view-section').forEach(s => s.classList.add('hidden'));
+  document.getElementById(viewMap[actualView])?.classList.remove('hidden');
+  if (isProjects) switchMainTab('projects');
   if (actualView === 'logs' && typeof renderLogs === 'function') renderLogs();
   if (actualView === 'settings' && typeof renderSettings === 'function') renderSettings();
   if (actualView === 'analytics' && typeof renderAnalytics === 'function') renderAnalytics();
   if (actualView === 'inbox' && typeof renderInbox === 'function') renderInbox();
-  if (actualView === 'ai' && typeof initAiView === 'function') initAiView();
-  // Logs/Inbox/Analytics/Settings/AI ではメインヘッダーを非表示（各ビューにメニューボタンあり）
-  const mainHeader = document.getElementById('main-header');
-  if (mainHeader) {
-    const hideMainHeader = ['logs', 'inbox', 'ai', 'analytics', 'settings'].includes(actualView);
-    mainHeader.style.display = hideMainHeader ? 'none' : '';
-  }
-  if (window.innerWidth < 1024) {
-    closeMobileSidebar();
-  } else {
-    const sidebar = document.getElementById('sidebar');
-    sidebar.style.transform = '';
-  }
+  if (actualView === 'team' && typeof renderTeamView === 'function') renderTeamView();
+  closeMobileSidebar();
 }

@@ -1,5 +1,115 @@
 // ── Settings: Team ────────────────────────────────────────
 
+async function renderTeamView() {
+  const container = document.getElementById('team-content');
+  if (!container) return;
+
+  const [syncMode, ready] = await Promise.all([
+    _isTauri ? apiTeamGetSyncMode() : Promise.resolve(SYNC_MODE_AUTO),
+    _isTauri ? apiTeamIsReady() : Promise.resolve(false),
+  ]);
+
+  container.innerHTML = `
+    <!-- Display Name -->
+    <section id="team-display-name-section" class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6 hidden">
+      <h2 class="text-sm font-bold text-white mb-1">表示名</h2>
+      <p class="text-[10px] text-[#8b949e] mb-3">チーム内で表示される名前を設定します。</p>
+      <div class="flex gap-2">
+        <input id="team-display-name-input" type="text" placeholder="表示名を入力" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-white outline-none focus:border-indigo-500" maxlength="64">
+        <button onclick="teamSaveDisplayName()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-[10px] font-bold text-white">保存</button>
+      </div>
+    </section>
+
+    <!-- Create / Invite -->
+    <section class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6">
+      <h2 class="text-sm font-bold text-white mb-1">チーム作成・招待</h2>
+      <p class="text-[10px] text-[#8b949e] mb-3">新しいチームを作成するか、招待コードを発行します。</p>
+      <div id="team-buttons-status" class="mb-3"></div>
+      <div class="flex flex-wrap items-center gap-2">
+        <select id="team-invite-expires" class="bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-white outline-none focus:border-indigo-500">
+          <option value="30">30分</option>
+          <option value="60" selected>1時間</option>
+          <option value="180">3時間</option>
+          <option value="1440">24時間</option>
+          <option value="0">無期限</option>
+        </select>
+        <button id="btn-team-create" onclick="teamCreate()" class="h-8 px-4 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white flex items-center gap-2">
+          <i data-lucide="plus" size="14"></i> チーム作成
+        </button>
+        <button id="btn-team-issue-invite" onclick="teamIssueInvite()" class="h-8 px-4 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-xs font-bold text-white flex items-center gap-2">
+          <i data-lucide="link" size="14"></i> 招待コード発行
+        </button>
+      </div>
+    </section>
+
+    <!-- Join -->
+    <section class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6">
+      <h2 class="text-sm font-bold text-white mb-1">チームに参加</h2>
+      <p class="text-[10px] text-[#8b949e] mb-3">招待コードを入力してチームに参加します。</p>
+      <div id="team-join-form" class="flex gap-2">
+        <input id="team-join-code" type="text" placeholder="KASTRIX-..." class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-white outline-none focus:border-indigo-500">
+        <button onclick="teamJoin()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-[10px] font-bold text-white">参加申請</button>
+      </div>
+      <div id="team-pending-status" class="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl mt-2" style="display:none;">
+        <span class="text-xs text-amber-400 font-bold">参加申請中…</span>
+        <button onclick="teamCancelJoin()" class="px-2 py-1 text-[9px] font-bold text-red-400 hover:bg-red-500/10 rounded-lg">キャンセル</button>
+      </div>
+    </section>
+
+    <!-- Invite Codes -->
+    <section id="team-invite-codes-section" class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6 hidden">
+      <h2 class="text-sm font-bold text-white mb-3">発行済み招待コード</h2>
+      <div id="team-invite-codes-list" class="space-y-2"></div>
+    </section>
+
+    <!-- Pending Joins (Host) -->
+    <section id="team-pending-joins-section" class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6 hidden">
+      <h2 class="text-sm font-bold text-white mb-3">参加申請</h2>
+      <div id="team-pending-joins-list" class="space-y-2"></div>
+    </section>
+
+    <!-- Members -->
+    <section id="team-members-section" class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6 hidden">
+      <h2 class="text-sm font-bold text-white mb-3">メンバー</h2>
+      <div id="team-members-list" class="space-y-2"></div>
+    </section>
+
+    <!-- Blocked -->
+    <section id="team-blocked-section" class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6 hidden">
+      <h2 class="text-sm font-bold text-white mb-3">ブロック</h2>
+      <div id="team-blocked-list" class="space-y-2"></div>
+    </section>
+
+    <!-- Sync Mode -->
+    <section class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6">
+      <h2 class="text-sm font-bold text-white mb-1">同期モード</h2>
+      <p class="text-[10px] text-[#8b949e] mb-3">タスク変更の同期方法を選択します。</p>
+      <select onchange="saveSyncMode(this.value)" class="bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-white outline-none focus:border-indigo-500">
+        <option value="auto" ${syncMode !== 'manual' ? 'selected' : ''}>自動同期</option>
+        <option value="manual" ${syncMode === 'manual' ? 'selected' : ''}>手動同期</option>
+      </select>
+    </section>
+
+    <!-- Debug -->
+    <section class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6">
+      <button onclick="toggleTeamDebug()" class="text-[10px] text-[#484f58] hover:text-[#8b949e] font-bold">デバッグ情報を表示</button>
+      <div id="team-debug-panel" class="hidden mt-3 p-3 bg-[#0d1117] border border-[#30363d] rounded-xl text-[10px] font-mono text-[#8b949e]">
+        <div id="team-debug-content">...</div>
+        <div class="mt-2 text-[8px] text-[#484f58]">最終更新: <span id="team-debug-updated">-</span></div>
+      </div>
+    </section>
+  `;
+
+  lucide.createIcons();
+  updateTeamButtonsState(ready, false);
+  renderTeamDisplayNameSection();
+  renderTeamInviteCodes();
+  renderTeamPendingJoins();
+  renderTeamMembers();
+  renderTeamBlocked();
+  renderTeamPendingStatus();
+}
+
 function formatExpiresAt(isoStr) {
   if (!isoStr) return '';
   try {

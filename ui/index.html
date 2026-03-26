@@ -296,6 +296,10 @@
             <i data-lucide="sparkles" size="16"></i>
             <span class="nav-label font-bold tracking-wide">AI</span>
           </button>
+          <button onclick="setActiveMenu('team')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="team">
+            <i data-lucide="users" size="16"></i>
+            <span class="nav-label font-bold tracking-wide">Team</span>
+          </button>
         </div>
         <div id="sidebar-push-section" class="hidden pt-3 border-t border-[#30363d]/50">
           <button id="sidebar-push-btn" onclick="teamPushUnsynced()" class="flex items-center justify-center w-full p-3 rounded-xl gap-2 text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-all">
@@ -843,6 +847,20 @@
             <div class="w-10 shrink-0 lg:w-0 lg:overflow-hidden"></div>
           </header>
           <div id="analytics-content" class="flex-1 overflow-auto custom-scrollbar p-4 sm:p-6 space-y-4"></div>
+        </div>
+
+        <!-- Team View -->
+        <div id="view-team" class="view-section absolute inset-0 flex flex-col overflow-hidden min-h-0" style="display: none;">
+          <header class="h-14 shrink-0 bg-[#010409] border-b border-[#30363d] flex items-center justify-between px-3 sm:px-6">
+            <div class="w-10 shrink-0 lg:w-0 lg:overflow-hidden">
+              <button onclick="toggleSidebarVisibility()" class="p-2 hover:bg-[#161b22] rounded-xl text-[#8b949e] hover:text-white transition-all lg:hidden" title="メニュー">
+                <i data-lucide="menu" size="16"></i>
+              </button>
+            </div>
+            <h1 class="flex-1 text-center font-black text-[10px] tracking-[0.15em] text-[#c9d1d9] uppercase">Team</h1>
+            <div class="w-10 shrink-0 lg:w-0 lg:overflow-hidden"></div>
+          </header>
+          <div id="team-content" class="flex-1 overflow-auto custom-scrollbar p-4 sm:p-6 space-y-4"><p class="text-[#8b949e] text-xs">読み込み中...</p></div>
         </div>
 
         <!-- Settings View -->
