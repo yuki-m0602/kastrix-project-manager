@@ -265,8 +265,8 @@
     <div class="shrink-0 border-b border-[#30363d] px-3 py-2">
       <div class="flex items-center justify-between">
         <span id="logo-text" class="font-black text-[11px] tracking-[0.25em] text-[#484f58] ml-2 uppercase">Kastrix</span>
-        <button onclick="toggleSidebar()" class="hidden lg:block p-2 hover:bg-[#161b22] rounded-xl text-[#484f58] hover:text-white transition-all">
-          <i data-lucide="chevron-left" size="14"></i>
+        <button onclick="toggleSidebar()" class="hidden lg:block p-2 hover:bg-[#161b22] rounded-xl text-[#484f58] hover:text-white transition-all" title="サイドバー開閉">
+          <i id="sidebar-toggle-icon" data-lucide="chevron-left" size="14" class="transition-transform duration-200"></i>
         </button>
       </div>
       <div id="sidebar-room-info" class="mt-1.5 ml-2 flex items-center gap-2 min-w-0">
@@ -304,6 +304,10 @@
           </button>
         </div>
         <div class="pt-3 border-t border-[#30363d]/50 space-y-0.5">
+          <button onclick="setActiveMenu('team')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="team">
+            <i data-lucide="users" size="16"></i>
+            <span class="nav-label font-bold tracking-wide">Team</span>
+          </button>
           <button onclick="setActiveMenu('analytics')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="analytics">
             <i data-lucide="bar-chart-3" size="16"></i>
             <span class="nav-label font-bold tracking-wide">Analytics</span>
@@ -351,6 +355,9 @@
             </div>
             <div class="border-l border-[#30363d] h-4 mx-1"></div>
             <div id="tabs-list" class="flex items-center gap-1"></div>
+            <button type="button" id="add-tab-btn" class="flex items-center justify-center h-6 sm:h-7 w-6 sm:w-7 shrink-0 rounded-lg sm:rounded-xl border border-dashed border-[#484f58] text-[#8b949e] hover:text-white hover:border-[#8b949e] hover:bg-[#161b22] transition-all" title="プロジェクトタブを追加">
+              <span class="text-sm font-bold leading-none">+</span>
+            </button>
           </div>
         
         <!-- Header -->
@@ -590,20 +597,22 @@
         </div>
       </div>
 
-      <!-- Project Picker Dropdown -->
-      <div id="project-picker" class="absolute top-12 left-[200px] w-56 bg-[#161b22] border border-[#30363d] rounded-2xl shadow-2xl z-50" style="display: none;">
-        <div class="p-3 border-b border-[#30363d]">
+      <!-- Project Picker（背面タップで閉じる） -->
+      <div id="project-picker-backdrop" class="absolute left-0 right-0 bottom-0 top-9 sm:top-10 z-[80] bg-black/45 pointer-events-auto" style="display: none;" aria-hidden="true"></div>
+      <div id="project-picker" class="absolute top-12 left-2 sm:left-[200px] w-[min(100%-1rem,14rem)] max-h-[min(70vh,24rem)] flex flex-col bg-[#161b22] border border-[#30363d] rounded-2xl shadow-2xl z-[85] overflow-hidden pointer-events-auto" style="display: none;">
+        <div class="p-3 border-b border-[#30363d] flex items-center justify-between gap-2 shrink-0">
           <p class="text-[10px] font-black text-[#484f58] uppercase tracking-widest">Select Project</p>
+          <button type="button" class="js-project-picker-close text-[10px] font-bold text-[#8b949e] hover:text-white px-2 py-1 rounded-lg hover:bg-[#21262d]">閉じる</button>
         </div>
-        <div id="project-picker-list" class="p-2 space-y-1">
+        <div id="project-picker-list" class="p-2 space-y-1 overflow-y-auto custom-scrollbar">
           <!-- Dynamically rendered by renderProjectPicker() -->
         </div>
       </div>
 
 <!-- Project Detail Modal -->
-      <div id="project-detail-modal" class="fixed inset-0 z-50" style="display: none;">
-        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeProjectDetailModal()"></div>
-        <div class="absolute right-0 top-0 h-full w-full sm:w-[480px] bg-[#0d1117] border-l border-[#30363d] shadow-2xl transform transition-transform duration-300 translate-x-full" id="project-detail-modal-content">
+      <div id="project-detail-modal" class="fixed inset-0 z-[70]" style="display: none; pointer-events: none;">
+        <div id="project-detail-modal-backdrop" class="absolute inset-0 z-0 bg-black/60 backdrop-blur-sm" aria-hidden="true"></div>
+        <div class="absolute right-0 top-0 z-10 h-full w-full sm:w-[480px] bg-[#0d1117] border-l border-[#30363d] shadow-2xl transform transition-transform duration-300 translate-x-full" id="project-detail-modal-content">
           <div class="h-full flex flex-col">
             <!-- Modal Header -->
             <div class="h-12 border-b border-[#30363d] flex items-center justify-between px-4 bg-[#161b22]">
@@ -611,7 +620,7 @@
                 <span id="project-modal-lang-badge" class="px-2 py-0.5 rounded text-[9px] font-black bg-[#2b748920] text-[#2b7489]">TS</span>
                 <h2 id="project-modal-name" class="font-bold text-sm text-white">Project Name</h2>
               </div>
-              <button onclick="closeProjectDetailModal()" class="p-2 hover:bg-[#21262d] rounded-lg text-[#8b949e] hover:text-white transition-colors">
+              <button type="button" class="js-project-detail-dismiss p-2 hover:bg-[#21262d] rounded-lg text-[#8b949e] hover:text-white transition-colors" aria-label="閉じる">
                 <i data-lucide="x" size="16"></i>
               </button>
             </div>
@@ -674,14 +683,14 @@
               </div>
             </div>
             <div class="h-12 border-t border-[#30363d] flex items-center justify-end gap-2 sm:gap-3 px-4 sm:px-6 bg-[#161b22]">
-              <button onclick="closeProjectDetailModal()" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-bold text-[#8b949e] hover:text-white transition-colors">Close</button>
+              <button type="button" class="js-project-detail-dismiss px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs font-bold text-[#8b949e] hover:text-white transition-colors">Close</button>
             </div>
           </div>
         </div>
       </div>
 
       <!-- Task Edit/Create Modal -->
-      <div id="task-edit-modal" class="fixed inset-0 z-50" style="display: none;">
+      <div id="task-edit-modal" class="fixed inset-0 z-[70]" style="display: none;">
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeTaskEditModal()"></div>
         <div class="absolute right-0 top-0 h-full w-full sm:w-[480px] bg-[#0d1117] border-l border-[#30363d] shadow-2xl transform transition-transform duration-300 translate-x-full flex flex-col" id="task-edit-modal-content">
           <div class="h-12 border-b border-[#30363d] flex items-center justify-between px-4 bg-[#161b22]">
@@ -831,6 +840,20 @@
           <div id="inbox-content" class="flex-1 overflow-auto custom-scrollbar p-4 sm:p-6 space-y-2"></div>
         </div>
 
+        <!-- Team View -->
+        <div id="view-team" class="view-section absolute inset-0 flex flex-col overflow-hidden min-h-0" style="display: none;">
+          <header class="h-14 shrink-0 bg-[#010409] border-b border-[#30363d] flex items-center justify-between px-3 sm:px-6">
+            <div class="w-10 shrink-0 lg:w-0 lg:overflow-hidden">
+              <button onclick="toggleSidebarVisibility()" class="p-2 hover:bg-[#161b22] rounded-xl text-[#8b949e] hover:text-white transition-all lg:hidden" title="メニュー">
+                <i data-lucide="menu" size="16"></i>
+              </button>
+            </div>
+            <h1 class="flex-1 text-center font-black text-[10px] tracking-[0.15em] text-[#c9d1d9] uppercase">Team</h1>
+            <div class="w-10 shrink-0 lg:w-0 lg:overflow-hidden"></div>
+          </header>
+          <div id="team-page-content" class="flex-1 overflow-auto custom-scrollbar p-4 sm:p-6 space-y-4"></div>
+        </div>
+
         <!-- Analytics View -->
         <div id="view-analytics" class="view-section absolute inset-0 flex flex-col overflow-hidden min-h-0" style="display: none;">
           <header class="h-14 shrink-0 bg-[#010409] border-b border-[#30363d] flex items-center justify-between px-3 sm:px-6">
@@ -861,11 +884,13 @@
       </div>
       <!-- /view-container -->
     </div>
+    </div>
+    <!-- /main-area（未閉鎖だと overflow:hidden 配下にモーダルが残り、クリックが効かない環境がある） -->
 
-<!-- 衝突解決ダイアログ (local vs local) -->
-<div id="conflict-modal" class="fixed inset-0 z-[60] flex items-center justify-center p-4" style="display: none;">
-  <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeConflictModal()"></div>
-  <div class="relative bg-[#161b22] border border-[#30363d] rounded-2xl shadow-2xl max-w-lg w-full p-6">
+<!-- 衝突解決ダイアログ (local vs local) — body 直下相当（メインエリア外） -->
+<div id="conflict-modal" class="fixed inset-0 z-[100] flex items-center justify-center p-4" style="display: none; pointer-events: none;">
+  <div id="conflict-modal-backdrop" class="absolute inset-0 z-0 bg-black/60 backdrop-blur-sm" aria-hidden="true"></div>
+  <div class="relative z-10 bg-[#161b22] border border-[#30363d] rounded-2xl shadow-2xl max-w-lg w-full p-6">
     <h3 class="text-sm font-bold text-white mb-2">タスクの競合</h3>
     <p class="text-[10px] text-[#8b949e] mb-4">同じタスクが別の端末でも変更されています。どちらを採用しますか？</p>
     <div class="grid grid-cols-2 gap-3 mb-4">
@@ -881,8 +906,8 @@
       </div>
     </div>
     <div class="flex gap-2 justify-end">
-      <button id="conflict-keep-local" type="button" onclick="resolveConflict('local')" class="px-4 py-2 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-xs font-bold text-white">ローカルを保持</button>
-      <button id="conflict-use-incoming" type="button" onclick="resolveConflict('incoming')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white">受信を採用</button>
+      <button id="conflict-keep-local" type="button" class="px-4 py-2 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-xs font-bold text-white">ローカルを保持</button>
+      <button id="conflict-use-incoming" type="button" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white">受信を採用</button>
     </div>
   </div>
 </div>

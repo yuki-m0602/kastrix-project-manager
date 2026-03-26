@@ -179,18 +179,22 @@ async function openTaskModal(taskId) {
       delBtn.style.display = '';
     }
   }
-  const modal   = document.getElementById('task-modal');
+  const modal = document.getElementById('task-modal');
   const content = document.getElementById('task-modal-content');
-  modal.style.display = '';
-  content.classList.remove('translate-x-full');
+  if (modal) modal.style.display = '';
+  if (modal) modal.style.pointerEvents = 'auto';
+  if (content) content.classList.remove('translate-x-full');
   _pushModalHistory('task');
 }
 
 function closeTaskModal() {
   const modal = document.getElementById('task-modal');
   const content = document.getElementById('task-modal-content');
-  modal.style.display = 'none';
-  content.classList.add('translate-x-full');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.style.pointerEvents = 'none';
+  }
+  if (content) content.classList.add('translate-x-full');
   if (_modalHistory === 'task') {
     _modalHistory = null;
     history.back();
@@ -205,7 +209,14 @@ async function openCreateTaskModal() {
   document.getElementById('task-edit-priority').value = 'medium';
   document.getElementById('task-edit-due').value = '';
   const assigneeEl = document.getElementById('task-edit-assignee');
-  const displayName = typeof apiTeamGetMyDisplayName === 'function' ? await apiTeamGetMyDisplayName() : null;
+  let displayName = null;
+  try {
+    if (typeof apiTeamGetMyDisplayName === 'function') {
+      displayName = await apiTeamGetMyDisplayName();
+    }
+  } catch (e) {
+    console.error('openCreateTaskModal: display name failed:', e);
+  }
   assigneeEl.value = displayName || '';
   document.getElementById('task-edit-desc').value = '';
   document.getElementById('task-edit-public').checked = true;
@@ -213,8 +224,9 @@ async function openCreateTaskModal() {
   _populateProjectDropdown();
   const modal = document.getElementById('task-edit-modal');
   const content = document.getElementById('task-edit-modal-content');
-  modal.style.display = '';
-  content.classList.remove('translate-x-full');
+  if (modal) modal.style.display = '';
+  if (modal) modal.style.pointerEvents = 'auto';
+  if (content) content.classList.remove('translate-x-full');
   _pushModalHistory('task-edit');
 }
 
@@ -233,8 +245,9 @@ function openEditTaskModal(taskId) {
   document.getElementById('task-edit-project').value = task.projectId || '';
   const modal = document.getElementById('task-edit-modal');
   const content = document.getElementById('task-edit-modal-content');
-  modal.style.display = '';
-  content.classList.remove('translate-x-full');
+  if (modal) modal.style.display = '';
+  if (modal) modal.style.pointerEvents = 'auto';
+  if (content) content.classList.remove('translate-x-full');
   _pushModalHistory('task-edit');
 }
 
@@ -249,8 +262,11 @@ function _populateProjectDropdown() {
 function closeTaskEditModal() {
   const modal = document.getElementById('task-edit-modal');
   const content = document.getElementById('task-edit-modal-content');
-  if (content) {
+  if (modal) {
     modal.style.display = 'none';
+    modal.style.pointerEvents = 'none';
+  }
+  if (content) {
     content.classList.add('translate-x-full');
   }
   if (_modalHistory === 'task-edit') {

@@ -75,6 +75,13 @@ async function updateSidebarRoomInfo() {
     syncDotEl.className = 'w-1.5 h-1.5 rounded-full bg-[#484f58]';
   }
   await updateSidebarUnsyncedBadge();
+  if (typeof fillTeamPageRoomSummary === 'function') {
+    try {
+      await fillTeamPageRoomSummary();
+    } catch (err) {
+      void err;
+    }
+  }
 }
 
 function toggleSidebarVisibility() {
@@ -94,18 +101,21 @@ function toggleSidebar() {
   const mainArea   = document.getElementById('main-area');
   const logoText   = document.getElementById('logo-text');
   const roomInfo   = document.getElementById('sidebar-room-info');
+  const toggleIcon = document.getElementById('sidebar-toggle-icon');
   const navLabels  = document.querySelectorAll('.nav-label');
   if (isSidebarCollapsed) {
     sidebar.style.width = '64px';
     mainArea.style.paddingLeft = '80px';
     logoText.style.display = 'none';
     if (roomInfo) roomInfo.style.display = 'none';
+    if (toggleIcon) toggleIcon.style.transform = 'rotate(180deg)';
     navLabels.forEach(l => l.style.display = 'none');
   } else {
     sidebar.style.width = '224px';
     mainArea.style.paddingLeft = '240px';
     logoText.style.display = '';
     if (roomInfo) roomInfo.style.display = 'flex';
+    if (toggleIcon) toggleIcon.style.transform = 'rotate(0deg)';
     navLabels.forEach(l => l.style.display = '');
   }
 }
@@ -133,6 +143,7 @@ function setActiveMenu(menu) {
     logs:      'Activity Logs',
     inbox:     'Inbox',
     ai:        'AI',
+    team:      'チーム',
     analytics: 'Analytics',
     settings:  'Settings'
   };
@@ -150,6 +161,7 @@ function setActiveMenu(menu) {
     logs:      'view-logs',
     inbox:     'view-inbox',
     ai:        'view-ai',
+    team:      'view-team',
     analytics: 'view-analytics',
     settings:  'view-settings'
   };
@@ -158,6 +170,7 @@ function setActiveMenu(menu) {
     logs:      'flex',
     inbox:     'flex',
     ai:        'flex',
+    team:      'flex',
     analytics: 'flex',
     settings:  'flex'
   };
@@ -169,13 +182,14 @@ function setActiveMenu(menu) {
   if (actualView === 'overview' || isProjects) switchMainTab('projects');
   if (actualView === 'logs' && typeof renderLogs === 'function') renderLogs();
   if (actualView === 'settings' && typeof renderSettings === 'function') renderSettings();
+  if (actualView === 'team' && typeof renderTeamPage === 'function') renderTeamPage();
   if (actualView === 'analytics' && typeof renderAnalytics === 'function') renderAnalytics();
   if (actualView === 'inbox' && typeof renderInbox === 'function') renderInbox();
   if (actualView === 'ai' && typeof initAiView === 'function') initAiView();
   // Logs/Inbox/Analytics/Settings/AI ではメインヘッダーを非表示（各ビューにメニューボタンあり）
   const mainHeader = document.getElementById('main-header');
   if (mainHeader) {
-    const hideMainHeader = ['logs', 'inbox', 'ai', 'analytics', 'settings'].includes(actualView);
+    const hideMainHeader = ['logs', 'inbox', 'ai', 'team', 'analytics', 'settings'].includes(actualView);
     mainHeader.style.display = hideMainHeader ? 'none' : '';
   }
   if (window.innerWidth < 1024) {

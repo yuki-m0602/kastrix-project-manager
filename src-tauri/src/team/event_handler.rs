@@ -148,6 +148,25 @@ pub async fn spawn_topic_listener(
                             });
                             let _ = app.emit("team-members-updated", ());
                         }
+                        // 自分がキック/ブロックされたら、このトピックの team_subscriptions を外す（「申請中」幽霊状態の防止）
+                        if let Some(iroh) = app.try_state::<IrohState>() {
+                            let my_id = get_my_endpoint_id(&iroh).await;
+                            if mop.target_id == my_id {
+                                if let Some(state) = app.try_state::<DbState>() {
+                                    let _ = state.0.lock().map(|db| {
+                                        let _ = db.execute(
+                                            "DELETE FROM team_subscriptions WHERE topic_id = ?1",
+                                            rusqlite::params![topic_id],
+                                        );
+                                    });
+                                }
+                                let guard = iroh.read().await;
+                                if let Some(node) = guard.as_ref() {
+                                    node.unsubscribe(&topic_id).await;
+                                }
+                                let _ = app.emit("team-cancelled", ());
+                            }
+                        }
                         // ブロックされた本人に通知
                         if mop.r#type == "member_block" {
                             if let Some(iroh) = app.try_state::<IrohState>() {

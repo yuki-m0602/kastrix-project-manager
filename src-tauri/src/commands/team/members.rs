@@ -2,8 +2,8 @@
 
 use crate::db::DbState;
 use crate::team::{
-    broadcast_member_display_name, broadcast_member_op, can_approve_or_reject, get_my_endpoint_id,
-    is_current_user_host, IrohState,
+    am_i_pending_guest, broadcast_member_display_name, broadcast_member_op, can_approve_or_reject,
+    get_my_endpoint_id, is_current_user_host, IrohState,
 };
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
@@ -77,28 +77,9 @@ pub async fn team_am_i_pending(
     state: State<'_, DbState>,
     iroh: State<'_, IrohState>,
 ) -> Result<bool, String> {
-    let has_sub = {
-        let db = state.0.lock().map_err(|e| e.to_string())?;
-        db.query_row("SELECT 1 FROM team_subscriptions WHERE is_host = 0 LIMIT 1", [], |_| Ok(()))
-            .is_ok()
-    };
-    if !has_sub {
-        return Ok(false);
-    }
     let my_id = get_my_endpoint_id(&iroh).await;
-    if my_id.is_empty() {
-        return Ok(false);
-    }
-    let is_active = {
-        let db = state.0.lock().map_err(|e| e.to_string())?;
-        db.query_row(
-            "SELECT 1 FROM members WHERE endpoint_id = ?1 AND status = 'active'",
-            [&my_id],
-            |_| Ok(()),
-        )
-        .is_ok()
-    };
-    Ok(!is_active)
+    let db = state.0.lock().map_err(|e| e.to_string())?;
+    Ok(am_i_pending_guest(&db, &my_id))
 }
 
 #[tauri::command]
@@ -108,61 +89,87 @@ pub async fn team_cancel_join(
     app: AppHandle,
 ) -> Result<(), String> {
     let my_id = get_my_endpoint_id(&iroh).await;
-    if my_id.is_empty() {
-        return Err("ノードIDを取得できません".to_string());
-    }
 
-    let (topic_id, is_guest_sub) = {
+    let guest_topics: Vec<String> = {
         let db = state.0.lock().map_err(|e| e.to_string())?;
-        let guest: Option<String> = db
-            .query_row(
-                "SELECT topic_id FROM team_subscriptions WHERE is_host = 0 LIMIT 1",
-                [],
-                |r| r.get(0),
-            )
-            .ok();
-        if let Some(t) = guest {
-            (t, true)
-        } else {
-            // 参加申請がない場合: ホストの孤立状態（is_host=1 だが members にいない）を解消
-            let host: Option<String> = db
-                .query_row(
-                    "SELECT topic_id FROM team_subscriptions WHERE is_host = 1 LIMIT 1",
-                    [],
-                    |r| r.get(0),
-                )
-                .ok();
-            let topic_id = host.ok_or_else(|| "参加申請中のチームがありません".to_string())?;
-            let is_active = db
-                .query_row(
+        let mut stmt = db
+            .prepare("SELECT topic_id FROM team_subscriptions WHERE is_host = 0")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+    };
+
+    if !guest_topics.is_empty() {
+        let is_active = {
+            let db = state.0.lock().map_err(|e| e.to_string())?;
+            if my_id.is_empty() {
+                false
+            } else {
+                db.query_row(
                     "SELECT 1 FROM members WHERE endpoint_id = ?1 AND status = 'active'",
                     [&my_id],
                     |_| Ok(()),
                 )
-                .is_ok();
-            if is_active {
-                return Err("参加申請中のチームがありません".to_string());
+                .is_ok()
             }
-            (topic_id, false)
+        };
+        if is_active {
+            return Err("すでに承認済みです。キャンセルできません。".to_string());
         }
-    };
+        // ブロードキャスト失敗でもローカル DB は必ず掃除する（ホスト側は申請リストが残る可能性はある）
+        if !my_id.is_empty() {
+            let _ = broadcast_member_op(&iroh, "member_cancel", &my_id, None).await;
+        }
+        {
+            let db = state.0.lock().map_err(|e| e.to_string())?;
+            db.execute(
+                "DELETE FROM team_subscriptions WHERE is_host = 0",
+                [],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        {
+            let guard = iroh.read().await;
+            if let Some(node) = guard.as_ref() {
+                for tid in &guest_topics {
+                    node.unsubscribe(tid).await;
+                }
+            }
+        }
+        let _ = app.emit("team-cancelled", ());
+        return Ok(());
+    }
 
-    let is_active = {
+    if my_id.is_empty() {
+        return Err("ノードIDを取得できません".to_string());
+    }
+
+    // 参加申請がない場合: ホストの孤立状態（is_host=1 だが members にいない）を解消
+    let topic_id = {
         let db = state.0.lock().map_err(|e| e.to_string())?;
-        db.query_row(
-            "SELECT 1 FROM members WHERE endpoint_id = ?1 AND status = 'active'",
-            [&my_id],
-            |_| Ok(()),
-        )
-        .is_ok()
+        let host: Option<String> = db
+            .query_row(
+                "SELECT topic_id FROM team_subscriptions WHERE is_host = 1 LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .ok();
+        let topic_id = host.ok_or_else(|| "参加申請中のチームがありません".to_string())?;
+        let is_active = db
+            .query_row(
+                "SELECT 1 FROM members WHERE endpoint_id = ?1 AND status = 'active'",
+                [&my_id],
+                |_| Ok(()),
+            )
+            .is_ok();
+        if is_active {
+            return Err("参加申請中のチームがありません".to_string());
+        }
+        topic_id
     };
-    if is_active {
-        return Err("すでに承認済みです。キャンセルできません。".to_string());
-    }
 
-    if is_guest_sub {
-        broadcast_member_op(&iroh, "member_cancel", &my_id, None).await?;
-    }
     {
         let db = state.0.lock().map_err(|e| e.to_string())?;
         db.execute(

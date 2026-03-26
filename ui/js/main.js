@@ -94,9 +94,15 @@ window.addEventListener('popstate', () => {
 // ── Close pickers / search on outside click ──────────────
 document.addEventListener('click', e => {
   const picker = document.getElementById('project-picker');
+  const backdrop = document.getElementById('project-picker-backdrop');
   const addBtn = document.getElementById('add-tab-btn');
-  if (picker && addBtn && !picker.contains(e.target) && e.target !== addBtn && !addBtn.contains(e.target)) {
-    picker.style.display = 'none';
+  if (picker && picker.style.display === 'block' && typeof closeProjectPicker === 'function') {
+    const inPicker = picker.contains(e.target);
+    const inBackdrop = backdrop?.contains(e.target);
+    const inAdd = addBtn && (e.target === addBtn || addBtn.contains(e.target));
+    if (!inPicker && !inBackdrop && !inAdd) {
+      closeProjectPicker();
+    }
   }
   const searchResults = document.getElementById('search-results');
   const searchInput = document.getElementById('global-search');
@@ -108,45 +114,145 @@ document.addEventListener('click', e => {
 
 // ── 衝突ダイアログ (local vs local) ───────────────────────
 let _pendingConflict = null;
-const _resolvedConflictTaskIds = new Set();
 let _conflictDebounceUntil = 0;
 
-function showConflictDialog(payload) {
-  if (!payload) return;
-  const tid = payload.taskId || payload.task_id;
+/** Tauri event.listen の第1引数が { payload } なのか、ペイロード単体なのかを吸収 */
+function unwrapTeamConflictArg(raw) {
+  if (raw == null) return null;
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof raw !== 'object') return null;
+  if (
+    Object.prototype.hasOwnProperty.call(raw, 'payload') &&
+    raw.payload != null &&
+    typeof raw.payload === 'object' &&
+    !Array.isArray(raw.payload)
+  ) {
+    return raw.payload;
+  }
+  return raw;
+}
+
+/** ペイロード内の Task（文字列化・キー揺れ対応） */
+function coerceConflictTask(v) {
+  if (v == null) return null;
+  if (typeof v === 'string') {
+    try {
+      return JSON.parse(v);
+    } catch {
+      return null;
+    }
+  }
+  return typeof v === 'object' ? v : null;
+}
+
+/** 表示用: Rust の camelCase と snake_case の両方を読む */
+function conflictTaskSummary(t) {
+  const o = coerceConflictTask(t);
+  if (!o) {
+    return { title: '-', detail: '-' };
+  }
+  const title =
+    o.title ||
+    o.Title ||
+    (o.id != null && o.id !== '' ? String(o.id) : '') ||
+    (o.Id != null && o.Id !== '' ? String(o.Id) : '') ||
+    '-';
+  const status = o.status ?? o.Status;
+  const priority = o.priority ?? o.Priority;
+  const detail =
+    [status, priority].filter((x) => x != null && String(x) !== '').join(' / ') || '-';
+  return { title, detail };
+}
+
+function showConflictDialog(rawArg) {
+  const payload = unwrapTeamConflictArg(rawArg);
+  if (!payload || typeof payload !== 'object') return;
+
+  const incomingObj = coerceConflictTask(payload.incoming ?? payload.Incoming);
+  const localObj = coerceConflictTask(payload.local ?? payload.Local);
+  const tid =
+    payload.taskId ||
+    payload.task_id ||
+    (incomingObj && (incomingObj.id || incomingObj.Id)) ||
+    (localObj && (localObj.id || localObj.Id));
   if (!tid) return;
   if (Date.now() < _conflictDebounceUntil) return;
-  if (_resolvedConflictTaskIds.has(tid)) return;
   if (_pendingConflict) return;
+
+  initConflictModal();
+
+  // 競合表示時はタスク系モーダルを畳む（z 順・ゴーストクリックで残ったオーバーレイを防ぐ）
+  if (typeof closeTaskEditModal === 'function') {
+    try {
+      closeTaskEditModal();
+    } catch (err) {
+      void err;
+    }
+  }
+  if (typeof closeTaskModal === 'function') {
+    try {
+      closeTaskModal();
+    } catch (err) {
+      void err;
+    }
+  }
+  if (typeof closeProjectDetailModal === 'function') {
+    try {
+      closeProjectDetailModal();
+    } catch (err) {
+      void err;
+    }
+  }
+  if (typeof closeProjectPicker === 'function') {
+    try {
+      closeProjectPicker();
+    } catch (err) {
+      void err;
+    }
+  }
 
   _pendingConflict = payload;
   const modal = document.getElementById('conflict-modal');
   if (!modal) return;
-  const local = payload.local || {};
-  const incoming = payload.incoming || {};
+  const localSum = conflictTaskSummary(localObj);
+  const incomingSum = conflictTaskSummary(incomingObj);
   const el = (id) => document.getElementById(id);
   const lt = el('conflict-local-title');
   const ls = el('conflict-local-status');
   const it = el('conflict-incoming-title');
   const is2 = el('conflict-incoming-status');
-  if (lt) lt.textContent = local.title || '-';
-  if (ls) ls.textContent = [local.status, local.priority].filter(Boolean).join(' / ') || '-';
-  if (it) it.textContent = incoming.title || '-';
-  if (is2) is2.textContent = [incoming.status, incoming.priority].filter(Boolean).join(' / ') || '-';
+  if (lt) lt.textContent = localSum.title;
+  if (ls) ls.textContent = localSum.detail;
+  if (it) it.textContent = incomingSum.title;
+  if (is2) is2.textContent = incomingSum.detail;
   modal.style.display = 'flex';
-  try {
-    lucide.createIcons();
-  } catch (err) {
-    void err;
-  }
+  modal.style.pointerEvents = 'auto';
 }
+
+/** ゴーストクリックで「+ New Task」等にイベントが落ちないよう、短時間だけメインを無効化 */
+function brieflyBlockMainPointerEvents(ms) {
+  const main = document.getElementById('main-area');
+  const sidebar = document.getElementById('sidebar');
+  if (main) main.style.pointerEvents = 'none';
+  if (sidebar) sidebar.style.pointerEvents = 'none';
+  window.setTimeout(() => {
+    if (main) main.style.pointerEvents = '';
+    if (sidebar) sidebar.style.pointerEvents = '';
+  }, ms);
+}
+window.brieflyBlockMainPointerEvents = brieflyBlockMainPointerEvents;
 
 function closeConflictModal() {
   const modal = document.getElementById('conflict-modal');
-  if (modal) modal.style.display = 'none';
-  if (_pendingConflict) {
-    const tid = _pendingConflict.taskId || _pendingConflict.task_id;
-    if (tid) _resolvedConflictTaskIds.add(tid);
+  if (modal) {
+    modal.style.display = 'none';
+    modal.style.pointerEvents = 'none';
   }
   _pendingConflict = null;
   _conflictDebounceUntil = Date.now() + 3000;
@@ -154,12 +260,42 @@ function closeConflictModal() {
 
 async function resolveConflict(choice) {
   const saved = _pendingConflict;
+  brieflyBlockMainPointerEvents(500);
   closeConflictModal();
+  if (typeof closeTaskEditModal === 'function') {
+    try {
+      closeTaskEditModal();
+    } catch (err) {
+      void err;
+    }
+  }
+  if (typeof closeTaskModal === 'function') {
+    try {
+      closeTaskModal();
+    } catch (err) {
+      void err;
+    }
+  }
+  if (typeof closeProjectDetailModal === 'function') {
+    try {
+      closeProjectDetailModal();
+    } catch (err) {
+      void err;
+    }
+  }
+  if (typeof closeProjectPicker === 'function') {
+    try {
+      closeProjectPicker();
+    } catch (err) {
+      void err;
+    }
+  }
   if (!saved) return;
   try {
-    if (_isTauri && saved.incoming) {
+    const incoming = saved.incoming ?? saved.Incoming;
+    if (_isTauri && incoming) {
       const seq = saved.conflictSeq || saved.conflict_seq || null;
-      await apiTeamResolveConflict(choice, saved.incoming, seq);
+      await apiTeamResolveConflict(choice, incoming, seq);
     }
   } catch (e) {
     console.error('Conflict resolve failed:', e);
@@ -172,8 +308,90 @@ async function resolveConflict(choice) {
   }
 }
 
+let _conflictModalWired = false;
+
+/**
+ * 競合モーダルは #conflict-modal へ capture で委譲（子要素差し替えや WebView でもクリックを拾う）
+ */
+function initConflictModal() {
+  if (_conflictModalWired) return;
+  const modal = document.getElementById('conflict-modal');
+  if (!modal) return;
+  _conflictModalWired = true;
+  modal.addEventListener(
+    'click',
+    (e) => {
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      if (t.closest('#conflict-keep-local')) {
+        e.preventDefault();
+        e.stopPropagation();
+        void resolveConflict('local');
+        return;
+      }
+      if (t.closest('#conflict-use-incoming')) {
+        e.preventDefault();
+        e.stopPropagation();
+        void resolveConflict('incoming');
+        return;
+      }
+      if (t.id === 'conflict-modal-backdrop') {
+        e.preventDefault();
+        e.stopPropagation();
+        brieflyBlockMainPointerEvents(500);
+        closeConflictModal();
+      }
+    },
+    true
+  );
+}
+
+window.closeConflictModal = closeConflictModal;
+window.resolveConflict = resolveConflict;
+/** 取り残しオーバーレイの応急解除（開発者コンソールから `__kastrixResetModals()`） */
+window.__kastrixResetModals = function __kastrixResetModals() {
+  brieflyBlockMainPointerEvents(50);
+  closeConflictModal();
+  if (typeof closeTaskEditModal === 'function') {
+    try {
+      closeTaskEditModal();
+    } catch (_) {
+      /* ignore */
+    }
+  }
+  if (typeof closeTaskModal === 'function') {
+    try {
+      closeTaskModal();
+    } catch (_) {
+      /* ignore */
+    }
+  }
+  if (typeof closeProjectDetailModal === 'function') {
+    try {
+      closeProjectDetailModal();
+    } catch (_) {
+      /* ignore */
+    }
+  }
+  if (typeof closeProjectPicker === 'function') {
+    try {
+      closeProjectPicker();
+    } catch (_) {
+      /* ignore */
+    }
+  }
+};
+
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const picker = document.getElementById('project-picker');
+    if (picker && picker.style.display === 'block' && typeof closeProjectPicker === 'function') {
+      closeProjectPicker();
+      return;
+    }
+  }
   if (e.key === 'Escape' && _pendingConflict) {
+    brieflyBlockMainPointerEvents(500);
     closeConflictModal();
   }
 });
@@ -314,6 +532,13 @@ async function exportLogs() {
 
 // ── Initialize ────────────────────────────────────────────
 async function init() {
+  initConflictModal();
+  if (typeof initProjectDetailModalDelegation === 'function') {
+    initProjectDetailModalDelegation();
+  }
+  if (typeof initProjectPickerDelegation === 'function') {
+    initProjectPickerDelegation();
+  }
   try {
     await loadData();
   } catch (e) {
@@ -333,6 +558,61 @@ async function init() {
   }
 }
 
+/** 原因調査: localStorage `kastrixDebugTeamEvents=1` または `window.__KASTRIX_DEBUG_TEAM_EVENTS = true` で team-conflict の生データを console に出す */
+function _kastrixTeamConflictDebugEnabled() {
+  try {
+    if (window.__KASTRIX_DEBUG_TEAM_EVENTS === true) return true;
+    return localStorage.getItem('kastrixDebugTeamEvents') === '1';
+  } catch {
+    return false;
+  }
+}
+
+function _logTeamConflictEventForDebug(raw) {
+  if (!_kastrixTeamConflictDebugEnabled()) return;
+  try {
+    console.info('[kastrix debug] team-conflict listener: raw argument =', raw);
+    const unwrapped = typeof unwrapTeamConflictArg === 'function' ? unwrapTeamConflictArg(raw) : raw;
+    console.info('[kastrix debug] team-conflict unwrapped JSON:\n', JSON.stringify(unwrapped, null, 2));
+  } catch (err) {
+    console.warn('[kastrix debug] team-conflict log failed', err);
+  }
+}
+
+/** 原因調査: コンソールで `__kastrixDumpModalState()` — 主要モーダルの display / pointer-events / z-index */
+window.__kastrixDumpModalState = function __kastrixDumpModalState() {
+  const ids = [
+    'task-modal',
+    'task-edit-modal',
+    'project-detail-modal',
+    'conflict-modal',
+    'project-picker',
+    'project-picker-backdrop',
+  ];
+  const rows = ids.map((id) => {
+    const el = document.getElementById(id);
+    if (!el) {
+      return { id, found: false };
+    }
+    const cs = window.getComputedStyle(el);
+    return {
+      id,
+      found: true,
+      styleDisplay: el.style.display || '',
+      computedDisplay: cs.display,
+      stylePointerEvents: el.style.pointerEvents || '',
+      computedPointerEvents: cs.pointerEvents,
+      zIndex: cs.zIndex,
+    };
+  });
+  if (typeof console.table === 'function') {
+    console.table(rows);
+  } else {
+    console.info('[kastrix] modal state', rows);
+  }
+  return rows;
+};
+
 // チーム同期でタスクが更新されたら再読み込み
 if (_isTauri && window.__TAURI__?.event?.listen) {
   window.__TAURI__.event.listen('team-task-updated', async () => {
@@ -344,7 +624,8 @@ if (_isTauri && window.__TAURI__?.event?.listen) {
     if (typeof updateSidebarUnsyncedBadge === 'function') await updateSidebarUnsyncedBadge();
   });
   window.__TAURI__.event.listen('team-conflict', (e) => {
-    if (typeof showConflictDialog === 'function') showConflictDialog(e.payload);
+    _logTeamConflictEventForDebug(e);
+    if (typeof showConflictDialog === 'function') showConflictDialog(e);
   });
   window.__TAURI__.event.listen('team-subscriptions-restored', async () => {
     if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();

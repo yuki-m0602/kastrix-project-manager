@@ -100,6 +100,8 @@
     "renderProjectPicker": "readonly",
     "renderLogs": "readonly",
     "renderSettings": "readonly",
+    "renderTeamPage": "readonly",
+    "fillTeamPageRoomSummary": "readonly",
     "renderAnalytics": "readonly",
     "renderInbox": "readonly",
     "renderTeamMembers": "readonly",
@@ -111,7 +113,13 @@
     "showAlert": "readonly",
     "loadData": "readonly",
     "reloadTasks": "readonly",
-    "_pushModalHistory": "readonly"
+    "_pushModalHistory": "readonly",
+    "initProjectDetailModalDelegation": "readonly",
+    "closeProjectDetailModal": "readonly",
+    "toggleProjectPicker": "readonly",
+    "closeProjectPicker": "readonly",
+    "openProjectPicker": "readonly",
+    "initProjectPickerDelegation": "readonly"
   },
   "rules": {
     "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],

@@ -4,6 +4,7 @@ use crate::db::DbState;
 use crate::models::Task;
 use crate::team::can_apply_remote_task_delete;
 use bytes::Bytes;
+use std::io::Write;
 use tauri::Emitter;
 use uuid::Uuid;
 
@@ -168,6 +169,98 @@ fn task_equal_for_conflict(a: &Task, b: &Task) -> bool {
         && a.created_by == b.created_by
 }
 
+/// 環境変数 `KASTRIX_DEBUG_TEAM_CONFLICT=1`（または true/yes）で有効。`team-conflict` emit 直前の JSON と差分理由を stderr に出す。
+fn team_conflict_debug_logs_enabled() -> bool {
+    std::env::var("KASTRIX_DEBUG_TEAM_CONFLICT")
+        .map(|v| {
+            matches!(
+                v.to_lowercase().as_str(),
+                "1" | "true" | "yes"
+            )
+        })
+        .unwrap_or(false)
+}
+
+/// dev / release どちらでも同じファイルに追記し、行頭にビルド種別を付ける（`debug-compare-*.bat` 用）。
+fn team_conflict_debug_trace(message: &str) {
+    if !team_conflict_debug_logs_enabled() {
+        return;
+    }
+    let build_label = if cfg!(debug_assertions) {
+        "DEV_debug"
+    } else {
+        "RELEASE_exe"
+    };
+    let ts = chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
+    let line = format!("[{ts}] [{build_label}] {message}");
+    eprintln!("{line}");
+    let path = std::env::temp_dir().join("kastrix_team_conflict.log");
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        let _ = writeln!(f, "{line}");
+    }
+}
+
+fn log_conflict_mismatch_detail(
+    local: &Task,
+    incoming: &Task,
+    payload: &TaskUpdatePayload,
+    db_last_src: Option<&str>,
+) {
+    if !team_conflict_debug_logs_enabled() {
+        return;
+    }
+    let mut fields = Vec::new();
+    if local.title != incoming.title {
+        fields.push("title");
+    }
+    if local.status != incoming.status {
+        fields.push("status");
+    }
+    if local.priority != incoming.priority {
+        fields.push("priority");
+    }
+    if local.project_id != incoming.project_id {
+        fields.push("project_id");
+    }
+    if local.due_date != incoming.due_date {
+        fields.push("due_date");
+    }
+    if local.assignee != incoming.assignee {
+        fields.push("assignee");
+    }
+    if local.description != incoming.description {
+        fields.push("description");
+    }
+    if local.is_public != incoming.is_public {
+        fields.push("is_public");
+    }
+    if local.created_at != incoming.created_at {
+        fields.push("created_at");
+    }
+    if local.updated_at != incoming.updated_at {
+        fields.push("updated_at");
+    }
+    if local.created_by != incoming.created_by {
+        fields.push("created_by");
+    }
+    team_conflict_debug_trace(&format!(
+        "[kastrix] team-conflict (debug): task_id={} seq={:?} payload_ts_source={:?} db_last_update_source={:?} unequal_fields=[{}]",
+        incoming.id,
+        payload.seq,
+        payload.ts_source.as_deref(),
+        db_last_src,
+        fields.join(", ")
+    ));
+    team_conflict_debug_trace(&format!(
+        "[kastrix] team-conflict (debug): local title={:?} status={:?} | incoming title={:?} status={:?}",
+        local.title, local.status, incoming.title, incoming.status
+    ));
+}
+
 fn is_conflict_seq_skipped(db: &rusqlite::Connection, task_id: &str, seq: i64) -> Result<bool, String> {
     let n: i32 = db
         .query_row(
@@ -219,6 +312,12 @@ pub fn apply_task_update(
                         if task_equal_for_conflict(&local, task) {
                             return Ok(());
                         }
+                        log_conflict_mismatch_detail(
+                            &local,
+                            task,
+                            payload,
+                            local_source.as_deref(),
+                        );
                         emit_conflict = Some(ConflictInfo {
                             task_id: task.id.clone(),
                             incoming: task.clone(),
@@ -286,6 +385,11 @@ pub fn apply_task_update(
     }
     if let Some(app) = app {
         if let Some(info) = emit_conflict {
+            if team_conflict_debug_logs_enabled() {
+                if let Ok(s) = serde_json::to_string(&info) {
+                    team_conflict_debug_trace(&format!("[kastrix] team-conflict emit JSON: {s}"));
+                }
+            }
             let _ = app.emit("team-conflict", &info);
         } else if emit_task_updated {
             let _ = app.emit("team-task-updated", ());

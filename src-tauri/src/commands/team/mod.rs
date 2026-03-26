@@ -6,7 +6,9 @@ pub mod members;
 
 use crate::db::DbState;
 use crate::models::Task;
-use crate::team::{apply_task_update, broadcast_task_update, IrohState, TaskUpdatePayload};
+use crate::team::{
+    am_i_pending_guest, apply_task_update, broadcast_task_update, IrohState, TaskUpdatePayload,
+};
 use serde::Deserialize;
 use tauri::{AppHandle, Emitter, State};
 
@@ -115,17 +117,8 @@ pub async fn team_debug_status(
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| e.to_string())?;
 
-        let has_guest_sub = subs.iter().any(|s| !s.is_host);
         let my_id = endpoint_id.as_deref().unwrap_or("");
-        let is_active = !my_id.is_empty()
-            && conn
-                .query_row(
-                    "SELECT 1 FROM members WHERE endpoint_id = ?1 AND status = 'active'",
-                    [my_id],
-                    |_| Ok(()),
-                )
-                .is_ok();
-        let am_i_pending = has_guest_sub && !is_active;
+        let am_i_pending = am_i_pending_guest(&conn, my_id);
 
         (subs, am_i_pending)
     };

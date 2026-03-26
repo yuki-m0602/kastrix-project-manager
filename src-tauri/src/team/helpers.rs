@@ -59,6 +59,45 @@ pub fn in_team(conn: &rusqlite::Connection) -> bool {
         .is_ok()
 }
 
+/// ゲストとしてチームに未承認参加（ホストの承認待ち）か。
+/// `my_endpoint_id` が空のときは false。キック/ブロック済みの行があるときも false（誤って「申請中」と出さない）。
+pub fn am_i_pending_guest(conn: &rusqlite::Connection, my_endpoint_id: &str) -> bool {
+    if my_endpoint_id.is_empty() {
+        return false;
+    }
+    let has_guest = conn
+        .query_row(
+            "SELECT 1 FROM team_subscriptions WHERE is_host = 0 LIMIT 1",
+            [],
+            |_| Ok(()),
+        )
+        .is_ok();
+    if !has_guest {
+        return false;
+    }
+    if conn
+        .query_row(
+            "SELECT 1 FROM members WHERE endpoint_id = ?1 AND status = 'active'",
+            [my_endpoint_id],
+            |_| Ok(()),
+        )
+        .is_ok()
+    {
+        return false;
+    }
+    if conn
+        .query_row(
+            "SELECT 1 FROM members WHERE endpoint_id = ?1 AND status IN ('kicked','blocked')",
+            [my_endpoint_id],
+            |_| Ok(()),
+        )
+        .is_ok()
+    {
+        return false;
+    }
+    true
+}
+
 /// ローカル削除を許可するか: チーム未参加なら常に可。参加中はホスト端末、または作成者本人。
 pub fn can_delete_task_for_user(
     conn: &rusqlite::Connection,
