@@ -289,7 +289,7 @@ pub async fn team_resolve_conflict(
         task: Some(incoming),
         task_id: None,
         timestamp: None,
-        ts_source: None,
+        ts_source: Some("resolved".to_string()),
         seq: None,
         prev_id: None,
         actor_endpoint_id: None,

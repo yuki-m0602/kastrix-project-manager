@@ -66,8 +66,6 @@ pub fn run() {
             });
             app.manage(iroh_state);
 
-            let _main_window = app.get_webview_window("main").unwrap();
-
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

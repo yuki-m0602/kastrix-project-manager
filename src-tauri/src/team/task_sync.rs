@@ -164,9 +164,9 @@ fn task_equal_for_conflict(a: &Task, b: &Task) -> bool {
         && a.assignee == b.assignee
         && a.description == b.description
         && a.is_public == b.is_public
-        && a.created_at == b.created_at
-        && a.updated_at == b.updated_at
         && a.created_by == b.created_by
+    // created_at / updated_at は同期遅延・SQLite datetime('now') の精度差で
+    // 不一致になりやすく、ユーザー編集の競合とは無関係なので比較対象外
 }
 
 /// 環境変数 `KASTRIX_DEBUG_TEAM_CONFLICT=1`（または true/yes）で有効。`team-conflict` emit 直前の JSON と差分理由を stderr に出す。
@@ -186,6 +186,11 @@ fn team_conflict_debug_trace(message: &str) {
     if !team_conflict_debug_logs_enabled() {
         return;
     }
+    _trace_to_file(message);
+}
+
+/// 環境変数に関係なく常時ファイルに書く診断ログ
+fn _trace_to_file(message: &str) {
     let build_label = if cfg!(debug_assertions) {
         "DEV_debug"
     } else {
@@ -283,6 +288,13 @@ pub fn apply_task_update(
     payload: &TaskUpdatePayload,
     app: Option<&tauri::AppHandle>,
 ) -> Result<(), String> {
+    _trace_to_file(&format!(
+        "[apply_task_update] ENTER action={} ts_source={:?} seq={:?} task_id={:?}",
+        payload.action,
+        payload.ts_source,
+        payload.seq,
+        payload.task.as_ref().map(|t| &t.id).or(payload.task_id.as_ref()),
+    ));
     let mut emit_conflict: Option<ConflictInfo> = None;
     let mut emit_task_updated = false;
     {
@@ -293,6 +305,13 @@ pub fn apply_task_update(
                     .task
                     .as_ref()
                     .ok_or_else(|| "task_update: task is required for create/update".to_string())?;
+                // 意味的に同一なら ts_source に関係なくスキップ（重複メッセージ・再起動時バックログ対策）
+                if let Ok(local) = query_local_task(&db, &task.id) {
+                    if task_equal_for_conflict(&local, task) {
+                        _trace_to_file(&format!("[apply_task_update] SKIP equal task_id={}", task.id));
+                        return Ok(());
+                    }
+                }
                 let incoming_ts_local = payload.ts_source.as_deref() == Some("local");
                 let local_source: Option<String> = db
                     .query_row(
@@ -302,6 +321,10 @@ pub fn apply_task_update(
                     )
                     .ok();
                 let is_local_vs_local = incoming_ts_local && local_source.as_deref() == Some("local");
+                _trace_to_file(&format!(
+                    "[apply_task_update] task_id={} incoming_ts_local={} db_last_update_source={:?} is_local_vs_local={}",
+                    task.id, incoming_ts_local, local_source, is_local_vs_local
+                ));
                 if is_local_vs_local {
                     if let Some(seq) = payload.seq {
                         if is_conflict_seq_skipped(&db, &task.id, seq)? {
@@ -330,7 +353,9 @@ pub fn apply_task_update(
                         ensure_project_exists(&db, pid)?;
                     }
                     let is_public = if task.is_public { 1 } else { 0 };
-                    let ts_src = payload.ts_source.as_deref().unwrap_or("local");
+                    // 同期受信は "remote" — ローカル未編集と区別し is_local_vs_local の偽陽性を防ぐ
+                    // （"local" は commands/tasks.rs でユーザーが直接編集した場合にのみ設定される）
+                    let ts_src = "remote";
                     db.execute(
                         "INSERT INTO tasks (id, project_id, title, status, priority, due_date, assignee, description, is_public, created_at, updated_at, last_update_source, created_by)
                          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
@@ -385,6 +410,10 @@ pub fn apply_task_update(
     }
     if let Some(app) = app {
         if let Some(info) = emit_conflict {
+            _trace_to_file(&format!(
+                "[apply_task_update] EMIT team-conflict task_id={} local_title={:?} incoming_title={:?}",
+                info.task_id, info.local.title, info.incoming.title
+            ));
             if team_conflict_debug_logs_enabled() {
                 if let Ok(s) = serde_json::to_string(&info) {
                     team_conflict_debug_trace(&format!("[kastrix] team-conflict emit JSON: {s}"));
