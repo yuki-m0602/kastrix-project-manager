@@ -110,18 +110,26 @@ pub async fn spawn_topic_listener(
                     }
                 } else if let Ok(join_req) = serde_json::from_slice::<JoinRequestPayload>(slice) {
                     if join_req.r#type == "join_request" && join_req.topic_id == topic_id {
-                        let info = PendingJoinInfo {
-                            endpoint_id: join_req.endpoint_id,
-                            topic_id: join_req.topic_id,
-                            requested_at: join_req.requested_at,
+                        let my_id = if let Some(iroh) = app.try_state::<IrohState>() {
+                            get_my_endpoint_id(&iroh).await
+                        } else {
+                            String::new()
                         };
-                        let mut guard = pending_joins.write().await;
-                        if !guard.iter().any(|p| {
-                            p.endpoint_id == info.endpoint_id && p.topic_id == info.topic_id
-                        }) {
-                            guard.push(info.clone());
+                        // ゲストが自分でブロードキャストした join_request を自分の pending に入れない
+                        if join_req.endpoint_id != my_id {
+                            let info = PendingJoinInfo {
+                                endpoint_id: join_req.endpoint_id,
+                                topic_id: join_req.topic_id,
+                                requested_at: join_req.requested_at,
+                            };
+                            let mut guard = pending_joins.write().await;
+                            if !guard.iter().any(|p| {
+                                p.endpoint_id == info.endpoint_id && p.topic_id == info.topic_id
+                            }) {
+                                guard.push(info.clone());
+                            }
+                            let _ = app.emit("team-pending-join", &info);
                         }
-                        let _ = app.emit("team-pending-join", &info);
                     }
                 } else if let Ok(mop) = serde_json::from_slice::<MemberOpPayload>(slice) {
                     let ver = mop.version.as_deref().unwrap_or("1.0");

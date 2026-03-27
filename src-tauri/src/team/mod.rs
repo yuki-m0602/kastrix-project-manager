@@ -12,9 +12,10 @@ mod pending;
 mod task_sync;
 
 pub use broadcast::{
-    broadcast_member_display_name, broadcast_member_op, broadcast_permission_change,
-    broadcast_team_disband,
+    broadcast_json_payload, broadcast_member_display_name, broadcast_member_op,
+    broadcast_permission_change, broadcast_team_disband,
 };
+pub use payloads::JoinRequestPayload;
 pub use event_handler::spawn_topic_listener;
 pub use helpers::{
     am_i_pending_guest, can_apply_remote_task_delete, can_approve_or_reject, can_delete_task_for_user,

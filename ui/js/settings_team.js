@@ -585,6 +585,17 @@ async function renderTeamInviteCodes() {
   }
 }
 
+async function copyInviteToClipboard(text) {
+  if (!text) return false;
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) {
+    console.warn('clipboard copy failed:', e);
+    return false;
+  }
+}
+
 async function teamCreate() {
   if (!_isTauri) {
     showAlert('チーム機能は Tauri 環境で動作します', 'info');
@@ -594,17 +605,25 @@ async function teamCreate() {
     const expiresEl = document.getElementById('team-invite-expires');
     const expiresMinutes = expiresEl ? parseInt(expiresEl.value, 10) : 60;
     const result = await apiTeamCreate(expiresMinutes);
-    if (result && result.invite_string) {
-      await navigator.clipboard.writeText(result.invite_string);
-      showAlert(`チームを作成しました。\n招待コード: ${result.code}\n\n参加する人にこの招待リンクを共有してください（クリップボードにコピー済み）`, 'success');
-      await renderTeamInviteCodes();
-      renderSettings();
+    const inviteStr = result?.invite_string ?? result?.inviteString;
+    const code = result?.code;
+    if (result && inviteStr) {
+      const copied = await copyInviteToClipboard(inviteStr);
+      await apiSetSetting('team_name', 'My Team').catch(() => {});
+      showAlert(
+        `チームを作成しました。\n招待コード: ${code}\n\n参加する人にこの招待リンクを共有してください${copied ? '（クリップボードにコピー済み）' : '（コピーに失敗しました。手動でコピーしてください）'}`,
+        'success'
+      );
+      if (typeof window.renderTeamView === 'function') await window.renderTeamView();
       if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
-    } else if (result && result.code) {
-      await navigator.clipboard.writeText(result.code);
-      showAlert(`チームを作成しました。\n招待コード: ${result.code}\n（クリップボードにコピーしました）`, 'success');
-      await renderTeamInviteCodes();
-      renderSettings();
+    } else if (result && code) {
+      const copied = await copyInviteToClipboard(code);
+      await apiSetSetting('team_name', 'My Team').catch(() => {});
+      showAlert(
+        `チームを作成しました。\n招待コード: ${code}${copied ? '\n（クリップボードにコピーしました）' : '\n（コピーに失敗しました。手動でコピーしてください）'}`,
+        'success'
+      );
+      if (typeof window.renderTeamView === 'function') await window.renderTeamView();
       if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
     } else {
       console.error('teamCreate unexpected result:', result);
@@ -626,14 +645,15 @@ async function teamIssueInvite() {
     const expiresMinutes = expiresEl ? parseInt(expiresEl.value, 10) : 60;
     const result = await apiTeamIssueInvite(expiresMinutes);
     if (result && result.code) {
-      const toCopy = result.invite_string || result.code;
-      await navigator.clipboard.writeText(toCopy);
-      const msg = result.invite_string
-        ? `招待リンクを発行しました。\n参加する人にこのリンクを共有してください（クリップボードにコピー済み）`
-        : `招待コードを発行しました。\n${result.code}\n（クリップボードにコピーしました）`;
+      const link = result.invite_string ?? result.inviteString;
+      const toCopy = link || result.code;
+      const copied = await copyInviteToClipboard(toCopy);
+      const msg = link
+        ? `招待リンクを発行しました。\n参加する人にこのリンクを共有してください${copied ? '（クリップボードにコピー済み）' : '（コピーに失敗しました。手動でコピーしてください）'}`
+        : `招待コードを発行しました。\n${result.code}${copied ? '\n（クリップボードにコピーしました）' : '\n（コピーに失敗しました。手動でコピーしてください）'}`;
       showAlert(msg, 'success');
-      await renderTeamInviteCodes();
-      renderSettings();
+      if (typeof window.renderTeamView === 'function') await window.renderTeamView();
+      if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
     } else {
       console.error('teamIssueInvite unexpected result:', result);
       showAlert('招待コードの発行に失敗しました。しばらく待ってから再度お試しください。', 'error');
@@ -1042,52 +1062,6 @@ function cancelTeamNameEdit() {
   const formEl = document.getElementById('team-name-edit-form');
   if (displayEl) displayEl.style.display = '';
   if (formEl) formEl.classList.add('hidden');
-}
-
-async function teamCreate() {
-  if (!_isTauri) {
-    alert('Tauri環境でのみ利用可能です');
-    return;
-  }
-
-  const expiresSelect = document.getElementById('team-invite-expires');
-  const expiresMinutes = expiresSelect ? parseInt(expiresSelect.value) : 60;
-
-  try {
-    const result = await apiTeamCreate(expiresMinutes);
-
-    // チーム名を保存
-    await apiSetSetting('team_name', 'My Team');
-
-    console.log('Team created:', result);
-    alert(`チームを作成しました！\n招待コード: ${result.code}\n招待リンク: ${result.inviteString}`);
-
-    // UI更新 - ダッシュボードを表示
-    renderTeamView();
-  } catch (e) {
-    console.error('Failed to create team:', e);
-    alert('チーム作成に失敗しました: ' + e);
-  }
-}
-
-async function teamIssueInvite() {
-  if (!_isTauri) return;
-
-  const expiresSelect = document.getElementById('team-invite-expires');
-  const expiresMinutes = expiresSelect ? parseInt(expiresSelect.value) : 60;
-
-  try {
-    const result = await apiTeamIssueInvite(expiresMinutes);
-
-    console.log('Invite issued:', result);
-    alert(`招待コードを発行しました！\nコード: ${result.code}\nリンク: ${result.inviteString}`);
-
-    // UI更新
-    renderTeamView();
-  } catch (e) {
-    console.error('Failed to issue invite:', e);
-    alert('招待コード発行に失敗しました: ' + e);
-  }
 }
 
 function confirmTeamLeave() {

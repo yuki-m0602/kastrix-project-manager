@@ -2,8 +2,8 @@
 
 use crate::db::DbState;
 use crate::team::{
-    generate_invite_code, get_my_endpoint_id, normalize_code, spawn_topic_listener, topic_id_to_hex,
-    IrohState,
+    broadcast_json_payload, generate_invite_code, get_my_endpoint_id, normalize_code,
+    spawn_topic_listener, topic_id_to_hex, JoinRequestPayload, IrohState,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -257,29 +257,45 @@ pub async fn team_join(
             .to_string()
     })?;
 
-    let guard = iroh.read().await;
-    let node = guard
-        .as_ref()
-        .ok_or_else(|| "iroh が初期化されていません".to_string())?;
-    let ticket: iroh_base::ticket::NodeTicket = host_ticket_str
-        .parse()
-        .map_err(|e| format!("ホスト情報の解析に失敗: {}", e))?;
-    node.add_node_addr(&ticket)
-        .map_err(|e| format!("ホストへの接続設定に失敗: {}", e))?;
-    let topic_id_bytes = hex_to_topic_id(&topic_id)?;
-    let topic_id_iroh = iroh_gossip::proto::TopicId::from_bytes(topic_id_bytes);
-    let host_node_id = ticket.node_addr().node_id;
-    let receiver = node
-        .subscribe(topic_id_iroh, &topic_id, vec![host_node_id])
-        .await
-        .map_err(|e| format!("トピック参加に失敗: {}", e))?;
+    let receiver = {
+        let guard = iroh.read().await;
+        let node = guard
+            .as_ref()
+            .ok_or_else(|| "iroh が初期化されていません".to_string())?;
+        let ticket: iroh_base::ticket::NodeTicket = host_ticket_str
+            .parse()
+            .map_err(|e| format!("ホスト情報の解析に失敗: {}", e))?;
+        node.add_node_addr(&ticket)
+            .map_err(|e| format!("ホストへの接続設定に失敗: {}", e))?;
+        let topic_id_bytes = hex_to_topic_id(&topic_id)?;
+        let topic_id_iroh = iroh_gossip::proto::TopicId::from_bytes(topic_id_bytes);
+        let host_node_id = ticket.node_addr().node_id;
+        node.subscribe(topic_id_iroh, &topic_id, vec![host_node_id])
+            .await
+            .map_err(|e| format!("トピック参加に失敗: {}", e))?
+    };
 
-    let db = state.0.lock().map_err(|e| e.to_string())?;
-    db.execute(
-        "INSERT OR REPLACE INTO team_subscriptions (topic_id, host_ticket, is_host) VALUES (?1, ?2, 0)",
-        rusqlite::params![topic_id, host_ticket_str],
-    )
-    .map_err(|e| e.to_string())?;
+    {
+        let db = state.0.lock().map_err(|e| e.to_string())?;
+        db.execute(
+            "INSERT OR REPLACE INTO team_subscriptions (topic_id, host_ticket, is_host) VALUES (?1, ?2, 0)",
+            rusqlite::params![topic_id, host_ticket_str],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    // NeighborUp がホストに届かない場合でも、gossip の join_request で承認キューに載せる
+    let my_ep = get_my_endpoint_id(&iroh).await;
+    if !my_ep.is_empty() {
+        let requested_at = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let payload = JoinRequestPayload {
+            r#type: "join_request".to_string(),
+            endpoint_id: my_ep,
+            topic_id: topic_id.clone(),
+            requested_at,
+        };
+        let _ = broadcast_json_payload(&iroh, &payload).await;
+    }
 
     let pending_joins = pending_joins.inner().clone();
     let topic_id_for_listener = topic_id.clone();
