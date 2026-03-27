@@ -4,110 +4,274 @@ async function renderTeamView() {
   const container = document.getElementById('team-content');
   if (!container) return;
 
-  const [syncMode, ready] = await Promise.all([
-    _isTauri ? apiTeamGetSyncMode() : Promise.resolve(SYNC_MODE_AUTO),
-    _isTauri ? apiTeamIsReady() : Promise.resolve(false),
-  ]);
+  // チーム参加状態をチェック
+  let isJoined = false;
+  let teamInfo = null;
+  let members = [];
+  let pendingJoins = [];
+  let inviteCodes = [];
+  let syncMode = SYNC_MODE_AUTO;
 
-  container.innerHTML = `
-    <!-- Display Name -->
-    <section id="team-display-name-section" class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6 hidden">
-      <h2 class="text-sm font-bold text-white mb-1">表示名</h2>
-      <p class="text-[10px] text-[#8b949e] mb-3">チーム内で表示される名前を設定します。</p>
-      <div class="flex gap-2">
-        <input id="team-display-name-input" type="text" placeholder="表示名を入力" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-white outline-none focus:border-indigo-500" maxlength="64">
-        <button onclick="teamSaveDisplayName()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-[10px] font-bold text-white">保存</button>
+  if (_isTauri) {
+    try {
+      const [membersData, pendingData, codesData, syncData, teamName] = await Promise.all([
+        apiTeamListMembers(),
+        apiTeamListPendingJoins(),
+        apiTeamListInviteCodes(),
+        apiTeamGetSyncMode(),
+        window.__TAURI__.invoke('get_setting', { key: 'team_name' }).catch(() => 'My Team')
+      ]);
+      members = membersData || [];
+      pendingJoins = pendingData || [];
+      inviteCodes = codesData || [];
+      syncMode = syncData || SYNC_MODE_AUTO;
+      isJoined = members.length > 0;
+      if (isJoined) {
+        // チーム情報を取得
+        const amIHost = await apiTeamAmIHost();
+        teamInfo = {
+          name: teamName || 'My Team',
+          memberCount: members.length,
+          host: members.find(m => m.role === 'host')?.display_name || 'Unknown',
+          amIHost
+        };
+      }
+    } catch (e) {
+      console.error('Failed to load team data:', e);
+    }
+  }
+
+  if (!isJoined) {
+    // チーム未参加時のUI
+    // チーム準備状態を取得
+    const ready = _isTauri ? await apiTeamIsReady().catch(() => false) : false;
+  
+    container.innerHTML = `
+        <!-- Welcome Card -->
+        <div class="bg-[#161b22] border border-[#30363d] rounded-2xl p-8 text-center">
+          <div class="max-w-md mx-auto space-y-6">
+            <div class="w-16 h-16 bg-indigo-500/20 rounded-2xl flex items-center justify-center mx-auto">
+              <i data-lucide="users" size="32" class="text-indigo-400"></i>
+            </div>
+            <div>
+              <h2 class="text-lg font-bold text-white mb-2">チームに参加しましょう</h2>
+              <p class="text-sm text-[#8b949e]">チームを作成してメンバーを招待するか、招待コードで既存チームに参加できます。</p>
+            </div>
+            <div class="flex gap-4 justify-center">
+              <button id="btn-team-create" onclick="teamCreate()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-sm font-bold text-white flex items-center gap-2 ${ready ? '' : 'opacity-60 cursor-not-allowed'}" ${ready ? '' : 'disabled'}>
+                <i data-lucide="plus" size="16"></i>
+                チーム作成
+              </button>
+              <button id="btn-team-join-modal" onclick="document.getElementById('team-join-form').scrollIntoView()" class="px-6 py-3 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-sm font-bold text-white flex items-center gap-2">
+                <i data-lucide="user-plus" size="16"></i>
+                チームに参加
+              </button>
+            </div>
+          </div>
+        </div>
+
+      <!-- Quick Actions -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+        <div class="bg-[#161b22] border border-[#30363d] rounded-2xl p-6">
+          <h3 class="text-sm font-bold text-white mb-3 flex items-center gap-2">
+            <i data-lucide="link" size="16"></i>
+            招待コードを持っている場合
+          </h3>
+          <p class="text-xs text-[#8b949e] mb-4">招待コードを入力してチームに参加します。</p>
+          <div class="flex gap-2">
+            <input id="team-join-code" type="text" placeholder="KASTRIX-..." class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-white outline-none focus:border-indigo-500">
+            <button onclick="teamJoin()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white">参加</button>
+          </div>
+          <div id="team-pending-status" class="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl mt-3" style="display:none;">
+            <span class="text-xs text-amber-400 font-bold">参加申請中…</span>
+            <button onclick="teamCancelJoin()" class="px-2 py-1 text-[10px] font-bold text-red-400 hover:bg-red-500/10 rounded-lg">キャンセル</button>
+          </div>
+        </div>
+
+        <div class="bg-[#161b22] border border-[#30363d] rounded-2xl p-6">
+          <h3 class="text-sm font-bold text-white mb-3 flex items-center gap-2">
+            <i data-lucide="settings" size="16"></i>
+            チーム機能について
+          </h3>
+          <p class="text-xs text-[#8b949e]">チームに参加すると、メンバーのタスクをリアルタイムで同期できます。</p>
+          <div class="mt-4 space-y-2 text-xs text-[#8b949e]">
+            <div class="flex items-center gap-2">
+              <i data-lucide="check" size="12" class="text-green-400"></i>
+              <span>リアルタイム同期</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <i data-lucide="check" size="12" class="text-green-400"></i>
+              <span>共同作業</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <i data-lucide="check" size="12" class="text-green-400"></i>
+              <span>タスク共有</span>
+            </div>
+          </div>
+        </div>
       </div>
-    </section>
+    `;
+  } else {
+    // チーム参加時のダッシュボードUI
+    const memberListHtml = members.map(m => {
+      const roleLabel = { host: 'HOST', co_host: 'CO-HOST', member: 'MEMBER' }[m.role] || m.role;
+      const avatarLetter = (m.display_name || m.endpoint_id).charAt(0).toUpperCase();
+      return `
+        <div class="flex items-center gap-3">
+          <div class="avatar w-8 h-8 text-sm bg-gradient-to-br from-indigo-500 to-purple-600">${avatarLetter}</div>
+          <div class="flex-1">
+            <p class="text-sm font-medium text-white">${escapeHtml(m.display_name || 'Unknown')}</p>
+            <p class="text-xs text-[#8b949e]">${roleLabel}</p>
+          </div>
+          <div class="status-online w-2 h-2 rounded-full bg-green-500"></div>
+          <span class="px-2 py-1 text-xs font-bold rounded ${m.role === 'host' ? 'bg-amber-500 text-black' : 'bg-indigo-500 text-white'}">${roleLabel}</span>
+        </div>
+      `;
+    }).join('');
 
-    <!-- Create / Invite -->
-    <section class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6">
-      <h2 class="text-sm font-bold text-white mb-1">チーム作成・招待</h2>
-      <p class="text-[10px] text-[#8b949e] mb-3">新しいチームを作成するか、招待コードを発行します。</p>
-      <div id="team-buttons-status" class="mb-3"></div>
-      <div class="flex flex-wrap items-center gap-2">
-        <select id="team-invite-expires" class="bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-white outline-none focus:border-indigo-500">
-          <option value="30">30分</option>
-          <option value="60" selected>1時間</option>
-          <option value="180">3時間</option>
-          <option value="1440">24時間</option>
-          <option value="0">無期限</option>
-        </select>
-        <button id="btn-team-create" onclick="teamCreate()" class="h-8 px-4 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white flex items-center gap-2">
-          <i data-lucide="plus" size="14"></i> チーム作成
-        </button>
-        <button id="btn-team-issue-invite" onclick="teamIssueInvite()" class="h-8 px-4 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-xs font-bold text-white flex items-center gap-2">
-          <i data-lucide="link" size="14"></i> 招待コード発行
-        </button>
+    const inviteCodesHtml = inviteCodes.map(code => `
+      <div class="bg-[#0d1117] border border-[#30363d] rounded-xl p-3">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-mono text-indigo-400">${escapeHtml(code.code)}</span>
+          <button class="text-indigo-400 hover:text-indigo-300">
+            <i data-lucide="copy" size="14"></i>
+          </button>
+        </div>
+        <div class="text-xs text-[#8b949e]">期限: ${code.expires_at || '無期限'}</div>
       </div>
-    </section>
+    `).join('');
 
-    <!-- Join -->
-    <section class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6">
-      <h2 class="text-sm font-bold text-white mb-1">チームに参加</h2>
-      <p class="text-[10px] text-[#8b949e] mb-3">招待コードを入力してチームに参加します。</p>
-      <div id="team-join-form" class="flex gap-2">
-        <input id="team-join-code" type="text" placeholder="KASTRIX-..." class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-white outline-none focus:border-indigo-500">
-        <button onclick="teamJoin()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-[10px] font-bold text-white">参加申請</button>
+    container.innerHTML = `
+      <!-- Team Header -->
+      <div class="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 mb-6">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-4">
+            <div class="avatar w-12 h-12 text-lg bg-gradient-to-br from-indigo-500 to-purple-600">T</div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h2 id="team-name-display" class="text-lg font-bold text-white">${escapeHtml(teamInfo?.name || 'My Team')}</h2>
+                ${teamInfo?.amIHost ? `<button onclick="toggleTeamNameEdit()" class="text-[#8b949e] hover:text-white">
+                  <i data-lucide="edit-2" size="16"></i>
+                </button>` : ''}
+              </div>
+              <p class="text-sm text-[#8b949e]">${members.length}メンバー • ホスト: ${escapeHtml(teamInfo?.host || 'Unknown')}</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="px-3 py-1 bg-green-500/20 text-green-400 text-xs font-bold rounded-full">オンライン</span>
+          </div>
+        </div>
+
+        <!-- チーム名編集フォーム（ホストのみ表示） -->
+        <div id="team-name-edit-form" class="hidden mt-4 pt-4 border-t border-[#30363d]">
+          <div class="flex gap-2">
+            <input id="team-name-input" type="text" value="${escapeHtml(teamInfo?.name || 'My Team')}" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-sm text-white outline-none focus:border-indigo-500" maxlength="50">
+            <button onclick="saveTeamName()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white">保存</button>
+            <button onclick="cancelTeamNameEdit()" class="px-3 py-2 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-xs font-bold text-white">キャンセル</button>
+          </div>
+        </div>
       </div>
-      <div id="team-pending-status" class="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl mt-2" style="display:none;">
-        <span class="text-xs text-amber-400 font-bold">参加申請中…</span>
-        <button onclick="teamCancelJoin()" class="px-2 py-1 text-[9px] font-bold text-red-400 hover:bg-red-500/10 rounded-lg">キャンセル</button>
+
+      <!-- Dashboard Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+        <!-- Members -->
+        <div class="bg-[#161b22] border border-[#30363d] rounded-2xl p-6">
+          <h3 class="text-sm font-bold text-white mb-4 flex items-center gap-2">
+            <i data-lucide="users" size="16"></i>
+            メンバー (${members.length})
+          </h3>
+          <div class="space-y-3 max-h-64 overflow-y-auto custom-scrollbar">
+            ${memberListHtml}
+          </div>
+        </div>
+
+        <!-- Invite Codes -->
+        <div class="bg-[#161b22] border border-[#30363d] rounded-2xl p-6">
+          <h3 class="text-sm font-bold text-white mb-4 flex items-center gap-2">
+            <i data-lucide="link" size="16"></i>
+            招待コード
+          </h3>
+          <div class="space-y-3 max-h-64 overflow-y-auto custom-scrollbar">
+            ${inviteCodes.length > 0 ? inviteCodesHtml : '<p class="text-xs text-[#8b949e]">発行済みコードはありません</p>'}
+            <button onclick="teamIssueInvite()" class="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 mt-3">
+              <i data-lucide="plus" size="14"></i>
+              新規コード発行
+            </button>
+          </div>
+        </div>
+
+        <!-- Settings -->
+        <div class="bg-[#161b22] border border-[#30363d] rounded-2xl p-6">
+          <h3 class="text-sm font-bold text-white mb-4 flex items-center gap-2">
+            <i data-lucide="settings" size="16"></i>
+            設定
+          </h3>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-white mb-2">同期モード</label>
+              <select onchange="saveSyncMode(this.value)" class="w-full bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-sm text-white">
+                <option value="auto" ${syncMode !== 'manual' ? 'selected' : ''}>自動同期</option>
+                <option value="manual" ${syncMode === 'manual' ? 'selected' : ''}>手動同期</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-white mb-2">自分の表示名</label>
+              <input id="team-display-name-input" type="text" placeholder="表示名を入力" class="w-full bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-sm text-white">
+            </div>
+            <button onclick="teamLeave()" class="w-full px-4 py-2 bg-red-600 hover:bg-red-500 rounded-xl text-sm font-bold text-white">
+              チームを抜ける
+            </button>
+          </div>
+        </div>
+
       </div>
-    </section>
 
-    <!-- Invite Codes -->
-    <section id="team-invite-codes-section" class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6 hidden">
-      <h2 class="text-sm font-bold text-white mb-3">発行済み招待コード</h2>
-      <div id="team-invite-codes-list" class="space-y-2"></div>
-    </section>
+      <!-- Pending Joins (Host only) -->
+      ${pendingJoins.length > 0 ? `
+        <div class="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 mt-6">
+          <h3 class="text-sm font-bold text-white mb-4">参加申請 (${pendingJoins.length})</h3>
+          <div class="space-y-3">
+            ${pendingJoins.map(p => `
+              <div class="flex items-center justify-between p-3 bg-[#0d1117] border border-[#30363d] rounded-xl">
+                <div class="flex items-center gap-3">
+                  <div class="avatar w-8 h-8 text-sm bg-gradient-to-br from-blue-500 to-cyan-600">${(p.display_name || p.endpoint_id).charAt(0).toUpperCase()}</div>
+                  <div>
+                    <p class="text-sm font-medium text-white">${escapeHtml(p.display_name || 'Unknown')}</p>
+                    <p class="text-xs text-[#8b949e]">申請日時: ${p.requested_at || 'Unknown'}</p>
+                  </div>
+                </div>
+                <div class="flex gap-2">
+                  <button onclick="teamApproveJoin('${escapeHtml(p.endpoint_id)}')" class="px-3 py-1 bg-green-600 hover:bg-green-500 rounded text-xs font-bold text-white">承認</button>
+                  <button onclick="teamRejectJoin('${escapeHtml(p.endpoint_id)}')" class="px-3 py-1 bg-red-600 hover:bg-red-500 rounded text-xs font-bold text-white">拒否</button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
 
-    <!-- Pending Joins (Host) -->
-    <section id="team-pending-joins-section" class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6 hidden">
-      <h2 class="text-sm font-bold text-white mb-3">参加申請</h2>
-      <div id="team-pending-joins-list" class="space-y-2"></div>
-    </section>
-
-    <!-- Members -->
-    <section id="team-members-section" class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6 hidden">
-      <h2 class="text-sm font-bold text-white mb-3">メンバー</h2>
-      <div id="team-members-list" class="space-y-2"></div>
-    </section>
-
-    <!-- Blocked -->
-    <section id="team-blocked-section" class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6 hidden">
-      <h2 class="text-sm font-bold text-white mb-3">ブロック</h2>
-      <div id="team-blocked-list" class="space-y-2"></div>
-    </section>
-
-    <!-- Sync Mode -->
-    <section class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6">
-      <h2 class="text-sm font-bold text-white mb-1">同期モード</h2>
-      <p class="text-[10px] text-[#8b949e] mb-3">タスク変更の同期方法を選択します。</p>
-      <select onchange="saveSyncMode(this.value)" class="bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-white outline-none focus:border-indigo-500">
-        <option value="auto" ${syncMode !== 'manual' ? 'selected' : ''}>自動同期</option>
-        <option value="manual" ${syncMode === 'manual' ? 'selected' : ''}>手動同期</option>
-      </select>
-    </section>
-
-    <!-- Debug -->
-    <section class="bg-[#161b22] border border-[#30363d] rounded-2xl p-4 sm:p-6">
-      <button onclick="toggleTeamDebug()" class="text-[10px] text-[#484f58] hover:text-[#8b949e] font-bold">デバッグ情報を表示</button>
-      <div id="team-debug-panel" class="hidden mt-3 p-3 bg-[#0d1117] border border-[#30363d] rounded-xl text-[10px] font-mono text-[#8b949e]">
-        <div id="team-debug-content">...</div>
-        <div class="mt-2 text-[8px] text-[#484f58]">最終更新: <span id="team-debug-updated">-</span></div>
+      <!-- Debug -->
+      <div class="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 mt-6">
+        <button onclick="toggleTeamDebug()" class="text-[10px] text-[#484f58] hover:text-[#8b949e] font-bold">デバッグ情報を表示</button>
+        <div id="team-debug-panel" class="hidden mt-3 p-3 bg-[#0d1117] border border-[#30363d] rounded-xl text-[10px] font-mono text-[#8b949e]">
+          <div id="team-debug-content">...</div>
+          <div class="mt-2 text-[8px] text-[#484f58]">最終更新: <span id="team-debug-updated">-</span></div>
+        </div>
       </div>
-    </section>
-  `;
+    `;
+  }
 
   lucide.createIcons();
-  updateTeamButtonsState(ready, false);
-  renderTeamDisplayNameSection();
-  renderTeamInviteCodes();
-  renderTeamPendingJoins();
-  renderTeamMembers();
-  renderTeamBlocked();
-  renderTeamPendingStatus();
+  if (!isJoined) {
+    // 未参加時はボタン状態更新
+    const readyForButtons = _isTauri ? await apiTeamIsReady().catch(() => false) : false;
+    updateTeamButtonsState(readyForButtons, false);
+  } else {
+    // 参加時は個別レンダリング（ダッシュボードに統合済み）
+    renderTeamDisplayNameSection();
+    renderTeamPendingStatus();
+  }
 }
 
 function formatExpiresAt(isoStr) {
@@ -598,6 +762,227 @@ function updateTeamButtonsState(ready, failed) {
     inviteBtn.className = 'h-8 px-4 rounded-xl text-xs font-bold text-white flex items-center gap-2 bg-[#21262d] opacity-60 cursor-not-allowed border border-[#30363d]';
   }
   if (typeof lucide !== 'undefined') lucide.createIcons?.();
+}
+
+/** サイドバー Inbox 行の未同期件数（チーム手動同期キュー） */
+async function updateSidebarUnsyncedBadge() {
+  const el = document.getElementById('sidebar-unsynced-badge');
+  if (!el) return;
+  if (!_isTauri || typeof apiTeamGetUnsyncedCount !== 'function') {
+    el.classList.add('hidden');
+    return;
+  }
+  try {
+    const n = await apiTeamGetUnsyncedCount();
+    const count = typeof n === 'number' && !Number.isNaN(n) ? Math.max(0, n) : 0;
+    el.textContent = String(count);
+    el.classList.toggle('hidden', count <= 0);
+  } catch (_) {
+    el.classList.add('hidden');
+  }
+}
+
+async function teamApproveJoin(endpointId) {
+  if (!_isTauri || !endpointId) return;
+  try {
+    await window.__TAURI__.invoke('team_approve_join', { endpointId });
+    alert('参加を承認しました。');
+    renderTeamView(); // UI更新
+  } catch (e) {
+    console.error('Failed to approve join:', e);
+    alert('参加承認に失敗しました。');
+  }
+}
+
+async function teamRejectJoin(endpointId) {
+  if (!_isTauri || !endpointId) return;
+  try {
+    await window.__TAURI__.invoke('team_reject_join', { endpointId });
+    alert('参加を拒否しました。');
+    renderTeamView(); // UI更新
+  } catch (e) {
+    console.error('Failed to reject join:', e);
+    alert('参加拒否に失敗しました。');
+  }
+}
+
+function showTeamSettingsModal() {
+  if (!_isTauri) return;
+
+  // モーダルのHTML
+  const modalHtml = `
+    <div id="team-settings-modal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div class="bg-[#161b22] border border-[#30363d] rounded-2xl max-w-md w-full max-h-[80vh] overflow-hidden">
+        <div class="p-6">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-bold text-white">チーム設定</h3>
+            <button onclick="closeTeamSettingsModal()" class="text-[#8b949e] hover:text-white">
+              <i data-lucide="x" size="20"></i>
+            </button>
+          </div>
+
+          <div class="space-y-4">
+            <!-- チーム名変更 -->
+            <div>
+              <label class="block text-sm font-medium text-white mb-2">チーム名</label>
+              <input id="modal-team-name" type="text" placeholder="チーム名を入力" class="w-full bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-sm text-white outline-none focus:border-indigo-500" maxlength="50">
+            </div>
+
+            <!-- 同期モード -->
+            <div>
+              <label class="block text-sm font-medium text-white mb-2">同期モード</label>
+              <select id="modal-sync-mode" class="w-full bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-sm text-white">
+                <option value="auto">自動同期</option>
+                <option value="manual">手動同期</option>
+              </select>
+            </div>
+
+            <!-- 自分の表示名 -->
+            <div>
+              <label class="block text-sm font-medium text-white mb-2">自分の表示名</label>
+              <input id="modal-display-name" type="text" placeholder="表示名を入力" class="w-full bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-sm text-white outline-none focus:border-indigo-500" maxlength="64">
+            </div>
+
+            <!-- 危険ゾーン -->
+            <div class="pt-4 border-t border-[#30363d]">
+              <h4 class="text-sm font-bold text-red-400 mb-2">危険ゾーン</h4>
+              <button onclick="confirmTeamLeave()" class="w-full px-4 py-2 bg-red-600 hover:bg-red-500 rounded-xl text-sm font-bold text-white">
+                チームを抜ける
+              </button>
+            </div>
+          </div>
+
+          <div class="flex gap-3 mt-6">
+            <button onclick="saveTeamSettings()" class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-sm font-bold text-white">
+              保存
+            </button>
+            <button onclick="closeTeamSettingsModal()" class="px-4 py-2 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-sm font-bold text-white">
+              キャンセル
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // モーダルをbodyに追加
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  lucide.createIcons();
+
+  // 現在の設定を読み込んで入力欄にセット
+  loadTeamSettingsIntoModal();
+}
+
+function closeTeamSettingsModal() {
+  const modal = document.getElementById('team-settings-modal');
+  if (modal) modal.remove();
+}
+
+async function loadTeamSettingsIntoModal() {
+  try {
+    const [syncMode, displayName] = await Promise.all([
+      apiTeamGetSyncMode(),
+      apiTeamGetMyDisplayName ? apiTeamGetMyDisplayName() : Promise.resolve('')
+    ]);
+
+    const nameEl = document.getElementById('modal-team-name');
+    const syncEl = document.getElementById('modal-sync-mode');
+    const displayEl = document.getElementById('modal-display-name');
+
+    if (nameEl) nameEl.value = 'My Team'; // TODO: APIで取得
+    if (syncEl) syncEl.value = syncMode || 'auto';
+    if (displayEl) displayEl.value = displayName || '';
+  } catch (e) {
+    console.error('Failed to load team settings:', e);
+  }
+}
+
+async function saveTeamSettings() {
+  try {
+    const name = document.getElementById('modal-team-name')?.value || '';
+    const syncMode = document.getElementById('modal-sync-mode')?.value || 'auto';
+    const displayName = document.getElementById('modal-display-name')?.value || '';
+
+    // TODO: APIコールで保存
+    // await apiTeamUpdateSettings({ name, syncMode, displayName });
+
+    alert('設定を保存しました（実装予定）');
+    closeTeamSettingsModal();
+    renderTeamView(); // UI更新
+  } catch (e) {
+    console.error('Failed to save team settings:', e);
+    alert('設定保存に失敗しました');
+  }
+}
+
+function toggleTeamNameEdit() {
+  const displayEl = document.getElementById('team-name-display');
+  const formEl = document.getElementById('team-name-edit-form');
+  if (!displayEl || !formEl) return;
+
+  const isEditing = !formEl.classList.contains('hidden');
+  if (isEditing) {
+    cancelTeamNameEdit();
+  } else {
+    formEl.classList.remove('hidden');
+    displayEl.style.display = 'none';
+    document.getElementById('team-name-input')?.focus();
+  }
+}
+
+async function saveTeamName() {
+  const inputEl = document.getElementById('team-name-input');
+  if (!inputEl) return;
+
+  const newName = inputEl.value.trim();
+  if (!newName) {
+    alert('チーム名を入力してください');
+    return;
+  }
+
+  try {
+    // APIでチーム名を保存
+    await window.__TAURI__.invoke('team_update_name', { newName });
+
+    // 表示を更新
+    const displayEl = document.getElementById('team-name-display');
+    if (displayEl) displayEl.textContent = escapeHtml(newName);
+
+    cancelTeamNameEdit();
+    alert('チーム名を更新しました');
+
+    // UI全体を再レンダリングして同期
+    renderTeamView();
+  } catch (e) {
+    console.error('Failed to save team name:', e);
+    alert('チーム名の保存に失敗しました');
+  }
+}
+
+function cancelTeamNameEdit() {
+  const displayEl = document.getElementById('team-name-display');
+  const formEl = document.getElementById('team-name-edit-form');
+  if (displayEl) displayEl.style.display = '';
+  if (formEl) formEl.classList.add('hidden');
+}
+
+function confirmTeamLeave() {
+  if (confirm('チームを抜けますか？ この操作は取り消せません。')) {
+    teamLeave();
+    closeTeamSettingsModal();
+  }
+}
+
+async function teamLeave() {
+  if (!_isTauri || !confirm('チームを抜けますか？ この操作は取り消せません。')) return;
+  try {
+    await window.__TAURI__.invoke('team_leave');
+    alert('チームを抜けました。');
+    renderTeamView(); // UI更新
+  } catch (e) {
+    console.error('Failed to leave team:', e);
+    alert('チームを抜けるのに失敗しました。');
+  }
 }
 
 if (_isTauri && window.__TAURI__?.event?.listen) {

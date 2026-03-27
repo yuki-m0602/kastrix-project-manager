@@ -3,6 +3,7 @@
 pub mod invite;
 pub mod leave;
 pub mod members;
+pub mod update_name;
 
 use crate::db::DbState;
 use crate::models::Task;

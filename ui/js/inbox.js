@@ -73,7 +73,8 @@ async function renderInbox() {
       <div class="mb-4">
         <h3 class="text-[10px] font-bold text-[#8b949e] uppercase mb-2 flex items-center gap-2">
           <i data-lucide="user-plus" size="12"></i>
-          参加申請 <span class="text-indigo-400">[${pending.length}件]</span>
+          <span>参加申請</span>
+          <span class="inline-flex items-center justify-center min-h-5 min-w-5 px-1.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[9px] font-black tabular-nums leading-none">${pending.length}</span>
         </h3>
         <div class="space-y-2">
           ${pending.map((p) => `
@@ -92,6 +93,14 @@ async function renderInbox() {
       </div>
     `
     : '';
+
+  const totalInboxItems =
+    notifications.length + (canApprove && pending.length > 0 ? pending.length : 0);
+  const headerCount = document.getElementById('inbox-header-count');
+  if (headerCount) {
+    headerCount.textContent = String(totalInboxItems);
+    headerCount.classList.toggle('hidden', totalInboxItems <= 0);
+  }
 
   const hasAny = joinSection || notifications.length > 0;
   container.innerHTML = !hasAny

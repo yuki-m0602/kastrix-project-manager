@@ -7,6 +7,22 @@ async function initWindowControls() {
   const { getCurrentWindow } = window.__TAURI__.window;
   const win = getCurrentWindow();
   
+  // 最大化アイコンの更新
+  async function updateMaximizeIcon() {
+    const icon = document.getElementById('maximize-icon');
+    if (!icon) return;
+    const isMaximized = await win.isMaximized();
+    // アイコンを切り替え
+    icon.setAttribute('data-lucide', isMaximized ? 'copy' : 'square');
+    // Lucideアイコンを再生成
+    if (typeof lucide !== 'undefined') {
+      lucide.createIcons();
+    }
+  }
+  
+  // 初期状態を設定
+  updateMaximizeIcon();
+  
   document.getElementById('btn-minimize')?.addEventListener('click', () => win.minimize());
   document.getElementById('btn-maximize')?.addEventListener('click', async () => {
     const isMaximized = await win.isMaximized();
@@ -15,8 +31,15 @@ async function initWindowControls() {
     } else {
       win.maximize();
     }
+    // アイコンを更新
+    setTimeout(updateMaximizeIcon, 100);
   });
   document.getElementById('btn-close')?.addEventListener('click', () => win.close());
+  
+  // ウィンドウのリサイズイベントでアイコンを更新
+  win.onResized(() => {
+    updateMaximizeIcon();
+  });
 }
 initWindowControls();
 
@@ -325,10 +348,16 @@ async function init() {
   lucide.createIcons();
   fixFilterIconSizes();
   if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
+  if (typeof updateSidebarUnsyncedBadge === 'function') await updateSidebarUnsyncedBadge();
   // iroh 復元が遅い場合のリトライ（1s, 2s, 3s 後）
   if (_isTauri && typeof updateSidebarRoomInfo === 'function') {
     [1000, 2000, 3000].forEach((ms) => {
       setTimeout(() => updateSidebarRoomInfo(), ms);
+    });
+  }
+  if (_isTauri && typeof updateSidebarUnsyncedBadge === 'function') {
+    [500, 2000].forEach((ms) => {
+      setTimeout(() => updateSidebarUnsyncedBadge(), ms);
     });
   }
 }

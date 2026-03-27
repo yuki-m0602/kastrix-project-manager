@@ -130,6 +130,7 @@ pub fn run() {
             commands::team::members::team_get_my_display_name,
             commands::team::team_resolve_conflict,
             commands::team::leave::team_leave,
+            commands::team::update_name::team_update_name,
         ])
         .run(tauri::generate_context!())
         .expect("Error while running Tauri application");

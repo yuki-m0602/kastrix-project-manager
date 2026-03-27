@@ -43,6 +43,34 @@
         #sidebar + * {
           margin-left: 0 !important;
         }
+        /* ドロワー時はメインを全幅（p-2 の左と揃える） */
+        #main-area {
+          padding-left: 0.5rem !important;
+        }
+      }
+      /* デスクトップ: サイドバー左オフセット8px + 幅 + 余白8px（JS で折りたたみ時は上書き） */
+      @media (min-width: 1024px) {
+        #main-area {
+          padding-left: 240px;
+        }
+        /* 折りたたみ時: 全ナビの Lucide を同じ比率で拡大（Inbox は span 内の svg もここに含まれる） */
+        #sidebar.sidebar-collapsed .nav-btn {
+          justify-content: center;
+          gap: 0;
+        }
+        #sidebar.sidebar-collapsed .nav-btn svg {
+          width: 20px !important;
+          height: 20px !important;
+        }
+        #sidebar.sidebar-collapsed #sidebar-unsynced-badge {
+          min-height: 0.875rem;
+          min-width: 0.875rem;
+          padding-left: 0.125rem;
+          padding-right: 0.125rem;
+          font-size: 7px;
+          top: -0.5rem;
+          right: -0.5rem;
+        }
       }
       
       /* Thinner lucide icons */
@@ -250,13 +278,18 @@
   <div id="mobile-overlay" class="fixed inset-0 bg-black/50 z-20" onclick="closeMobileSidebar()" style="display: none;"></div>
 
   <!-- Custom Title Bar (for frameless window) -->
-  <div class="fixed top-0 left-0 right-0 h-8 bg-[#0d1117] z-50 flex items-center" data-tauri-drag-region>
-    <div class="flex-1" data-tauri-drag-region></div>
-    <span class="text-xs text-[#c9d1d9] font-bold" data-tauri-drag-region>Kastrix</span>
-    <div class="flex-1 flex justify-end" data-tauri-drag-region>
-      <button id="btn-minimize" class="w-10 h-6 text-[#8b949e] hover:bg-[#30363d]">─</button>
-      <button id="btn-maximize" class="w-10 h-6 text-[#8b949e] hover:bg-[#30363d]">□</button>
-      <button id="btn-close" class="w-10 h-6 text-[#8b949e] hover:bg-red-600">✕</button>
+  <div class="fixed top-0 left-0 right-0 h-8 bg-[#0d1117] z-50 flex items-center justify-between px-2" data-tauri-drag-region>
+    <span class="text-xs text-[#c9d1d9] font-bold ml-2" data-tauri-drag-region>Kastrix</span>
+    <div class="flex items-center gap-1" data-tauri-drag-region>
+      <button id="btn-minimize" class="w-10 h-6 flex items-center justify-center text-[#8b949e] hover:bg-[#30363d] rounded">
+        <i data-lucide="minus" class="w-5 h-6"></i>
+      </button>
+      <button id="btn-maximize" class="w-10 h-6 flex items-center justify-center text-[#8b949e] hover:bg-[#30363d] rounded">
+        <i id="maximize-icon" data-lucide="square" class="w-4 h-6"></i>
+      </button>
+      <button id="btn-close" class="w-10 h-6 flex items-center justify-center text-[#8b949e] hover:bg-red-600 rounded">
+        <i data-lucide="x" class="w-5 h-6"></i>
+      </button>
     </div>
   </div>
 
@@ -287,10 +320,12 @@
             <i data-lucide="activity" size="16"></i>
             <span class="nav-label font-bold tracking-wide">Activity Logs</span>
           </button>
-          <button onclick="setActiveMenu('inbox')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent relative" data-menu="inbox">
-            <i data-lucide="inbox" size="16"></i>
+          <button onclick="setActiveMenu('inbox')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="inbox">
+            <span class="relative inline-flex shrink-0 items-center justify-center">
+              <i data-lucide="inbox" size="16"></i>
+              <span id="sidebar-unsynced-badge" class="pointer-events-none absolute -top-2 -right-2 z-[1] hidden min-h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-0.5 text-[8px] font-black leading-none tabular-nums text-black ring-2 ring-[#161b22] flex">0</span>
+            </span>
             <span class="nav-label font-bold tracking-wide">Inbox</span>
-            <span id="sidebar-unsynced-badge" class="hidden ml-auto w-5 h-5 rounded-full bg-amber-500 text-[9px] font-black flex items-center justify-center text-black nav-label">0</span>
           </button>
           <button onclick="setActiveMenu('ai')" class="nav-btn flex items-center w-full p-3 rounded-xl gap-2 transition-all duration-200 text-[10px] hover:bg-[#161b22] border border-transparent" data-menu="ai">
             <i data-lucide="sparkles" size="16"></i>
@@ -321,7 +356,7 @@
     </aside>
 
     <!-- Main area -->
-    <div id="main-area" class="h-full p-2 pt-8 overflow-hidden w-full" style="padding-left: 240px;">
+    <div id="main-area" class="h-full p-2 pt-8 overflow-hidden w-full">
     <div class="h-full flex flex-col min-w-0 bg-[#0d1117] rounded-2xl border border-[#30363d] overflow-hidden shadow-inner relative">
       
       <!-- Header with Menu (sidebar toggle when sidebar hidden) -->
@@ -829,7 +864,13 @@
                 <i data-lucide="menu" size="16"></i>
               </button>
             </div>
-            <h1 class="flex-1 text-center font-black text-[10px] tracking-[0.15em] text-[#c9d1d9] uppercase">Inbox</h1>
+            <h1 class="flex-1 flex items-center justify-center gap-2 font-black text-[10px] tracking-[0.15em] text-[#c9d1d9] uppercase">
+              <span class="relative inline-flex shrink-0 items-center justify-center">
+                <i data-lucide="inbox" size="16" class="text-[#c9d1d9]"></i>
+                <span id="inbox-header-count" class="pointer-events-none absolute -top-2 -right-2 z-[1] hidden min-h-4 min-w-4 items-center justify-center rounded-full bg-indigo-500/90 px-0.5 text-[8px] font-black leading-none tabular-nums text-white ring-2 ring-[#010409] flex">0</span>
+              </span>
+              <span>Inbox</span>
+            </h1>
             <div class="w-10 shrink-0 lg:w-0 lg:overflow-hidden"></div>
           </header>
           <div id="inbox-content" class="flex-1 overflow-auto custom-scrollbar p-4 sm:p-6 space-y-2"></div>
