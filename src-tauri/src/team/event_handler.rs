@@ -12,7 +12,7 @@ use super::broadcast::{
     broadcast_blocked_notify, broadcast_json_payload, broadcast_permission_change,
     broadcast_team_disband,
 };
-use super::helpers::get_my_endpoint_id;
+use super::helpers::{clear_members_if_no_team, get_my_endpoint_id};
 use super::payloads::{
     JoinRequestPayload, MemberBlockedNotifyPayload, MemberDisplayNamePayload, MemberOpPayload,
     PermissionChangePayload, TeamDisbandPayload,
@@ -158,6 +158,7 @@ pub async fn spawn_topic_listener(
                                             "DELETE FROM team_subscriptions WHERE topic_id = ?1",
                                             rusqlite::params![topic_id],
                                         );
+                                        let _ = clear_members_if_no_team(&db);
                                     });
                                 }
                                 let guard = iroh.read().await;

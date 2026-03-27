@@ -3,7 +3,7 @@
 use crate::db::DbState;
 use crate::team::{
     am_i_pending_guest, broadcast_member_display_name, broadcast_member_op, can_approve_or_reject,
-    get_my_endpoint_id, is_current_user_host, IrohState,
+    clear_members_if_no_team, get_my_endpoint_id, in_team, is_current_user_host, IrohState,
 };
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
@@ -40,6 +40,93 @@ pub fn team_list_blocked(state: State<'_, DbState>) -> Result<Vec<MemberInfo>, S
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
     Ok(rows)
+}
+
+#[tauri::command]
+pub fn team_is_in_team(state: State<'_, DbState>) -> Result<bool, String> {
+    let db = state.0.lock().map_err(|e| e.to_string())?;
+    Ok(in_team(&db))
+}
+
+/// 自分が members で active か（購読の残骸だけでは true にしない）
+#[tauri::command]
+pub async fn team_is_active_member(
+    state: State<'_, DbState>,
+    iroh: State<'_, IrohState>,
+) -> Result<bool, String> {
+    let my_id = get_my_endpoint_id(&iroh).await;
+    if my_id.is_empty() {
+        return Ok(false);
+    }
+    let db = state.0.lock().map_err(|e| e.to_string())?;
+    if !in_team(&db) {
+        return Ok(false);
+    }
+    Ok(db
+        .query_row(
+            "SELECT 1 FROM members WHERE endpoint_id = ?1 AND status = 'active'",
+            [&my_id],
+            |_| Ok(()),
+        )
+        .is_ok())
+}
+
+/// 購読はあるが自分が active メンバーでも承認待ちでもない不整合を掃除（UI が「参加中」のまま固まるのを防ぐ）
+#[tauri::command]
+pub async fn team_repair_orphan_if_needed(
+    app: AppHandle,
+    state: State<'_, DbState>,
+    iroh: State<'_, IrohState>,
+) -> Result<bool, String> {
+    let my_id = get_my_endpoint_id(&iroh).await;
+    if my_id.is_empty() {
+        return Ok(false);
+    }
+    let topics: Vec<String> = {
+        let db = state.0.lock().map_err(|e| e.to_string())?;
+        if !in_team(&db) {
+            return Ok(false);
+        }
+        if am_i_pending_guest(&db, &my_id) {
+            return Ok(false);
+        }
+        if db
+            .query_row(
+                "SELECT 1 FROM members WHERE endpoint_id = ?1 AND status = 'active'",
+                [&my_id],
+                |_| Ok(()),
+            )
+            .is_ok()
+        {
+            return Ok(false);
+        }
+        let mut stmt = db
+            .prepare("SELECT topic_id FROM team_subscriptions")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| r.get::<_, String>(0))
+            .map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?
+    };
+    if topics.is_empty() {
+        return Ok(false);
+    }
+    for tid in &topics {
+        let guard = iroh.read().await;
+        if let Some(node) = guard.as_ref() {
+            node.unsubscribe(tid).await;
+        }
+    }
+    {
+        let db = state.0.lock().map_err(|e| e.to_string())?;
+        db.execute("DELETE FROM team_subscriptions", [])
+            .map_err(|e| e.to_string())?;
+        db.execute("DELETE FROM members", [])
+            .map_err(|e| e.to_string())?;
+    }
+    let _ = app.emit("team-left", ());
+    Ok(true)
 }
 
 #[tauri::command]
@@ -129,6 +216,7 @@ pub async fn team_cancel_join(
                 [],
             )
             .map_err(|e| e.to_string())?;
+            clear_members_if_no_team(&db).map_err(|e| e.to_string())?;
         }
         {
             let guard = iroh.read().await;
@@ -177,6 +265,7 @@ pub async fn team_cancel_join(
             [&topic_id],
         )
         .map_err(|e| e.to_string())?;
+        clear_members_if_no_team(&db).map_err(|e| e.to_string())?;
     }
     {
         let guard = iroh.read().await;

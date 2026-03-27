@@ -18,7 +18,7 @@ pub use broadcast::{
 pub use event_handler::spawn_topic_listener;
 pub use helpers::{
     am_i_pending_guest, can_apply_remote_task_delete, can_approve_or_reject, can_delete_task_for_user,
-    get_my_endpoint_id, is_current_user_host, topic_id_to_hex,
+    clear_members_if_no_team, get_my_endpoint_id, in_team, is_current_user_host, topic_id_to_hex,
 };
 pub use invite_code::{generate_invite_code, normalize_code};
 pub use iroh_node::{IrohNodeState, IrohState};

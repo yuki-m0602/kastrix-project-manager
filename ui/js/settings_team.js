@@ -1,40 +1,70 @@
 // ── Settings: Team ────────────────────────────────────────
+// _isTauri は api.js で定義済み
+
+// Expose functions globally
+window.renderTeamView = renderTeamView;
 
 async function renderTeamView() {
+  console.log('renderTeamView called');
   const container = document.getElementById('team-content');
-  if (!container) return;
+  if (!container) {
+    console.error('team-content not found');
+    return;
+  }
 
-  // チーム参加状態をチェック
+  // 参加中: members に自分が active としていることのみ（購読だけ残る不整合は Rust 側で修復してから判定）
   let isJoined = false;
   let teamInfo = null;
   let members = [];
   let pendingJoins = [];
   let inviteCodes = [];
   let syncMode = SYNC_MODE_AUTO;
+  let unsyncedCount = 0;
 
   if (_isTauri) {
     try {
-      const [membersData, pendingData, codesData, syncData, teamName] = await Promise.all([
-        apiTeamListMembers(),
-        apiTeamListPendingJoins(),
-        apiTeamListInviteCodes(),
-        apiTeamGetSyncMode(),
-        window.__TAURI__.invoke('get_setting', { key: 'team_name' }).catch(() => 'My Team')
-      ]);
+      await apiTeamRepairOrphanIfNeeded().catch(() => false);
+
+      let membersData = [];
+      try {
+        membersData = await apiTeamListMembers();
+      } catch (e) {
+        console.error('Failed to load members:', e);
+        membersData = [];
+      }
+
       members = membersData || [];
-      pendingJoins = pendingData || [];
-      inviteCodes = codesData || [];
-      syncMode = syncData || SYNC_MODE_AUTO;
-      isJoined = members.length > 0;
+      const isActiveMember = await apiTeamIsActiveMember().catch(() => false);
+      isJoined = isActiveMember;
+
       if (isJoined) {
-        // チーム情報を取得
-        const amIHost = await apiTeamAmIHost();
+        // チーム参加時のデータ取得
+        const promises = [
+          apiTeamListPendingJoins().catch(() => []),
+          apiTeamListInviteCodes().catch(() => []),
+          apiTeamGetSyncMode().catch(() => SYNC_MODE_AUTO),
+          apiTeamAmIHost().catch(() => false),
+          apiGetSetting('team_name').catch(() => 'My Team'),
+          apiTeamGetUnsyncedCount().catch(() => 0),
+        ];
+
+        const [pendingData, codesData, syncData, amIHost, teamName, unsyncedN] = await Promise.all(promises);
+
+        pendingJoins = pendingData || [];
+        inviteCodes = codesData || [];
+        syncMode = syncData || SYNC_MODE_AUTO;
+        unsyncedCount =
+          typeof unsyncedN === 'number' && !Number.isNaN(unsyncedN) ? Math.max(0, unsyncedN) : 0;
+
         teamInfo = {
           name: teamName || 'My Team',
           memberCount: members.length,
           host: members.find(m => m.role === 'host')?.display_name || 'Unknown',
           amIHost
         };
+      } else {
+        // 未参加時のデータ取得
+        syncMode = await apiTeamGetSyncMode().catch(() => SYNC_MODE_AUTO);
       }
     } catch (e) {
       console.error('Failed to load team data:', e);
@@ -219,6 +249,15 @@ async function renderTeamView() {
               <label class="block text-sm font-medium text-white mb-2">自分の表示名</label>
               <input id="team-display-name-input" type="text" placeholder="表示名を入力" class="w-full bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-sm text-white">
             </div>
+            ${syncMode === SYNC_MODE_MANUAL || syncMode === 'manual' ? `
+            <div class="pt-2 border-t border-[#30363d] space-y-2">
+              <p class="text-xs text-[#8b949e]">手動同期: 未配信 <span class="text-amber-400 font-bold">${unsyncedCount}</span> 件</p>
+              <button type="button" onclick="teamPushUnsynced()" class="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2">
+                <i data-lucide="upload" size="16"></i>
+                Push して配信
+              </button>
+            </div>
+            ` : ''}
             <button onclick="teamLeave()" class="w-full px-4 py-2 bg-red-600 hover:bg-red-500 rounded-xl text-sm font-bold text-white">
               チームを抜ける
             </button>
@@ -271,6 +310,7 @@ async function renderTeamView() {
     // 参加時は個別レンダリング（ダッシュボードに統合済み）
     renderTeamDisplayNameSection();
     renderTeamPendingStatus();
+    if (typeof updateSidebarUnsyncedBadge === 'function') await updateSidebarUnsyncedBadge();
   }
 }
 
@@ -764,45 +804,83 @@ function updateTeamButtonsState(ready, failed) {
   if (typeof lucide !== 'undefined') lucide.createIcons?.();
 }
 
-/** サイドバー Inbox 行の未同期件数（チーム手動同期キュー） */
+/** サイドバー: 手動同期時の未配信バッジ + Push ボタンエリア */
 async function updateSidebarUnsyncedBadge() {
-  const el = document.getElementById('sidebar-unsynced-badge');
-  if (!el) return;
+  const badge = document.getElementById('sidebar-unsynced-badge');
+  const pushSection = document.getElementById('sidebar-push-section');
+  const pushCount = document.getElementById('sidebar-push-count');
   if (!_isTauri || typeof apiTeamGetUnsyncedCount !== 'function') {
-    el.classList.add('hidden');
+    badge?.classList.add('hidden');
+    pushSection?.classList.add('hidden');
     return;
   }
   try {
-    const n = await apiTeamGetUnsyncedCount();
+    const [n, mode, active] = await Promise.all([
+      apiTeamGetUnsyncedCount(),
+      apiTeamGetSyncMode().catch(() => SYNC_MODE_AUTO),
+      typeof apiTeamIsActiveMember === 'function' ? apiTeamIsActiveMember().catch(() => false) : Promise.resolve(false),
+    ]);
     const count = typeof n === 'number' && !Number.isNaN(n) ? Math.max(0, n) : 0;
-    el.textContent = String(count);
-    el.classList.toggle('hidden', count <= 0);
+    const manual = mode === SYNC_MODE_MANUAL || mode === 'manual';
+
+    if (badge) {
+      badge.textContent = String(count);
+      badge.classList.toggle('hidden', !(manual && count > 0));
+    }
+    if (pushSection && pushCount) {
+      pushCount.textContent = String(count);
+      pushSection.classList.toggle('hidden', !(manual && active));
+    }
   } catch (_) {
-    el.classList.add('hidden');
+    badge?.classList.add('hidden');
+    pushSection?.classList.add('hidden');
   }
 }
+
+/** 未配信 Operation を一括送信（サイドバー / Team 設定の Push から） */
+async function teamPushUnsynced() {
+  if (!_isTauri || typeof apiTeamPushUnsynced !== 'function') return;
+  try {
+    const n = await apiTeamPushUnsynced();
+    const sent = typeof n === 'number' && !Number.isNaN(n) ? Math.max(0, n) : 0;
+    if (typeof showAlert === 'function') {
+      showAlert(
+        sent > 0 ? `${sent} 件を配信しました。` : '未配信の変更はありません。',
+        sent > 0 ? 'success' : 'info'
+      );
+    }
+    if (typeof updateSidebarUnsyncedBadge === 'function') await updateSidebarUnsyncedBadge();
+    if (typeof window.renderTeamView === 'function') await window.renderTeamView();
+  } catch (e) {
+    if (typeof showAlert === 'function') showAlert('Push に失敗しました: ' + (e?.message || e), 'error');
+  }
+}
+
+window.teamPushUnsynced = teamPushUnsynced;
 
 async function teamApproveJoin(endpointId) {
   if (!_isTauri || !endpointId) return;
   try {
-    await window.__TAURI__.invoke('team_approve_join', { endpointId });
-    alert('参加を承認しました。');
+    await apiTeamApproveJoin(endpointId, '');
+    console.log('Approved join for:', endpointId);
+    // alert('参加を承認しました。');
     renderTeamView(); // UI更新
   } catch (e) {
     console.error('Failed to approve join:', e);
-    alert('参加承認に失敗しました。');
+    alert('参加承認に失敗しました: ' + e);
   }
 }
 
 async function teamRejectJoin(endpointId) {
   if (!_isTauri || !endpointId) return;
   try {
-    await window.__TAURI__.invoke('team_reject_join', { endpointId });
-    alert('参加を拒否しました。');
+    await apiTeamRejectJoin(endpointId, '');
+    console.log('Rejected join for:', endpointId);
+    // alert('参加を拒否しました。');
     renderTeamView(); // UI更新
   } catch (e) {
     console.error('Failed to reject join:', e);
-    alert('参加拒否に失敗しました。');
+    alert('参加拒否に失敗しました: ' + e);
   }
 }
 
@@ -942,7 +1020,7 @@ async function saveTeamName() {
 
   try {
     // APIでチーム名を保存
-    await window.__TAURI__.invoke('team_update_name', { newName });
+    await apiTeamUpdateName(newName);
 
     // 表示を更新
     const displayEl = document.getElementById('team-name-display');
@@ -966,6 +1044,52 @@ function cancelTeamNameEdit() {
   if (formEl) formEl.classList.add('hidden');
 }
 
+async function teamCreate() {
+  if (!_isTauri) {
+    alert('Tauri環境でのみ利用可能です');
+    return;
+  }
+
+  const expiresSelect = document.getElementById('team-invite-expires');
+  const expiresMinutes = expiresSelect ? parseInt(expiresSelect.value) : 60;
+
+  try {
+    const result = await apiTeamCreate(expiresMinutes);
+
+    // チーム名を保存
+    await apiSetSetting('team_name', 'My Team');
+
+    console.log('Team created:', result);
+    alert(`チームを作成しました！\n招待コード: ${result.code}\n招待リンク: ${result.inviteString}`);
+
+    // UI更新 - ダッシュボードを表示
+    renderTeamView();
+  } catch (e) {
+    console.error('Failed to create team:', e);
+    alert('チーム作成に失敗しました: ' + e);
+  }
+}
+
+async function teamIssueInvite() {
+  if (!_isTauri) return;
+
+  const expiresSelect = document.getElementById('team-invite-expires');
+  const expiresMinutes = expiresSelect ? parseInt(expiresSelect.value) : 60;
+
+  try {
+    const result = await apiTeamIssueInvite(expiresMinutes);
+
+    console.log('Invite issued:', result);
+    alert(`招待コードを発行しました！\nコード: ${result.code}\nリンク: ${result.inviteString}`);
+
+    // UI更新
+    renderTeamView();
+  } catch (e) {
+    console.error('Failed to issue invite:', e);
+    alert('招待コード発行に失敗しました: ' + e);
+  }
+}
+
 function confirmTeamLeave() {
   if (confirm('チームを抜けますか？ この操作は取り消せません。')) {
     teamLeave();
@@ -976,7 +1100,7 @@ function confirmTeamLeave() {
 async function teamLeave() {
   if (!_isTauri || !confirm('チームを抜けますか？ この操作は取り消せません。')) return;
   try {
-    await window.__TAURI__.invoke('team_leave');
+    await apiTeamLeave();
     alert('チームを抜けました。');
     renderTeamView(); // UI更新
   } catch (e) {
@@ -985,11 +1109,4 @@ async function teamLeave() {
   }
 }
 
-if (_isTauri && window.__TAURI__?.event?.listen) {
-  window.__TAURI__.event.listen('team-pending-join', () => {
-    if (typeof renderTeamPendingJoins === 'function') renderTeamPendingJoins();
-  });
-  window.__TAURI__.event.listen('team-iroh-ready', (e) => {
-    updateTeamButtonsState(e.payload === true, e.payload === false);
-  });
-}
+// チーム画面のリアルタイム更新は ui/js/main.js の refreshTeamUiFromBackend（Tauri イベント）に集約

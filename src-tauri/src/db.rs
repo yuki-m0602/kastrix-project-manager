@@ -168,6 +168,11 @@ fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
             conn.execute(sql, [])?;
         }
     }
+    // 退出後に他メンバー行だけ残ると UI が「参加中」のままになるため、購読 0 件なら members を掃除
+    let n_subs: i64 = conn.query_row("SELECT COUNT(*) FROM team_subscriptions", [], |r| r.get(0))?;
+    if n_subs == 0 {
+        conn.execute("DELETE FROM members", [])?;
+    }
     Ok(())
 }
 

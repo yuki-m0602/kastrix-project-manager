@@ -3,36 +3,30 @@
 // ブラウザ開発時はダミーデータにフォールバック
 const _isTauri = typeof window !== 'undefined' && window.__TAURI__ !== undefined;
 
-/** XSS対策: ユーザー入力を innerHTML に挿入する前にエスケープ（属性値内の ' も対応） */
-function escapeHtml(s) {
-  if (s == null) return '';
-  const div = document.createElement('div');
-  div.textContent = String(s);
-  return div.innerHTML.replace(/'/g, '&#39;');
-}
-
 async function _invoke(cmd, args) {
   if (!_isTauri) return null;
   return await window.__TAURI__.core.invoke(cmd, args || {});
 }
 
-/** invoke を try-catch でラップし、失敗時に defaultVal を返す */
-async function _invokeWithDefault(cmd, args, defaultVal, options = {}) {
-  const { asArray = false, logLabel } = options;
-  try {
-    const result = await _invoke(cmd, args || {});
-    if (asArray) return Array.isArray(result) ? result : defaultVal;
-    return result ?? defaultVal;
-  } catch (e) {
-    if (logLabel) console.error(logLabel + ' failed:', e);
-    return defaultVal;
+// ── Dialog ───────────────────────────────────────────────
+async function confirmAsync(message) {
+  if (_isTauri && window.__TAURI__.dialog) {
+    return await window.__TAURI__.dialog.confirm(message, { title: 'Kastrix' });
   }
+  return confirm(message);
+}
+
+async function apiDialogOpen(options) {
+  if (_isTauri && window.__TAURI__.dialog) {
+    return await window.__TAURI__.dialog.open(options);
+  }
+  return null;
 }
 
 // ── Projects ─────────────────────────────────────────────
 async function apiGetProjects() {
-  const fallback = [...(localProjects || [])];
-  return await _invokeWithDefault('get_projects', {}, fallback, { asArray: true, logLabel: 'apiGetProjects' });
+  const result = await _invoke('get_projects');
+  return result || [...localProjects];
 }
 
 async function apiScanDirectory(path) {
@@ -40,7 +34,7 @@ async function apiScanDirectory(path) {
 }
 
 async function apiScanAllWatchedDirs() {
-  return await _invokeWithDefault('scan_all_watched_dirs', {}, [], { asArray: true });
+  return await _invoke('scan_all_watched_dirs') || [];
 }
 
 async function apiRemoveProject(id) {
@@ -48,27 +42,22 @@ async function apiRemoveProject(id) {
 }
 
 async function apiGetReadme(path) {
-  return await _invokeWithDefault('get_readme', { path }, 'No README available');
+  const result = await _invoke('get_readme', { path });
+  return result || 'No README available';
 }
 
 async function apiOpenInIde(ide, path) {
   if (_isTauri) {
-    try {
-      await _invoke('open_in_ide', { ide, path: path || null });
-    } catch (e) {
-      console.error('Failed to open IDE:', e);
-      showAlert('IDE を開けませんでした: ' + e, 'error');
-    }
+    await _invoke('open_in_ide', { ide, path });
   } else {
-    showAlert(ide + ' で開く\n(Tauri 環境で動作)', 'info');
+    alert('Open in ' + ide + ': ' + path + '\n(Tauri環境で動作)');
   }
 }
 
 // ── Tasks ────────────────────────────────────────────────
 async function apiGetTasks(projectId) {
-  const fallback = [...(tasks || [])];
-  const args = projectId ? { projectId } : {};
-  return await _invokeWithDefault('get_tasks', args, fallback, { asArray: true, logLabel: 'apiGetTasks' });
+  const result = await _invoke('get_tasks', projectId ? { projectId } : {});
+  return result || [...tasks];
 }
 
 async function apiCreateTask(input) {
@@ -109,12 +98,6 @@ async function apiDeleteTask(id) {
   return await _invoke('delete_task', { id });
 }
 
-/** ホストまたは作成者のとき true（チーム未参加時は常に true） */
-async function apiTaskCanDelete(id) {
-  if (!_isTauri) return true;
-  return await _invokeWithDefault('task_can_delete', { id }, true, { logLabel: 'apiTaskCanDelete' });
-}
-
 async function apiUpdateTaskStatus(id, status) {
   if (!_isTauri) {
     const task = tasks.find(t => t.id === id);
@@ -126,9 +109,8 @@ async function apiUpdateTaskStatus(id, status) {
 
 // ── Logs ─────────────────────────────────────────────────
 async function apiGetActivityLogs(projectId) {
-  const fallback = [...(activityLogs || [])];
-  const args = projectId ? { projectId } : {};
-  return await _invokeWithDefault('get_activity_logs', args, fallback, { asArray: true });
+  const result = await _invoke('get_activity_logs', projectId ? { projectId } : {});
+  return result || [...activityLogs];
 }
 
 async function apiExportLogsCsv(projectId) {
@@ -138,7 +120,7 @@ async function apiExportLogsCsv(projectId) {
 
 // ── Settings ─────────────────────────────────────────────
 async function apiGetWatchedDirs() {
-  return await _invokeWithDefault('get_watched_dirs', {}, [], { asArray: true });
+  return (await _invoke('get_watched_dirs')) || [];
 }
 
 async function apiAddWatchedDir(path) {
@@ -163,22 +145,12 @@ async function apiSaveApiKey(provider, key) {
 }
 
 async function apiGetApiKeyStatus(provider) {
-  return await _invokeWithDefault('get_api_key_status', { provider }, false);
+  const result = await _invoke('get_api_key_status', { provider });
+  return result || false;
 }
 
 async function apiDeleteApiKey(provider) {
   return await _invoke('delete_api_key', { provider });
-}
-
-async function apiListAiModels(provider) {
-  if (!_isTauri) return [];
-  return await _invokeWithDefault('list_ai_models', { provider }, [], { asArray: true });
-}
-
-/** モデル一覧（id + is_free）。OpenRouter で無料判定に使用 */
-async function apiListAiModelsExtended(provider) {
-  if (!_isTauri) return [];
-  return await _invokeWithDefault('list_ai_models_extended', { provider }, [], { asArray: true });
 }
 
 async function apiAnalyzeLogs(prompt, provider) {
@@ -186,47 +158,25 @@ async function apiAnalyzeLogs(prompt, provider) {
   return await _invoke('analyze_logs', { prompt, provider });
 }
 
-// ── AI Chat Logs (永続化・複数チャット) ────────────────────
-async function apiAiCreateChat() {
-  if (!_isTauri) return null;
-  return await _invokeWithDefault('ai_create_chat', {}, null);
-}
-
-async function apiAiListChats() {
-  if (!_isTauri) return [];
-  return await _invokeWithDefault('ai_list_chats', {}, [], { asArray: true });
-}
-
-async function apiAiGetChatMessages(chatId) {
-  if (!_isTauri) return [];
-  return await _invokeWithDefault('ai_get_chat_messages', { chatId }, [], { asArray: true });
-}
-
-async function apiAiAddChatMessage(chatId, role, content) {
-  if (!_isTauri) return;
-  await _invoke('ai_add_chat_message', { chatId, role, content });
-}
-
-async function apiAiDeleteChat(chatId) {
-  if (!_isTauri) return;
-  await _invoke('ai_delete_chat', { chatId });
-}
-
 // ── Team ─────────────────────────────────────────────────
 async function apiTeamIsReady() {
-  if (!_isTauri) return false;
-  const r = await _invokeWithDefault('team_is_ready', {}, false);
-  return r === true;
+  return await _invoke('team_is_ready') ?? false;
+}
+
+async function apiTeamGetSyncMode() {
+  return await _invoke('team_get_sync_mode') ?? 'auto';
+}
+
+async function apiTeamSetSyncMode(mode) {
+  return await _invoke('team_set_sync_mode', { mode });
+}
+
+async function apiTeamGetUnsyncedCount() {
+  return await _invoke('team_get_unsynced_count') ?? 0;
 }
 
 async function apiTeamDebugStatus() {
-  if (!_isTauri) return null;
-  const fallback = { step1_iroh_node: 'エラー', step2_node_ticket: '-', step2_error: null, endpoint_id: null };
-  try {
-    return await _invoke('team_debug_status', {});
-  } catch (e) {
-    return { ...fallback, step2_error: String(e) };
-  }
+  return await _invoke('team_debug_status');
 }
 
 async function apiTeamCreate(expiresMinutes) {
@@ -241,16 +191,40 @@ async function apiTeamJoin(code) {
   return await _invoke('team_join', { code });
 }
 
-async function apiTeamListInviteCodes() {
-  return await _invokeWithDefault('team_list_invite_codes', {}, [], { asArray: true });
+async function apiTeamLeave() {
+  return await _invoke('team_leave');
 }
 
-async function apiTeamRevokeInviteCode(code) {
-  return await _invoke('team_revoke_invite_code', { code });
+async function apiTeamIsInTeam() {
+  return await _invoke('team_is_in_team') ?? false;
+}
+
+async function apiTeamIsActiveMember() {
+  return await _invoke('team_is_active_member') ?? false;
+}
+
+async function apiTeamRepairOrphanIfNeeded() {
+  return await _invoke('team_repair_orphan_if_needed') ?? false;
+}
+
+async function apiTeamListMembers() {
+  return await _invoke('team_list_members') ?? [];
+}
+
+async function apiTeamListBlocked() {
+  return await _invoke('team_list_blocked') ?? [];
 }
 
 async function apiTeamListPendingJoins() {
-  return await _invokeWithDefault('team_list_pending_joins', {}, [], { asArray: true });
+  return await _invoke('team_list_pending_joins') ?? [];
+}
+
+async function apiTeamAmIPending() {
+  return await _invoke('team_am_i_pending') ?? false;
+}
+
+async function apiTeamCancelJoin() {
+  return await _invoke('team_cancel_join');
 }
 
 async function apiTeamApproveJoin(endpointId, topicId) {
@@ -273,37 +247,16 @@ async function apiTeamUnblock(endpointId) {
   return await _invoke('team_unblock', { endpointId });
 }
 
-async function apiTeamListBlocked() {
-  return await _invokeWithDefault('team_list_blocked', {}, [], { asArray: true });
-}
-
-async function apiTeamGetCurrentRoom() {
-  const fallback = { roomName: '未参加', status: '未参加' };
-  return await _invokeWithDefault('team_get_current_room', {}, fallback, { logLabel: 'apiTeamGetCurrentRoom' });
-}
-
-async function apiTeamGetSyncMode() {
-  return await _invokeWithDefault('team_get_sync_mode', {}, SYNC_MODE_AUTO);
-}
-
-async function apiTeamSetSyncMode(mode) {
-  return await _invoke('team_set_sync_mode', { mode });
-}
-
-async function apiTeamGetUnsyncedCount() {
-  return await _invokeWithDefault('team_get_unsynced_count', {}, 0);
-}
-
-async function apiTeamPushUnsynced() {
-  return await _invoke('team_push_unsynced', {});
-}
-
-async function apiTeamGetMyRole() {
-  return await _invokeWithDefault('team_get_my_role', {}, 'member');
+async function apiTeamPromoteToCoHost(endpointId) {
+  return await _invoke('team_promote_to_co_host', { endpointId });
 }
 
 async function apiTeamAmIHost() {
-  return await _invokeWithDefault('team_am_i_host', {}, false);
+  return await _invoke('team_am_i_host') ?? false;
+}
+
+async function apiTeamGetMyRole() {
+  return await _invoke('team_get_my_role') ?? '';
 }
 
 async function apiTeamSetMyDisplayName(displayName) {
@@ -311,27 +264,25 @@ async function apiTeamSetMyDisplayName(displayName) {
 }
 
 async function apiTeamGetMyDisplayName() {
-  return await _invokeWithDefault('team_get_my_display_name', {}, null);
+  return await _invoke('team_get_my_display_name') ?? '';
 }
 
-async function apiTeamAmIPending() {
-  return await _invokeWithDefault('team_am_i_pending', {}, false);
+async function apiTeamListInviteCodes() {
+  return await _invoke('team_list_invite_codes') ?? [];
 }
 
-async function apiTeamCancelJoin() {
-  return await _invoke('team_cancel_join', {});
-}
-
-async function apiTeamListMembers() {
-  return await _invokeWithDefault('team_list_members', {}, [], { asArray: true });
-}
-
-async function apiTeamPromoteToCoHost(endpointId) {
-  return await _invoke('team_promote_to_co_host', { endpointId });
+async function apiTeamRevokeInviteCode(code) {
+  return await _invoke('team_revoke_invite_code', { code });
 }
 
 async function apiTeamResolveConflict(choice, incoming, seq) {
-  return await _invoke('team_resolve_conflict', {
-    input: { choice, incoming, seq: seq ?? null },
-  });
+  return await _invoke('team_resolve_conflict', { input: { choice, incoming, seq: seq ?? null } });
+}
+
+async function apiTeamUpdateName(newName) {
+  return await _invoke('team_update_name', { newName });
+}
+
+async function apiTeamPushUnsynced() {
+  return await _invoke('team_push_unsynced');
 }

@@ -92,6 +92,7 @@ function toggleSidebarVisibility() {
 }
 
 function setActiveMenu(menu) {
+  console.log('setActiveMenu called with:', menu);
   // 'projects' はOverviewビュー+Projectsタブへのショートカット
   const isProjects = menu === 'projects';
   const actualView = isProjects ? 'overview' : menu;
@@ -148,7 +149,7 @@ function setActiveMenu(menu) {
   if (actualView === 'settings' && typeof renderSettings === 'function') renderSettings();
   if (actualView === 'analytics' && typeof renderAnalytics === 'function') renderAnalytics();
   if (actualView === 'inbox' && typeof renderInbox === 'function') renderInbox();
-  if (actualView === 'team' && typeof renderTeamView === 'function') renderTeamView();
+  if (actualView === 'team' && typeof window.renderTeamView === 'function') window.renderTeamView();
   if (actualView === 'ai' && typeof initAiView === 'function') initAiView();
   closeMobileSidebar();
 }

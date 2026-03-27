@@ -59,6 +59,16 @@ pub fn in_team(conn: &rusqlite::Connection) -> bool {
         .is_ok()
 }
 
+/// `team_subscriptions` が 0 件のとき `members` を全削除する。
+/// 退出・キック後に他メンバーの行だけ残り「参加中」の UI になるのを防ぐ。
+pub fn clear_members_if_no_team(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
+    let n: i64 = conn.query_row("SELECT COUNT(*) FROM team_subscriptions", [], |r| r.get(0))?;
+    if n == 0 {
+        conn.execute("DELETE FROM members", [])?;
+    }
+    Ok(())
+}
+
 /// ゲストとしてチームに未承認参加（ホストの承認待ち）か。
 /// `my_endpoint_id` が空のときは false。キック/ブロック済みの行があるときも false（誤って「申請中」と出さない）。
 pub fn am_i_pending_guest(conn: &rusqlite::Connection, my_endpoint_id: &str) -> bool {
