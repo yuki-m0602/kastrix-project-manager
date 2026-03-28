@@ -13,7 +13,7 @@ pub mod pending_db;
 mod task_sync;
 
 pub use broadcast::{
-    broadcast_json_payload, broadcast_member_display_name, broadcast_member_join, broadcast_member_op,
+    broadcast_join_request, broadcast_member_display_name, broadcast_member_join, broadcast_member_op,
     broadcast_permission_change, broadcast_team_disband,
 };
 pub use payloads::JoinRequestPayload;

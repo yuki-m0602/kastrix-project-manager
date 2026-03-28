@@ -9,8 +9,7 @@ use crate::db::DbState;
 use crate::team::task_sync::{apply_task_update, TaskUpdatePayload};
 
 use super::broadcast::{
-    broadcast_blocked_notify, broadcast_json_payload, broadcast_permission_change,
-    broadcast_team_disband,
+    broadcast_blocked_notify, broadcast_join_request, broadcast_permission_change, broadcast_team_disband,
 };
 use super::helpers::{clear_members_if_no_team, get_my_endpoint_id, upsert_member_joined_active};
 use super::payloads::{
@@ -108,7 +107,7 @@ pub async fn spawn_topic_listener(
                             topic_id: topic_id.clone(),
                             requested_at: requested_at.clone(),
                         };
-                        let _ = broadcast_json_payload(&iroh, &payload).await;
+                        let _ = broadcast_join_request(&iroh, &topic_id, &payload).await;
                     }
                 }
             }

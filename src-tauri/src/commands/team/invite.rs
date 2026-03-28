@@ -2,8 +2,8 @@
 
 use crate::db::DbState;
 use crate::team::{
-    broadcast_json_payload, generate_invite_code, get_my_endpoint_id, normalize_code,
-    spawn_topic_listener, topic_id_to_hex, JoinRequestPayload, IrohState,
+    am_i_pending_guest, broadcast_join_request, generate_invite_code, get_my_endpoint_id,
+    normalize_code, spawn_topic_listener, topic_id_to_hex, JoinRequestPayload, IrohState,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -304,21 +304,34 @@ pub async fn team_join(
 
     // NeighborUp がホストに届かない場合でも、gossip の join_request で承認キューに載せる
     let my_ep = get_my_endpoint_id(&iroh).await;
-    if !my_ep.is_empty() {
-        let requested_at = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-        let payload = JoinRequestPayload {
-            r#type: "join_request".to_string(),
-            endpoint_id: my_ep,
-            topic_id: topic_id.clone(),
-            requested_at,
-        };
-        let _ = broadcast_json_payload(&iroh, &payload).await;
+    if my_ep.is_empty() {
+        return Err(
+            "エンドポイントIDを取得できませんでした。しばらく待ってから再度「参加」をお試しください。"
+                .to_string(),
+        );
     }
+    let requested_at = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let payload = JoinRequestPayload {
+        r#type: "join_request".to_string(),
+        endpoint_id: my_ep,
+        topic_id: topic_id.clone(),
+        requested_at,
+    };
+    let message = match broadcast_join_request(&iroh, &topic_id, &payload).await {
+        Ok(()) => "参加申請を送信しました。ホストの承認をお待ちください。".to_string(),
+        Err(e) => {
+            eprintln!("broadcast_join_request failed: {}", e);
+            format!(
+                "参加情報は保存しましたが、ホストへの参加申請の送信に失敗しました: {}。ネットワークを確認し、再度「参加」をお試しください。",
+                e
+            )
+        }
+    };
 
     Ok(super::TeamJoinResult {
         topic_id: topic_id.clone(),
         status: "pending".to_string(),
-        message: "参加申請を送信しました。ホストの承認をお待ちください。".to_string(),
+        message,
     })
 }
 
@@ -356,54 +369,84 @@ pub async fn restore_team_subscriptions(app: &tauri::AppHandle) -> Result<(), St
         return Ok(());
     }
 
-    let guard = iroh.read().await;
-    let node = guard
-        .as_ref()
-        .ok_or_else(|| "iroh が初期化されていません".to_string())?;
+    let mut guest_topics_to_resend_join: Vec<String> = Vec::new();
 
-    for (topic_id_row, host_ticket, is_host) in subs {
-        let topic_id = topic_id_row.to_ascii_lowercase();
-        let topic_id_bytes = hex_to_topic_id(&topic_id)?;
-        let topic_id_iroh = iroh_gossip::proto::TopicId::from_bytes(topic_id_bytes);
-        let bootstrap: Vec<iroh::NodeId> = if is_host != 0 {
-            vec![]
-        } else {
-            let ht = host_ticket.as_ref().ok_or_else(|| {
-                format!(
-                    "メンバーとして topic {} の host_ticket がありません",
-                    topic_id
+    {
+        let guard = iroh.read().await;
+        let node = guard
+            .as_ref()
+            .ok_or_else(|| "iroh が初期化されていません".to_string())?;
+
+        for (topic_id_row, host_ticket, is_host) in subs {
+            let topic_id = topic_id_row.to_ascii_lowercase();
+            let topic_id_bytes = hex_to_topic_id(&topic_id)?;
+            let topic_id_iroh = iroh_gossip::proto::TopicId::from_bytes(topic_id_bytes);
+            let bootstrap: Vec<iroh::NodeId> = if is_host != 0 {
+                vec![]
+            } else {
+                let ht = host_ticket.as_ref().ok_or_else(|| {
+                    format!(
+                        "メンバーとして topic {} の host_ticket がありません",
+                        topic_id
+                    )
+                })?;
+                let ticket: iroh_base::ticket::NodeTicket = ht
+                    .parse()
+                    .map_err(|e| format!("host_ticket 解析失敗: {}", e))?;
+                node.add_node_addr(&ticket)
+                    .map_err(|e| format!("ホスト接続設定失敗: {}", e))?;
+                vec![ticket.node_addr().node_id]
+            };
+
+            let receiver = node
+                .subscribe(topic_id_iroh, &topic_id, bootstrap)
+                .await
+                .map_err(|e| format!("topic {} の subscribe 復元失敗: {}", topic_id, e))?;
+
+            let pending_joins = pending_joins.inner().clone();
+            let app = app.clone();
+            let topic_id_for_listener = topic_id.clone();
+            let is_host_bool = is_host != 0;
+            tauri::async_runtime::spawn(async move {
+                spawn_topic_listener(
+                    receiver,
+                    pending_joins,
+                    app,
+                    topic_id_for_listener,
+                    is_host_bool,
                 )
-            })?;
-            let ticket: iroh_base::ticket::NodeTicket = ht
-                .parse()
-                .map_err(|e| format!("host_ticket 解析失敗: {}", e))?;
-            node.add_node_addr(&ticket)
-                .map_err(|e| format!("ホスト接続設定失敗: {}", e))?;
-            vec![ticket.node_addr().node_id]
+                .await;
+            });
+            // ゲストは member_join 受信ループを先に回してから他処理が走るように少し間を空ける
+            if is_host == 0 {
+                guest_topics_to_resend_join.push(topic_id.clone());
+                tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+            }
+        }
+    }
+
+    // ロック解除後に join_request を再送（再起動直後は NeighborUp だけではホストに届かない場合がある）
+    for tid in guest_topics_to_resend_join {
+        let my_ep = get_my_endpoint_id(&iroh).await;
+        if my_ep.is_empty() {
+            continue;
+        }
+        let still_pending = {
+            let db = db_state.0.lock().map_err(|e| e.to_string())?;
+            am_i_pending_guest(&db, &my_ep)
         };
-
-        let receiver = node
-            .subscribe(topic_id_iroh, &topic_id, bootstrap)
-            .await
-            .map_err(|e| format!("topic {} の subscribe 復元失敗: {}", topic_id, e))?;
-
-        let pending_joins = pending_joins.inner().clone();
-        let app = app.clone();
-        let topic_id_for_listener = topic_id.clone();
-        let is_host_bool = is_host != 0;
-        tauri::async_runtime::spawn(async move {
-            spawn_topic_listener(
-                receiver,
-                pending_joins,
-                app,
-                topic_id_for_listener,
-                is_host_bool,
-            )
-            .await;
-        });
-        // ゲストは member_join 受信ループを先に回してから他処理が走るように少し間を空ける
-        if is_host == 0 {
-            tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+        if !still_pending {
+            continue;
+        }
+        let requested_at = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let payload = JoinRequestPayload {
+            r#type: "join_request".to_string(),
+            endpoint_id: my_ep.clone(),
+            topic_id: tid.clone(),
+            requested_at,
+        };
+        if let Err(e) = broadcast_join_request(&iroh, &tid, &payload).await {
+            eprintln!("restore_team_subscriptions: broadcast_join_request failed: {}", e);
         }
     }
 
