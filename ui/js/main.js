@@ -423,9 +423,13 @@ if (_isTauri && window.__TAURI__?.event?.listen) {
   window.__TAURI__.event.listen('team-left', async () => {
     await refreshTeamUiFromBackend();
   });
-  window.__TAURI__.event.listen('team-iroh-ready', (e) => {
+  window.__TAURI__.event.listen('team-iroh-ready', async (e) => {
     if (typeof updateTeamButtonsState === 'function') {
       updateTeamButtonsState(e.payload === true, e.payload === false);
+    }
+    // iroh 準備前は endpoint が空のため team_am_i_pending が常に false になる。準備完了後に再描画する。
+    if (e.payload === true) {
+      await refreshTeamUiFromBackend();
     }
   });
   window.__TAURI__.event.listen('team-update-required', () => {
