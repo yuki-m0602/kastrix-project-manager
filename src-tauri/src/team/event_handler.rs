@@ -21,6 +21,11 @@ use super::pending::{PendingJoinInfo, PendingJoinsState};
 use super::pending_db;
 use super::IrohState;
 
+#[inline]
+fn gossip_topic_matches(message_topic: &str, listener_topic: &str) -> bool {
+    message_topic.eq_ignore_ascii_case(listener_topic)
+}
+
 /// team_disband 受信時の処理（unsubscribe + DB クリア）
 async fn handle_team_disband(app: &AppHandle, topic_id: &str, pending_joins: &PendingJoinsState) {
     if let Some(iroh) = app.try_state::<IrohState>() {
@@ -51,6 +56,7 @@ pub async fn spawn_topic_listener(
     topic_id: String,
     is_host: bool,
 ) {
+    let topic_id = topic_id.to_ascii_lowercase();
     while let Some(event) = receiver.next().await {
         match event {
             Ok(Event::NeighborUp(node_id)) if is_host => {
@@ -116,7 +122,9 @@ pub async fn spawn_topic_listener(
                         let _ = apply_task_update(&state, &payload, Some(&app));
                     }
                 } else if let Ok(join_req) = serde_json::from_slice::<JoinRequestPayload>(slice) {
-                    if join_req.r#type == "join_request" && join_req.topic_id == topic_id {
+                    if join_req.r#type == "join_request"
+                        && gossip_topic_matches(&join_req.topic_id, &topic_id)
+                    {
                         let my_id = if let Some(iroh) = app.try_state::<IrohState>() {
                             get_my_endpoint_id(&iroh).await
                         } else {
@@ -124,9 +132,10 @@ pub async fn spawn_topic_listener(
                         };
                         // ゲストが自分でブロードキャストした join_request を自分の pending に入れない
                         if join_req.endpoint_id != my_id {
+                            let tid = join_req.topic_id.to_ascii_lowercase();
                             let info = PendingJoinInfo {
                                 endpoint_id: join_req.endpoint_id,
-                                topic_id: join_req.topic_id,
+                                topic_id: tid,
                                 requested_at: join_req.requested_at,
                             };
                             let mut guard = pending_joins.write().await;
@@ -145,7 +154,7 @@ pub async fn spawn_topic_listener(
                     }
                 } else if let Ok(mj) = serde_json::from_slice::<MemberJoinPayload>(slice) {
                     if mj.r#type == "member_join"
-                        && mj.topic_id == topic_id
+                        && gossip_topic_matches(&mj.topic_id, &topic_id)
                         && !mj.endpoint_id.is_empty()
                     {
                         let ver = mj.version.as_deref().unwrap_or("1.0");

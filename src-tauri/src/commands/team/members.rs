@@ -297,6 +297,7 @@ pub async fn team_approve_join(
     endpoint_id: String,
     topic_id: String,
 ) -> Result<(), String> {
+    let topic_id = topic_id.to_ascii_lowercase();
     let my_endpoint_id = get_my_endpoint_id(&iroh).await;
     let can_approve = {
         let db = state.0.lock().map_err(|e| e.to_string())?;
@@ -341,6 +342,7 @@ pub async fn team_reject_join(
     endpoint_id: String,
     topic_id: String,
 ) -> Result<(), String> {
+    let topic_id = topic_id.to_ascii_lowercase();
     let my_endpoint_id = get_my_endpoint_id(&iroh).await;
     let can_reject = {
         let db = state.0.lock().map_err(|e| e.to_string())?;

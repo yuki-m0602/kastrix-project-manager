@@ -111,22 +111,36 @@ impl IrohNodeState {
         topic_id_hex: &str,
         bootstrap: Vec<NodeId>,
     ) -> Result<GossipReceiver, String> {
+        let key = topic_id_hex.to_ascii_lowercase();
         let topic = self
             .gossip
             .subscribe(topic_id, bootstrap)
             .await
             .map_err(|e| format!("gossip subscribe failed: {}", e))?;
         let (sender, receiver) = topic.split();
-        self.subscriptions
-            .write()
-            .await
-            .insert(topic_id_hex.to_string(), sender);
+        self.subscriptions.write().await.insert(key, sender);
         Ok(receiver)
     }
 
     /// トピックの GossipSender を取得（subscribe 済みの場合、broadcast 用）
     pub async fn get_sender(&self, topic_id_hex: &str) -> Option<GossipSender> {
-        self.subscriptions.read().await.get(topic_id_hex).cloned()
+        let map = self.subscriptions.read().await;
+        let lower = topic_id_hex.to_ascii_lowercase();
+        map.get(&lower)
+            .cloned()
+            .or_else(|| {
+                map.iter()
+                    .find(|(k, _)| k.eq_ignore_ascii_case(topic_id_hex))
+                    .map(|(_, v)| v.clone())
+            })
+    }
+
+    /// topic hex（大文字小文字無視）に対応する送信ハンドル（member_join 等で正しいトピックへ送る）
+    pub async fn get_senders_for_topic_hex(&self, topic_hex: &str) -> Vec<GossipSender> {
+        if let Some(s) = self.get_sender(topic_hex).await {
+            return vec![s];
+        }
+        vec![]
     }
 
     /// 全トピックの GossipSender を取得（task_update broadcast 用）
@@ -141,11 +155,16 @@ impl IrohNodeState {
 
     /// トピックの購読を解除（参加申請キャンセル時など）
     pub async fn unsubscribe(&self, topic_id_hex: &str) -> bool {
-        self.subscriptions
-            .write()
-            .await
-            .remove(topic_id_hex)
-            .is_some()
+        let mut map = self.subscriptions.write().await;
+        let lower = topic_id_hex.to_ascii_lowercase();
+        if map.remove(&lower).is_some() {
+            return true;
+        }
+        let key = map
+            .keys()
+            .find(|k| k.eq_ignore_ascii_case(topic_id_hex))
+            .cloned();
+        key.map(|k| map.remove(&k).is_some()).unwrap_or(false)
     }
 }
 

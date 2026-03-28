@@ -257,6 +257,8 @@ pub async fn team_join(
             .to_string()
     })?;
 
+    let topic_id = topic_id.to_ascii_lowercase();
+
     let receiver = {
         let guard = iroh.read().await;
         let node = guard
@@ -349,7 +351,8 @@ pub async fn restore_team_subscriptions(app: &tauri::AppHandle) -> Result<(), St
         .as_ref()
         .ok_or_else(|| "iroh が初期化されていません".to_string())?;
 
-    for (topic_id, host_ticket, is_host) in subs {
+    for (topic_id_row, host_ticket, is_host) in subs {
+        let topic_id = topic_id_row.to_ascii_lowercase();
         let topic_id_bytes = hex_to_topic_id(&topic_id)?;
         let topic_id_iroh = iroh_gossip::proto::TopicId::from_bytes(topic_id_bytes);
         let bootstrap: Vec<iroh::NodeId> = if is_host != 0 {

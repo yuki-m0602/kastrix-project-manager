@@ -31,18 +31,42 @@ pub async fn broadcast_json_payload<T: serde::Serialize>(
 }
 
 /// 承認済みメンバーをチーム全員のローカル DB に反映するためブロードキャスト
+///
+/// 該当トピックの sender を優先し、`broadcast` に加え `broadcast_neighbors` も送って
+/// 1 ホップの相手にも届きやすくする（topic_id の大小文字差で受信側が無視するのも防ぐため payload は小文字化）。
 pub async fn broadcast_member_join(
     iroh: &IrohState,
     endpoint_id: &str,
     topic_id: &str,
 ) -> Result<(), String> {
+    let topic_norm = topic_id.to_ascii_lowercase();
     let payload = MemberJoinPayload {
         r#type: "member_join".to_string(),
         version: Some("1.0".to_string()),
         endpoint_id: endpoint_id.to_string(),
-        topic_id: topic_id.to_string(),
+        topic_id: topic_norm,
     };
-    broadcast_json_payload(iroh, &payload).await
+    let json = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
+    let bytes = Bytes::from(json.into_bytes());
+
+    let guard = iroh.read().await;
+    let node = match guard.as_ref() {
+        Some(n) => n,
+        None => return Ok(()),
+    };
+
+    let mut senders = node.get_senders_for_topic_hex(topic_id).await;
+    if senders.is_empty() {
+        senders = node.get_all_senders().await;
+    }
+    if senders.is_empty() {
+        return Ok(());
+    }
+    for sender in senders {
+        let _ = sender.broadcast(bytes.clone()).await;
+        let _ = sender.broadcast_neighbors(bytes.clone()).await;
+    }
+    Ok(())
 }
 
 /// メンバー操作をブロードキャスト
