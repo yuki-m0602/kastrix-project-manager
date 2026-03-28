@@ -15,7 +15,7 @@ pub fn upsert_pending_join(conn: &Connection, info: &PendingJoinInfo) -> SqlResu
 
 pub fn delete_pending_join(conn: &Connection, endpoint_id: &str, topic_id: &str) -> SqlResult<()> {
     conn.execute(
-        "DELETE FROM team_pending_joins WHERE endpoint_id = ?1 AND topic_id = ?2",
+        "DELETE FROM team_pending_joins WHERE lower(endpoint_id) = lower(?1) AND topic_id = ?2",
         [endpoint_id, topic_id],
     )?;
     Ok(())

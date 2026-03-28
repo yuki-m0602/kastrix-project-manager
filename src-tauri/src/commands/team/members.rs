@@ -4,7 +4,7 @@ use crate::db::DbState;
 use crate::team::{
     am_i_pending_guest, broadcast_member_display_name, broadcast_member_join, broadcast_member_op,
     can_approve_or_reject, clear_members_if_no_team, get_my_endpoint_id, in_team,
-    is_current_user_host, pending_db, upsert_member_joined_active, IrohState,
+    is_current_user_host, normalize_endpoint_id, pending_db, upsert_member_joined_active, IrohState,
 };
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
@@ -65,7 +65,7 @@ pub async fn team_is_active_member(
     }
     Ok(db
         .query_row(
-            "SELECT 1 FROM members WHERE endpoint_id = ?1 AND status = 'active'",
+            "SELECT 1 FROM members WHERE lower(endpoint_id) = lower(?1) AND status = 'active'",
             [&my_id],
             |_| Ok(()),
         )
@@ -297,6 +297,7 @@ pub async fn team_approve_join(
     endpoint_id: String,
     topic_id: String,
 ) -> Result<(), String> {
+    let endpoint_id = normalize_endpoint_id(&endpoint_id);
     let topic_id = topic_id.to_ascii_lowercase();
     let my_endpoint_id = get_my_endpoint_id(&iroh).await;
     let can_approve = {
@@ -322,7 +323,9 @@ pub async fn team_approve_join(
     }
     {
         let mut guard = pending_joins.write().await;
-        guard.retain(|p| !(p.endpoint_id == endpoint_id && p.topic_id == topic_id));
+        guard.retain(|p| {
+            !(normalize_endpoint_id(&p.endpoint_id) == endpoint_id && p.topic_id == topic_id)
+        });
     }
     {
         let db = state.0.lock().map_err(|e| e.to_string())?;
@@ -348,6 +351,7 @@ pub async fn team_reject_join(
     endpoint_id: String,
     topic_id: String,
 ) -> Result<(), String> {
+    let endpoint_id = normalize_endpoint_id(&endpoint_id);
     let topic_id = topic_id.to_ascii_lowercase();
     let my_endpoint_id = get_my_endpoint_id(&iroh).await;
     let can_reject = {
@@ -359,7 +363,9 @@ pub async fn team_reject_join(
     }
     {
         let mut guard = pending_joins.write().await;
-        guard.retain(|p| !(p.endpoint_id == endpoint_id && p.topic_id == topic_id));
+        guard.retain(|p| {
+            !(normalize_endpoint_id(&p.endpoint_id) == endpoint_id && p.topic_id == topic_id)
+        });
     }
     {
         let db = state.0.lock().map_err(|e| e.to_string())?;
@@ -502,7 +508,7 @@ pub async fn team_get_my_role(
     let db = state.0.lock().map_err(|e| e.to_string())?;
     let role: Option<String> = db
         .query_row(
-            "SELECT role FROM members WHERE endpoint_id = ?1 AND status = 'active'",
+            "SELECT role FROM members WHERE lower(endpoint_id) = lower(?1) AND status = 'active'",
             [&my_id],
             |r| r.get(0),
         )

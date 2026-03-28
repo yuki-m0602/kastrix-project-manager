@@ -6,6 +6,7 @@ use super::payloads::{
     JoinRequestPayload, MemberBlockedNotifyPayload, MemberDisplayNamePayload, MemberJoinPayload,
     MemberOpPayload, PermissionChangePayload, TeamDisbandPayload,
 };
+use super::helpers::normalize_endpoint_id;
 use super::IrohState;
 
 /// JSON ペイロードをチーム全員にブロードキャスト（共通ヘルパー）
@@ -40,10 +41,11 @@ pub async fn broadcast_member_join(
     topic_id: &str,
 ) -> Result<(), String> {
     let topic_norm = topic_id.to_ascii_lowercase();
+    let ep_norm = normalize_endpoint_id(endpoint_id);
     let payload = MemberJoinPayload {
         r#type: "member_join".to_string(),
         version: Some("1.0".to_string()),
-        endpoint_id: endpoint_id.to_string(),
+        endpoint_id: ep_norm,
         topic_id: topic_norm,
     };
     let json = serde_json::to_string(&payload).map_err(|e| e.to_string())?;

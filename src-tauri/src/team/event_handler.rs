@@ -11,7 +11,9 @@ use crate::team::task_sync::{apply_task_update, TaskUpdatePayload};
 use super::broadcast::{
     broadcast_blocked_notify, broadcast_join_request, broadcast_permission_change, broadcast_team_disband,
 };
-use super::helpers::{clear_members_if_no_team, get_my_endpoint_id, upsert_member_joined_active};
+use super::helpers::{
+    clear_members_if_no_team, get_my_endpoint_id, normalize_endpoint_id, upsert_member_joined_active,
+};
 use super::payloads::{
     JoinRequestPayload, MemberBlockedNotifyPayload, MemberDisplayNamePayload, MemberJoinPayload,
     MemberOpPayload, PermissionChangePayload, TeamDisbandPayload,
@@ -59,11 +61,11 @@ pub async fn spawn_topic_listener(
     while let Some(event) = receiver.next().await {
         match event {
             Ok(Event::NeighborUp(node_id)) if is_host => {
-                let endpoint_id = node_id.to_string();
+                let endpoint_id = normalize_endpoint_id(&node_id.to_string());
                 let is_blocked = if let Some(state) = app.try_state::<DbState>() {
                     state.0.lock().map_or(false, |db| {
                         db.query_row(
-                            "SELECT 1 FROM members WHERE endpoint_id = ?1 AND status = 'blocked'",
+                            "SELECT 1 FROM members WHERE lower(endpoint_id) = lower(?1) AND status = 'blocked'",
                             [&endpoint_id],
                             |_| Ok(()),
                         )
@@ -86,10 +88,10 @@ pub async fn spawn_topic_listener(
                     };
                     {
                         let mut guard = pending_joins.write().await;
-                        if !guard
-                            .iter()
-                            .any(|p| p.endpoint_id == endpoint_id && p.topic_id == topic_id)
-                        {
+                        if !guard.iter().any(|p| {
+                            normalize_endpoint_id(&p.endpoint_id) == endpoint_id
+                                && p.topic_id == topic_id
+                        }) {
                             guard.push(info.clone());
                             if let Some(state) = app.try_state::<DbState>() {
                                 let _ = state.0.lock().map(|db| {
@@ -113,7 +115,33 @@ pub async fn spawn_topic_listener(
             }
             Ok(Event::Received(Message { content, .. })) => {
                 let slice = content.as_ref();
-                if let Ok(payload) = serde_json::from_slice::<TaskUpdatePayload>(slice) {
+                // member_join は JSON の "type" で先に処理（task_update との取り違え防止）
+                let mut member_join_handled = false;
+                if let Ok(v) = serde_json::from_slice::<serde_json::Value>(slice) {
+                    if v.get("type").and_then(|x| x.as_str()) == Some("member_join") {
+                        member_join_handled = true;
+                        if let Ok(mj) = serde_json::from_value::<MemberJoinPayload>(v) {
+                            if mj.r#type == "member_join"
+                                && gossip_topic_matches(&mj.topic_id, &topic_id)
+                                && !mj.endpoint_id.is_empty()
+                            {
+                                let ver = mj.version.as_deref().unwrap_or("1.0");
+                                if ver == "1.0" {
+                                    if let Some(state) = app.try_state::<DbState>() {
+                                        let ep = normalize_endpoint_id(&mj.endpoint_id);
+                                        let _ = state.0.lock().map(|db| {
+                                            upsert_member_joined_active(&db, &ep)
+                                        });
+                                        let _ = app.emit("team-members-updated", ());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if member_join_handled {
+                    // 上で member_join として解釈済み（task_update に流さない）
+                } else if let Ok(payload) = serde_json::from_slice::<TaskUpdatePayload>(slice) {
                     let version = payload.version.as_deref().unwrap_or("1.0");
                     if version != "1.0" {
                         let _ = app.emit("team-update-required", ());
@@ -129,11 +157,12 @@ pub async fn spawn_topic_listener(
                         } else {
                             String::new()
                         };
+                        let join_ep = normalize_endpoint_id(&join_req.endpoint_id);
                         // ゲストが自分でブロードキャストした join_request を自分の pending に入れない
-                        if join_req.endpoint_id != my_id {
+                        if join_ep != my_id {
                             let tid = join_req.topic_id.to_ascii_lowercase();
                             let info = PendingJoinInfo {
-                                endpoint_id: join_req.endpoint_id,
+                                endpoint_id: join_ep,
                                 topic_id: tid,
                                 requested_at: join_req.requested_at,
                             };
@@ -149,21 +178,6 @@ pub async fn spawn_topic_listener(
                                 }
                             }
                             let _ = app.emit("team-pending-join", &info);
-                        }
-                    }
-                } else if let Ok(mj) = serde_json::from_slice::<MemberJoinPayload>(slice) {
-                    if mj.r#type == "member_join"
-                        && gossip_topic_matches(&mj.topic_id, &topic_id)
-                        && !mj.endpoint_id.is_empty()
-                    {
-                        let ver = mj.version.as_deref().unwrap_or("1.0");
-                        if ver == "1.0" {
-                            if let Some(state) = app.try_state::<DbState>() {
-                                let _ = state.0.lock().map(|db| {
-                                    upsert_member_joined_active(&db, &mj.endpoint_id)
-                                });
-                                let _ = app.emit("team-members-updated", ());
-                            }
                         }
                     }
                 } else if let Ok(mop) = serde_json::from_slice::<MemberOpPayload>(slice) {

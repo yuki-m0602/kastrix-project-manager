@@ -5,12 +5,18 @@ use uuid::Uuid;
 
 use super::IrohState;
 
+/// iroh NodeId 文字列の表記を揃える（DB 比較・gossip 受信の取り違え防止）
+#[inline]
+pub fn normalize_endpoint_id(s: &str) -> String {
+    s.trim().to_ascii_lowercase()
+}
+
 /// 自分の EndpointID を取得（iroh 未初期化時は空文字）
 pub async fn get_my_endpoint_id(iroh: &IrohState) -> String {
     let guard = iroh.read().await;
     guard
         .as_ref()
-        .map(|n| n.node_id().to_string())
+        .map(|n| normalize_endpoint_id(&n.node_id().to_string()))
         .unwrap_or_default()
 }
 
@@ -41,7 +47,7 @@ pub fn can_approve_or_reject(
         true
     } else {
         db.query_row(
-            "SELECT 1 FROM members WHERE endpoint_id = ?1 AND role IN ('host','co_host') AND status = 'active'",
+            "SELECT 1 FROM members WHERE lower(endpoint_id) = lower(?1) AND role IN ('host','co_host') AND status = 'active'",
             [my_endpoint_id],
             |r| r.get(0),
         )
@@ -75,26 +81,35 @@ pub fn upsert_member_joined_active(
     conn: &rusqlite::Connection,
     endpoint_id: &str,
 ) -> rusqlite::Result<()> {
-    if endpoint_id.is_empty() {
+    let ep = normalize_endpoint_id(endpoint_id);
+    if ep.is_empty() {
         return Ok(());
     }
     if conn
         .query_row(
-            "SELECT 1 FROM members WHERE endpoint_id = ?1 AND status = 'blocked'",
-            [endpoint_id],
+            "SELECT 1 FROM members WHERE lower(endpoint_id) = lower(?1) AND status = 'blocked'",
+            [&ep],
             |_| Ok(()),
         )
         .is_ok()
     {
         return Ok(());
     }
+    let n = conn.execute(
+        "UPDATE members SET
+           endpoint_id = ?1,
+           status = CASE WHEN status = 'blocked' THEN status ELSE 'active' END,
+           role = CASE WHEN status = 'blocked' THEN role ELSE 'member' END
+         WHERE lower(endpoint_id) = lower(?1)",
+        [&ep],
+    )?;
+    if n > 0 {
+        return Ok(());
+    }
     let id = Uuid::new_v4().to_string();
     conn.execute(
-        "INSERT INTO members (id, endpoint_id, role, status) VALUES (?1, ?2, 'member', 'active')
-         ON CONFLICT(endpoint_id) DO UPDATE SET
-           status = CASE WHEN members.status = 'blocked' THEN members.status ELSE 'active' END,
-           role = CASE WHEN members.status = 'blocked' THEN members.role ELSE 'member' END",
-        rusqlite::params![id, endpoint_id],
+        "INSERT INTO members (id, endpoint_id, role, status) VALUES (?1, ?2, 'member', 'active')",
+        rusqlite::params![id, ep],
     )?;
     Ok(())
 }
@@ -117,7 +132,7 @@ pub fn am_i_pending_guest(conn: &rusqlite::Connection, my_endpoint_id: &str) -> 
     }
     if conn
         .query_row(
-            "SELECT 1 FROM members WHERE endpoint_id = ?1 AND status = 'active'",
+            "SELECT 1 FROM members WHERE lower(endpoint_id) = lower(?1) AND status = 'active'",
             [my_endpoint_id],
             |_| Ok(()),
         )
@@ -127,7 +142,7 @@ pub fn am_i_pending_guest(conn: &rusqlite::Connection, my_endpoint_id: &str) -> 
     }
     if conn
         .query_row(
-            "SELECT 1 FROM members WHERE endpoint_id = ?1 AND status IN ('kicked','blocked')",
+            "SELECT 1 FROM members WHERE lower(endpoint_id) = lower(?1) AND status IN ('kicked','blocked')",
             [my_endpoint_id],
             |_| Ok(()),
         )
