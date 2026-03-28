@@ -32,8 +32,8 @@ pub async fn broadcast_json_payload<T: serde::Serialize>(
 
 /// 承認済みメンバーをチーム全員のローカル DB に反映するためブロードキャスト
 ///
-/// 該当トピックの sender を優先し、`broadcast` に加え `broadcast_neighbors` も送って
-/// 1 ホップの相手にも届きやすくする（topic_id の大小文字差で受信側が無視するのも防ぐため payload は小文字化）。
+/// 該当トピックの sender を優先し、近傍優先で `broadcast_neighbors` のあと `broadcast`。
+/// メッシュの一時不安定に備え数回再試行する（iroh 購読が空ならエラー）。
 pub async fn broadcast_member_join(
     iroh: &IrohState,
     endpoint_id: &str,
@@ -49,24 +49,59 @@ pub async fn broadcast_member_join(
     let json = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
     let bytes = Bytes::from(json.into_bytes());
 
-    let guard = iroh.read().await;
-    let node = match guard.as_ref() {
-        Some(n) => n,
-        None => return Ok(()),
-    };
+    async fn send_once(iroh: &IrohState, topic_id: &str, bytes: &Bytes) -> Result<(), String> {
+        let guard = iroh.read().await;
+        let node = guard
+            .as_ref()
+            .ok_or_else(|| "iroh が初期化されていません".to_string())?;
 
-    let mut senders = node.get_senders_for_topic_hex(topic_id).await;
-    if senders.is_empty() {
-        senders = node.get_all_senders().await;
+        let mut senders = node.get_senders_for_topic_hex(topic_id).await;
+        if senders.is_empty() {
+            senders = node.get_all_senders().await;
+        }
+        if senders.is_empty() {
+            return Err(
+                "gossip の購読がありません（チームに接続してから再度お試しください）".to_string(),
+            );
+        }
+
+        let mut any_ok = false;
+        let mut last_err: Option<String> = None;
+        for sender in senders {
+            // 2ノード構成では Neighbors の方が届きやすいことがあるため先に送る
+            match sender.broadcast_neighbors(bytes.clone()).await {
+                Ok(()) => any_ok = true,
+                Err(e) => last_err = Some(format!("broadcast_neighbors: {:?}", e)),
+            }
+            match sender.broadcast(bytes.clone()).await {
+                Ok(()) => any_ok = true,
+                Err(e) => last_err = Some(format!("broadcast: {:?}", e)),
+            }
+        }
+        if !any_ok {
+            return Err(last_err.unwrap_or_else(|| "gossip 送信に失敗".to_string()));
+        }
+        Ok(())
     }
-    if senders.is_empty() {
-        return Ok(());
+
+    const ATTEMPTS: u32 = 6;
+    const PAUSE_MS: u64 = 450;
+    for attempt in 0..ATTEMPTS {
+        match send_once(iroh, topic_id, &bytes).await {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                // 購読ゼロは待っても改善しない
+                if e.contains("購読がありません") {
+                    return Err(e);
+                }
+                if attempt + 1 == ATTEMPTS {
+                    return Err(e);
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(PAUSE_MS)).await;
+            }
+        }
     }
-    for sender in senders {
-        let _ = sender.broadcast(bytes.clone()).await;
-        let _ = sender.broadcast_neighbors(bytes.clone()).await;
-    }
-    Ok(())
+    Err("member_join の gossip 送信が繰り返し失敗しました".to_string())
 }
 
 /// メンバー操作をブロードキャスト

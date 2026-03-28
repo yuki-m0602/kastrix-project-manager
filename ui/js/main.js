@@ -399,6 +399,14 @@ if (_isTauri && window.__TAURI__?.event?.listen) {
   window.__TAURI__.event.listen('team-members-updated', async () => {
     await refreshTeamUiFromBackend();
   });
+  window.__TAURI__.event.listen('team-member-join-broadcast-failed', (e) => {
+    const msg = typeof e?.payload === 'string' ? e.payload : '';
+    showAlert(
+      '承認は保存済みですが、相手端末への gossip 通知に失敗しました。ネットワークを確認し、必要なら再度「承認」を試すか、参加側で再読み込みしてください。 ' +
+        (msg || ''),
+      'warning',
+    );
+  });
   window.__TAURI__.event.listen('team-pending-join-cancelled', async () => {
     await refreshTeamUiFromBackend();
   });

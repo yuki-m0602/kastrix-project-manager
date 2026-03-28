@@ -112,7 +112,7 @@ async function renderTeamView() {
             招待コードを持っている場合
           </h3>
           <p class="text-xs text-[#8b949e] mb-4">招待コードを入力してチームに参加します。</p>
-          <div class="flex gap-2">
+          <div id="team-join-form" class="flex gap-2">
             <input id="team-join-code" type="text" placeholder="KASTRIX-..." class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-white outline-none focus:border-indigo-500">
             <button onclick="teamJoin()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white">参加</button>
           </div>
@@ -319,9 +319,10 @@ async function renderTeamView() {
 
   lucide.createIcons();
   if (!isJoined) {
-    // 未参加時はボタン状態更新
+    // 未参加時はボタン状態更新 + 参加申請中バナー（team_am_i_pending）
     const readyForButtons = _isTauri ? await apiTeamIsReady().catch(() => false) : false;
     updateTeamButtonsState(readyForButtons, false);
+    await renderTeamPendingStatus();
   } else {
     // 参加時は個別レンダリング（ダッシュボードに統合済み）
     renderTeamDisplayNameSection();

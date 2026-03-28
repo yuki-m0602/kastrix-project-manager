@@ -329,7 +329,13 @@ pub async fn team_approve_join(
         pending_db::delete_pending_join(&db, &endpoint_id, &topic_id).map_err(|e| e.to_string())?;
         upsert_member_joined_active(&db, &endpoint_id).map_err(|e| e.to_string())?;
     }
-    let _ = broadcast_member_join(&iroh, &endpoint_id, &topic_id).await;
+    match broadcast_member_join(&iroh, &endpoint_id, &topic_id).await {
+        Ok(()) => {}
+        Err(e) => {
+            eprintln!("broadcast_member_join: {}", e);
+            let _ = app.emit("team-member-join-broadcast-failed", e);
+        }
+    }
     let _ = app.emit("team-members-updated", ());
     Ok(())
 }

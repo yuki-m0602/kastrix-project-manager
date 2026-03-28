@@ -286,6 +286,22 @@ pub async fn team_join(
         .map_err(|e| e.to_string())?;
     }
 
+    // 先に Received を受け取るループを起動してから join_request / member_join を流す（取りこぼし防止）
+    let pending_joins = pending_joins.inner().clone();
+    let topic_id_for_listener = topic_id.clone();
+    let app_listener = app.clone();
+    tauri::async_runtime::spawn(async move {
+        spawn_topic_listener(
+            receiver,
+            pending_joins,
+            app_listener,
+            topic_id_for_listener,
+            false,
+        )
+        .await;
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+
     // NeighborUp がホストに届かない場合でも、gossip の join_request で承認キューに載せる
     let my_ep = get_my_endpoint_id(&iroh).await;
     if !my_ep.is_empty() {
@@ -298,12 +314,6 @@ pub async fn team_join(
         };
         let _ = broadcast_json_payload(&iroh, &payload).await;
     }
-
-    let pending_joins = pending_joins.inner().clone();
-    let topic_id_for_listener = topic_id.clone();
-    tauri::async_runtime::spawn(async move {
-        spawn_topic_listener(receiver, pending_joins, app, topic_id_for_listener, false).await;
-    });
 
     Ok(super::TeamJoinResult {
         topic_id: topic_id.clone(),
@@ -391,6 +401,10 @@ pub async fn restore_team_subscriptions(app: &tauri::AppHandle) -> Result<(), St
             )
             .await;
         });
+        // ゲストは member_join 受信ループを先に回してから他処理が走るように少し間を空ける
+        if is_host == 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+        }
     }
 
     let _ = app.emit("team-subscriptions-restored", ());
