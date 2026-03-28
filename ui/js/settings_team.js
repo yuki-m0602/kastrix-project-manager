@@ -20,6 +20,7 @@ async function renderTeamView() {
   let inviteCodes = [];
   let syncMode = SYNC_MODE_AUTO;
   let unsyncedCount = 0;
+  let myRole = 'member';
 
   if (_isTauri) {
     try {
@@ -46,15 +47,18 @@ async function renderTeamView() {
           apiTeamAmIHost().catch(() => false),
           apiGetSetting('team_name').catch(() => 'My Team'),
           apiTeamGetUnsyncedCount().catch(() => 0),
+          apiTeamGetMyRole().catch(() => 'member'),
         ];
 
-        const [pendingData, codesData, syncData, amIHost, teamName, unsyncedN] = await Promise.all(promises);
+        const [pendingData, codesData, syncData, amIHost, teamName, unsyncedN, roleStr] =
+          await Promise.all(promises);
 
         pendingJoins = pendingData || [];
         inviteCodes = codesData || [];
         syncMode = syncData || SYNC_MODE_AUTO;
         unsyncedCount =
           typeof unsyncedN === 'number' && !Number.isNaN(unsyncedN) ? Math.max(0, unsyncedN) : 0;
+        myRole = roleStr || 'member';
 
         teamInfo = {
           name: teamName || 'My Team',
@@ -159,17 +163,29 @@ async function renderTeamView() {
       `;
     }).join('');
 
-    const inviteCodesHtml = inviteCodes.map(code => `
+    const inviteCodesHtml = inviteCodes.map((code) => {
+      const expiresText = code.expires_at ? formatExpiresAt(code.expires_at) : '無期限';
+      const isExpired = code.expires_at && formatExpiresAt(code.expires_at) === '期限切れ';
+      const expiresClass = isExpired ? 'text-red-400' : 'text-[#8b949e]';
+      const copyBtn = code.invite_string
+        ? `<button type="button" onclick="teamCopyInviteLink(this)" data-invite="${escapeHtml(code.invite_string)}" class="px-2 py-1 text-[9px] font-bold text-indigo-400 hover:bg-indigo-500/10 rounded-lg">リンクをコピー</button>`
+        : '';
+      const revokeBtn = teamInfo?.amIHost
+        ? `<button type="button" onclick="teamRevokeCode(this)" data-code="${escapeHtml(code.code)}" class="px-2 py-1 text-[9px] font-bold text-red-400 hover:bg-red-500/10 rounded-lg">無効化</button>`
+        : '';
+      return `
       <div class="bg-[#0d1117] border border-[#30363d] rounded-xl p-3">
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-xs font-mono text-indigo-400">${escapeHtml(code.code)}</span>
-          <button class="text-indigo-400 hover:text-indigo-300">
-            <i data-lucide="copy" size="14"></i>
-          </button>
+        <div class="flex items-center justify-between gap-2 mb-2">
+          <span class="text-xs font-mono text-indigo-400 truncate min-w-0">${escapeHtml(code.code)}</span>
+          <span class="text-[9px] font-bold shrink-0 ${expiresClass}">${expiresText}</span>
         </div>
-        <div class="text-xs text-[#8b949e]">期限: ${code.expires_at || '無期限'}</div>
+        <div class="flex items-center justify-end gap-1 flex-wrap">
+          ${copyBtn}
+          ${revokeBtn}
+        </div>
       </div>
-    `).join('');
+    `;
+    }).join('');
 
     container.innerHTML = `
       <!-- Team Header -->
@@ -266,8 +282,8 @@ async function renderTeamView() {
 
       </div>
 
-      <!-- Pending Joins (Host only) -->
-      ${pendingJoins.length > 0 ? `
+      <!-- 参加申請: HOST/CO-HOST 側は DB+メモリ。承認時は member_join gossip でゲスト含む全員が members を更新 -->
+      ${pendingJoins.length > 0 && (myRole === 'host' || myRole === 'co_host') ? `
         <div class="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 mt-6">
           <h3 class="text-sm font-bold text-white mb-4">参加申請 (${pendingJoins.length})</h3>
           <div class="space-y-3">
@@ -281,8 +297,8 @@ async function renderTeamView() {
                   </div>
                 </div>
                 <div class="flex gap-2">
-                  <button onclick="teamApproveJoin('${escapeHtml(p.endpoint_id)}')" class="px-3 py-1 bg-green-600 hover:bg-green-500 rounded text-xs font-bold text-white">承認</button>
-                  <button onclick="teamRejectJoin('${escapeHtml(p.endpoint_id)}')" class="px-3 py-1 bg-red-600 hover:bg-red-500 rounded text-xs font-bold text-white">拒否</button>
+                  <button type="button" onclick="teamApproveJoin(this)" data-endpoint="${escapeHtml(p.endpoint_id)}" data-topic="${escapeHtml(p.topic_id)}" class="px-3 py-1 bg-green-600 hover:bg-green-500 rounded text-xs font-bold text-white">承認</button>
+                  <button type="button" onclick="teamRejectJoin(this)" data-endpoint="${escapeHtml(p.endpoint_id)}" data-topic="${escapeHtml(p.topic_id)}" class="px-3 py-1 bg-red-600 hover:bg-red-500 rounded text-xs font-bold text-white">拒否</button>
                 </div>
               </div>
             `).join('')}
@@ -705,7 +721,10 @@ async function teamApproveJoin(btn) {
   if (!_isTauri || !btn?.dataset?.endpoint || !btn?.dataset?.topic) return;
   try {
     await apiTeamApproveJoin(btn.dataset.endpoint, btn.dataset.topic);
+    if (typeof showAlert === 'function') showAlert('参加を承認しました。', 'success');
     await renderTeamPendingJoins();
+    if (typeof window.renderTeamView === 'function') await window.renderTeamView();
+    if (typeof renderInbox === 'function') await renderInbox();
   } catch (e) {
     showAlert('エラー: ' + (e?.toString?.() || e), 'error');
   }
@@ -715,7 +734,10 @@ async function teamRejectJoin(btn) {
   if (!_isTauri || !btn?.dataset?.endpoint || !btn?.dataset?.topic) return;
   try {
     await apiTeamRejectJoin(btn.dataset.endpoint, btn.dataset.topic);
+    if (typeof showAlert === 'function') showAlert('参加申請を拒否しました。', 'info');
     await renderTeamPendingJoins();
+    if (typeof window.renderTeamView === 'function') await window.renderTeamView();
+    if (typeof renderInbox === 'function') await renderInbox();
   } catch (e) {
     showAlert('エラー: ' + (e?.toString?.() || e), 'error');
   }
@@ -735,11 +757,13 @@ async function teamCopyInviteLink(btn) {
 async function teamRevokeCode(btn) {
   if (!_isTauri || !btn?.dataset?.code) return;
   const code = btn.dataset.code;
-  if (!confirm(`招待コード ${code} を無効化しますか？`)) return;
+  if (!confirm(`招待コード ${code} を無効化（削除）しますか？`)) return;
   try {
     await apiTeamRevokeInviteCode(code);
+    if (typeof showAlert === 'function') showAlert('招待コードを無効化しました。', 'success');
+    if (typeof window.renderTeamView === 'function') await window.renderTeamView();
     await renderTeamInviteCodes();
-    renderSettings();
+    if (typeof renderSettings === 'function') renderSettings();
   } catch (e) {
     showAlert('エラー: ' + (e?.toString?.() || e), 'error');
   }
@@ -877,32 +901,6 @@ async function teamPushUnsynced() {
 }
 
 window.teamPushUnsynced = teamPushUnsynced;
-
-async function teamApproveJoin(endpointId) {
-  if (!_isTauri || !endpointId) return;
-  try {
-    await apiTeamApproveJoin(endpointId, '');
-    console.log('Approved join for:', endpointId);
-    // alert('参加を承認しました。');
-    renderTeamView(); // UI更新
-  } catch (e) {
-    console.error('Failed to approve join:', e);
-    alert('参加承認に失敗しました: ' + e);
-  }
-}
-
-async function teamRejectJoin(endpointId) {
-  if (!_isTauri || !endpointId) return;
-  try {
-    await apiTeamRejectJoin(endpointId, '');
-    console.log('Rejected join for:', endpointId);
-    // alert('参加を拒否しました。');
-    renderTeamView(); // UI更新
-  } catch (e) {
-    console.error('Failed to reject join:', e);
-    alert('参加拒否に失敗しました: ' + e);
-  }
-}
 
 function showTeamSettingsModal() {
   if (!_isTauri) return;

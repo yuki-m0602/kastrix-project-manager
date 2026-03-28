@@ -1,6 +1,7 @@
 //! チーム機能の共通ヘルパー（DRY）
 
 use crate::models::Task;
+use uuid::Uuid;
 
 use super::IrohState;
 
@@ -66,6 +67,35 @@ pub fn clear_members_if_no_team(conn: &rusqlite::Connection) -> rusqlite::Result
     if n == 0 {
         conn.execute("DELETE FROM members", [])?;
     }
+    Ok(())
+}
+
+/// `member_join` 受信またはホスト側承認時: メンバーを active に追加・更新（ブロック済みは変更しない）
+pub fn upsert_member_joined_active(
+    conn: &rusqlite::Connection,
+    endpoint_id: &str,
+) -> rusqlite::Result<()> {
+    if endpoint_id.is_empty() {
+        return Ok(());
+    }
+    if conn
+        .query_row(
+            "SELECT 1 FROM members WHERE endpoint_id = ?1 AND status = 'blocked'",
+            [endpoint_id],
+            |_| Ok(()),
+        )
+        .is_ok()
+    {
+        return Ok(());
+    }
+    let id = Uuid::new_v4().to_string();
+    conn.execute(
+        "INSERT INTO members (id, endpoint_id, role, status) VALUES (?1, ?2, 'member', 'active')
+         ON CONFLICT(endpoint_id) DO UPDATE SET
+           status = CASE WHEN members.status = 'blocked' THEN members.status ELSE 'active' END,
+           role = CASE WHEN members.status = 'blocked' THEN members.role ELSE 'member' END",
+        rusqlite::params![id, endpoint_id],
+    )?;
     Ok(())
 }
 

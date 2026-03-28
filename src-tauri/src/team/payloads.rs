@@ -1,5 +1,15 @@
 //! チーム機能で使用するペイロード定義（gossip 送受信用）
 
+/// 承認後に全員がローカル members を揃えるための gossip ペイロード
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct MemberJoinPayload {
+    pub r#type: String,
+    #[serde(default)]
+    pub version: Option<String>,
+    pub endpoint_id: String,
+    pub topic_id: String,
+}
+
 /// join_request ブロードキャスト用（CO-HOST が参加申請を見れるようにする）
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct JoinRequestPayload {

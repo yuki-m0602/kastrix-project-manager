@@ -12,12 +12,13 @@ use super::broadcast::{
     broadcast_blocked_notify, broadcast_json_payload, broadcast_permission_change,
     broadcast_team_disband,
 };
-use super::helpers::{clear_members_if_no_team, get_my_endpoint_id};
+use super::helpers::{clear_members_if_no_team, get_my_endpoint_id, upsert_member_joined_active};
 use super::payloads::{
-    JoinRequestPayload, MemberBlockedNotifyPayload, MemberDisplayNamePayload, MemberOpPayload,
-    PermissionChangePayload, TeamDisbandPayload,
+    JoinRequestPayload, MemberBlockedNotifyPayload, MemberDisplayNamePayload, MemberJoinPayload,
+    MemberOpPayload, PermissionChangePayload, TeamDisbandPayload,
 };
 use super::pending::{PendingJoinInfo, PendingJoinsState};
+use super::pending_db;
 use super::IrohState;
 
 /// team_disband 受信時の処理（unsubscribe + DB クリア）
@@ -30,6 +31,7 @@ async fn handle_team_disband(app: &AppHandle, topic_id: &str, pending_joins: &Pe
     }
     if let Some(state) = app.try_state::<DbState>() {
         let _ = state.0.lock().map(|db| {
+            let _ = pending_db::delete_pending_for_topic(&db, topic_id);
             let _ = db.execute("DELETE FROM team_subscriptions WHERE topic_id = ?1", rusqlite::params![topic_id]);
             let _ = db.execute("DELETE FROM members", []);
         });
@@ -84,6 +86,11 @@ pub async fn spawn_topic_listener(
                             .any(|p| p.endpoint_id == endpoint_id && p.topic_id == topic_id)
                         {
                             guard.push(info.clone());
+                            if let Some(state) = app.try_state::<DbState>() {
+                                let _ = state.0.lock().map(|db| {
+                                    pending_db::upsert_pending_join(&db, &info)
+                                });
+                            }
                         }
                     }
                     let _ = app.emit("team-pending-join", &info);
@@ -127,8 +134,28 @@ pub async fn spawn_topic_listener(
                                 p.endpoint_id == info.endpoint_id && p.topic_id == info.topic_id
                             }) {
                                 guard.push(info.clone());
+                                if let Some(state) = app.try_state::<DbState>() {
+                                    let _ = state.0.lock().map(|db| {
+                                        pending_db::upsert_pending_join(&db, &info)
+                                    });
+                                }
                             }
                             let _ = app.emit("team-pending-join", &info);
+                        }
+                    }
+                } else if let Ok(mj) = serde_json::from_slice::<MemberJoinPayload>(slice) {
+                    if mj.r#type == "member_join"
+                        && mj.topic_id == topic_id
+                        && !mj.endpoint_id.is_empty()
+                    {
+                        let ver = mj.version.as_deref().unwrap_or("1.0");
+                        if ver == "1.0" {
+                            if let Some(state) = app.try_state::<DbState>() {
+                                let _ = state.0.lock().map(|db| {
+                                    upsert_member_joined_active(&db, &mj.endpoint_id)
+                                });
+                                let _ = app.emit("team-members-updated", ());
+                            }
                         }
                     }
                 } else if let Ok(mop) = serde_json::from_slice::<MemberOpPayload>(slice) {
@@ -138,6 +165,12 @@ pub async fn spawn_topic_listener(
                     } else if mop.r#type == "member_cancel" && mop.target_id != "" {
                         let mut guard = pending_joins.write().await;
                         guard.retain(|p| p.endpoint_id != mop.target_id);
+                        if let Some(state) = app.try_state::<DbState>() {
+                            let _ = state
+                                .0
+                                .lock()
+                                .map(|db| pending_db::delete_pending_for_endpoint(&db, &mop.target_id));
+                        }
                         let _ = app.emit("team-pending-join-cancelled", ());
                     } else if (mop.r#type == "member_kick" || mop.r#type == "member_block")
                         && mop.target_id != ""

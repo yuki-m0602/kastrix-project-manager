@@ -2,8 +2,9 @@
 
 use crate::db::DbState;
 use crate::team::{
-    am_i_pending_guest, broadcast_member_display_name, broadcast_member_op, can_approve_or_reject,
-    clear_members_if_no_team, get_my_endpoint_id, in_team, is_current_user_host, IrohState,
+    am_i_pending_guest, broadcast_member_display_name, broadcast_member_join, broadcast_member_op,
+    can_approve_or_reject, clear_members_if_no_team, get_my_endpoint_id, in_team,
+    is_current_user_host, pending_db, upsert_member_joined_active, IrohState,
 };
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
@@ -77,6 +78,7 @@ pub async fn team_repair_orphan_if_needed(
     app: AppHandle,
     state: State<'_, DbState>,
     iroh: State<'_, IrohState>,
+    pending_joins: State<'_, PendingJoinsState>,
 ) -> Result<bool, String> {
     let my_id = get_my_endpoint_id(&iroh).await;
     if my_id.is_empty() {
@@ -124,6 +126,11 @@ pub async fn team_repair_orphan_if_needed(
             .map_err(|e| e.to_string())?;
         db.execute("DELETE FROM members", [])
             .map_err(|e| e.to_string())?;
+        pending_db::delete_all_pending_joins(&db).map_err(|e| e.to_string())?;
+    }
+    {
+        let mut guard = pending_joins.write().await;
+        guard.clear();
     }
     let _ = app.emit("team-left", ());
     Ok(true)
@@ -216,6 +223,9 @@ pub async fn team_cancel_join(
                 [],
             )
             .map_err(|e| e.to_string())?;
+            for tid in &guest_topics {
+                let _ = pending_db::delete_pending_join(&db, &my_id, tid);
+            }
             clear_members_if_no_team(&db).map_err(|e| e.to_string())?;
         }
         {
@@ -265,6 +275,7 @@ pub async fn team_cancel_join(
             [&topic_id],
         )
         .map_err(|e| e.to_string())?;
+        let _ = pending_db::delete_pending_join(&db, &my_id, &topic_id);
         clear_members_if_no_team(&db).map_err(|e| e.to_string())?;
     }
     {
@@ -279,6 +290,7 @@ pub async fn team_cancel_join(
 
 #[tauri::command]
 pub async fn team_approve_join(
+    app: AppHandle,
     state: State<'_, DbState>,
     iroh: State<'_, IrohState>,
     pending_joins: State<'_, PendingJoinsState>,
@@ -313,12 +325,11 @@ pub async fn team_approve_join(
     }
     {
         let db = state.0.lock().map_err(|e| e.to_string())?;
-        db.execute(
-            "INSERT OR IGNORE INTO members (id, endpoint_id, role, status) VALUES (?1, ?2, 'member', 'active')",
-            rusqlite::params![Uuid::new_v4().to_string(), endpoint_id],
-        )
-        .map_err(|e| e.to_string())?;
+        pending_db::delete_pending_join(&db, &endpoint_id, &topic_id).map_err(|e| e.to_string())?;
+        upsert_member_joined_active(&db, &endpoint_id).map_err(|e| e.to_string())?;
     }
+    let _ = broadcast_member_join(&iroh, &endpoint_id, &topic_id).await;
+    let _ = app.emit("team-members-updated", ());
     Ok(())
 }
 
@@ -338,8 +349,14 @@ pub async fn team_reject_join(
     if !can_reject {
         return Err("拒否する権限がありません（HOST または CO-HOST のみ）".to_string());
     }
-    let mut guard = pending_joins.write().await;
-    guard.retain(|p| !(p.endpoint_id == endpoint_id && p.topic_id == topic_id));
+    {
+        let mut guard = pending_joins.write().await;
+        guard.retain(|p| !(p.endpoint_id == endpoint_id && p.topic_id == topic_id));
+    }
+    {
+        let db = state.0.lock().map_err(|e| e.to_string())?;
+        pending_db::delete_pending_join(&db, &endpoint_id, &topic_id).map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 
@@ -378,6 +395,10 @@ pub async fn team_kick(
         let mut guard = pending_joins.write().await;
         guard.retain(|p| p.endpoint_id != endpoint_id);
     }
+    {
+        let db = state.0.lock().map_err(|e| e.to_string())?;
+        pending_db::delete_pending_for_endpoint(&db, &endpoint_id).map_err(|e| e.to_string())?;
+    }
     broadcast_member_op(&iroh, "member_kick", &endpoint_id, None).await?;
     let _ = app.emit("team-members-updated", ());
     Ok(())
@@ -413,6 +434,10 @@ pub async fn team_block(
     {
         let mut guard = pending_joins.write().await;
         guard.retain(|p| p.endpoint_id != endpoint_id);
+    }
+    {
+        let db = state.0.lock().map_err(|e| e.to_string())?;
+        pending_db::delete_pending_for_endpoint(&db, &endpoint_id).map_err(|e| e.to_string())?;
     }
     broadcast_member_op(&iroh, "member_block", &endpoint_id, Some("high")).await?;
     let _ = app.emit("team-members-updated", ());

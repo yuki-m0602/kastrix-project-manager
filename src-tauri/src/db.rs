@@ -114,6 +114,13 @@ fn run_schema(conn: &Connection) -> Result<(), rusqlite::Error> {
             PRIMARY KEY (task_id, seq)
         );
 
+        CREATE TABLE IF NOT EXISTS team_pending_joins (
+            endpoint_id  TEXT NOT NULL,
+            topic_id     TEXT NOT NULL,
+            requested_at TEXT NOT NULL,
+            PRIMARY KEY (endpoint_id, topic_id)
+        );
+
         CREATE TABLE IF NOT EXISTS ai_chats (
             id          TEXT PRIMARY KEY,
             title       TEXT NOT NULL DEFAULT 'New Chat',
@@ -172,6 +179,7 @@ fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
     let n_subs: i64 = conn.query_row("SELECT COUNT(*) FROM team_subscriptions", [], |r| r.get(0))?;
     if n_subs == 0 {
         conn.execute("DELETE FROM members", [])?;
+        let _ = conn.execute("DELETE FROM team_pending_joins", []);
     }
     Ok(())
 }

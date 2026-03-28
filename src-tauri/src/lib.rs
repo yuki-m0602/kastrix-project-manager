@@ -41,6 +41,19 @@ pub fn run() {
             app.manage(pending_joins);
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
+                if let (Some(db_state), Some(pj)) = (
+                    app_handle.try_state::<db::DbState>(),
+                    app_handle.try_state::<commands::team::PendingJoinsState>(),
+                ) {
+                    let loaded = {
+                        let conn = db_state.0.lock().unwrap();
+                        team::pending_db::restore_pending_joins_from_db(&conn).unwrap_or_default()
+                    };
+                    {
+                        let mut guard = pj.write().await;
+                        *guard = loaded;
+                    }
+                }
                 let app_data_dir = app_handle
                     .path()
                     .app_data_dir()

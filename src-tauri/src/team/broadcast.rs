@@ -3,7 +3,7 @@
 use bytes::Bytes;
 
 use super::payloads::{
-    MemberBlockedNotifyPayload, MemberDisplayNamePayload, MemberOpPayload,
+    MemberBlockedNotifyPayload, MemberDisplayNamePayload, MemberJoinPayload, MemberOpPayload,
     PermissionChangePayload, TeamDisbandPayload,
 };
 use super::IrohState;
@@ -28,6 +28,21 @@ pub async fn broadcast_json_payload<T: serde::Serialize>(
         let _ = sender.broadcast(bytes.clone()).await;
     }
     Ok(())
+}
+
+/// 承認済みメンバーをチーム全員のローカル DB に反映するためブロードキャスト
+pub async fn broadcast_member_join(
+    iroh: &IrohState,
+    endpoint_id: &str,
+    topic_id: &str,
+) -> Result<(), String> {
+    let payload = MemberJoinPayload {
+        r#type: "member_join".to_string(),
+        version: Some("1.0".to_string()),
+        endpoint_id: endpoint_id.to_string(),
+        topic_id: topic_id.to_string(),
+    };
+    broadcast_json_payload(iroh, &payload).await
 }
 
 /// メンバー操作をブロードキャスト
