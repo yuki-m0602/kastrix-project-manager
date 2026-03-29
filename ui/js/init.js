@@ -1,19 +1,42 @@
 // ── UI: Init Module ────────────────────────────────────────
 // 起動・ウィンドウ制御（ロジックの初期化入口はこのファイルのみ）
 
-async function initWindowControls() {
-  if (!window.__TAURI__) return;
+/** Tauri v2: `window.__TAURI__.window` は WebviewWindow インスタンスではない。公式 API は invoke。 */
+function getTauriWindowLabel() {
   try {
-    const win = window.__TAURI__.window;
-    const closeBtn = document.getElementById('btn-close');
-    const minBtn = document.getElementById('btn-minimize');
-    const maxBtn = document.getElementById('btn-maximize');
-    if (closeBtn) closeBtn.onclick = () => win.close();
-    if (minBtn) minBtn.onclick = () => win.minimize();
-    if (maxBtn) maxBtn.onclick = async () => {
-      const isMaximized = await win.isMaximized();
-      if (isMaximized) win.unmaximize(); else win.maximize();
-    };
+    const w = window.__TAURI_INTERNALS__?.metadata?.currentWindow;
+    if (w && typeof w.label === 'string' && w.label.length > 0) return w.label;
+  } catch (_) {
+    /* ignore */
+  }
+  return 'main';
+}
+
+function invokeTauriWindow(cmd) {
+  const invoke = window.__TAURI__?.core?.invoke;
+  if (typeof invoke !== 'function') {
+    return Promise.reject(new Error('Tauri core.invoke unavailable'));
+  }
+  return invoke(`plugin:window|${cmd}`, { label: getTauriWindowLabel() });
+}
+
+async function initWindowControls() {
+  if (!window.__TAURI__?.core?.invoke) return;
+  const closeBtn = document.getElementById('btn-close');
+  const minBtn = document.getElementById('btn-minimize');
+  const maxBtn = document.getElementById('btn-maximize');
+  const bind = (el, fn) => {
+    if (!el) return;
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      void fn().catch((err) => console.error('titlebar control failed:', err));
+    });
+  };
+  try {
+    bind(closeBtn, () => invokeTauriWindow('close'));
+    bind(minBtn, () => invokeTauriWindow('minimize'));
+    bind(maxBtn, () => invokeTauriWindow('toggle_maximize'));
   } catch (e) {
     console.error('initWindowControls failed:', e);
   }

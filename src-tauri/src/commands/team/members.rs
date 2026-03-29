@@ -159,12 +159,11 @@ pub fn team_list_members(state: State<'_, DbState>) -> Result<Vec<MemberInfo>, S
     Ok(rows)
 }
 
+/// 参加申請一覧（SQLite を正とする。メモリとズレた場合でも UI に出るようにする）
 #[tauri::command]
-pub async fn team_list_pending_joins(
-    pending_joins: State<'_, PendingJoinsState>,
-) -> Result<Vec<PendingJoinInfo>, String> {
-    let guard = pending_joins.read().await;
-    Ok(guard.clone())
+pub fn team_list_pending_joins(state: State<'_, DbState>) -> Result<Vec<PendingJoinInfo>, String> {
+    let db = state.0.lock().map_err(|e| e.to_string())?;
+    pending_db::load_all_pending_joins(&db).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

@@ -9,8 +9,8 @@ use crate::db::DbState;
 use crate::team::task_sync::{apply_task_update, TaskUpdatePayload};
 
 use super::broadcast::{
-    broadcast_blocked_notify, broadcast_join_request, broadcast_member_join,
-    broadcast_permission_change, broadcast_team_disband,
+    broadcast_blocked_notify, broadcast_join_request, broadcast_permission_change,
+    broadcast_team_disband,
 };
 use super::helpers::{
     clear_members_if_no_team, get_my_endpoint_id, normalize_endpoint_id,
@@ -93,10 +93,9 @@ pub async fn spawn_topic_listener(
                         let _ = broadcast_blocked_notify(&iroh, &endpoint_id).await;
                     }
                 } else if already_active {
-                    // 承認済みメンバーが再接続したとき、取りこぼした member_join を補填する
-                    if let Some(iroh) = app.try_state::<IrohState>() {
-                        let _ = broadcast_member_join(&iroh, &endpoint_id, &topic_id).await;
-                    }
+                    // 承認済みメンバーの再接続: 参加申請には載せない。
+                    // NeighborUp で member_join を再送すると gossip が増え、iroh-gossip の
+                    // Lagged で join_request 等が落ちることがあるため送らない（承認時の遅延再送に任せる）。
                 } else {
                     let requested_at = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
                     let info = PendingJoinInfo {
@@ -385,6 +384,12 @@ pub async fn spawn_topic_listener(
                         }
                     }
                 }
+            }
+            Ok(Event::Lagged) => {
+                eprintln!(
+                    "team gossip: 受信バッファが詰まり一部メッセージを取りこぼした可能性があります (topic {})",
+                    topic_id
+                );
             }
             _ => {}
         }

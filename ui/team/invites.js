@@ -270,18 +270,75 @@ async function renderTeamPendingJoins() {
   }
 }
 
+const TEAM_PENDING_APPROVAL_POLL_MS = 5000;
+
+function clearTeamPendingApprovalPoll() {
+  if (window._teamPendingApprovalPollId) {
+    clearInterval(window._teamPendingApprovalPollId);
+    window._teamPendingApprovalPollId = null;
+  }
+}
+
 /**
- * 参加申請.statusを表示
+ * ゲスト: 承認同期（member_join）が届いたかを再確認し、届いていればチーム画面へ
+ */
+async function teamRefreshJoinStatus() {
+  if (!_isTauri) return;
+  try {
+    await apiTeamRepairOrphanIfNeeded().catch(() => false);
+    const active = await apiTeamIsActiveMember();
+    if (active) {
+      clearTeamPendingApprovalPoll();
+      if (typeof showAlert === 'function') {
+        showAlert('チームへの参加が承認され、同期されました。', 'success');
+      }
+      if (typeof refreshTeamUiFromBackend === 'function') await refreshTeamUiFromBackend();
+      else if (typeof window.renderTeamView === 'function') await window.renderTeamView();
+      return;
+    }
+    if (typeof showAlert === 'function') {
+      showAlert(
+        'この端末にはまだ承認の同期が届いていません。ホスト承認直後は数十秒かかることがあります。しばらく待ってから「状態を更新」を再度お試しください。',
+        'info'
+      );
+    }
+  } catch (e) {
+    if (typeof showAlert === 'function') showAlert('更新に失敗しました: ' + (e?.message || e), 'error');
+  }
+}
+
+/**
+ * 参加申請.statusを表示（承認待ちのあいだはポーリングで member_join 受信後に自動でダッシュボードへ）
  */
 async function renderTeamPendingStatus() {
   if (!_isTauri) return;
+  clearTeamPendingApprovalPoll();
   const form = document.getElementById('team-join-form');
   const status = document.getElementById('team-pending-status');
   if (!form || !status) return;
   try {
     const pending = await apiTeamAmIPending();
-    form.style.display = pending ? 'none' : '';
-    status.style.display = pending ? '' : 'none';
+    if (!pending) {
+      form.style.display = '';
+      status.style.display = 'none';
+      return;
+    }
+    form.style.display = 'none';
+    status.style.display = 'flex';
+    window._teamPendingApprovalPollId = setInterval(async () => {
+      try {
+        const active = await apiTeamIsActiveMember();
+        if (!active) return;
+        clearTeamPendingApprovalPoll();
+        if (typeof showAlert === 'function') {
+          showAlert('チームへの参加が承認され、同期されました。', 'success');
+        }
+        if (typeof refreshTeamUiFromBackend === 'function') await refreshTeamUiFromBackend();
+        else if (typeof window.renderTeamView === 'function') await window.renderTeamView();
+      } catch (_) {
+        /* ignore */
+      }
+    }, TEAM_PENDING_APPROVAL_POLL_MS);
   } catch (e) {
     form.style.display = '';
     status.style.display = 'none';
@@ -320,4 +377,5 @@ window.teamCopyInviteLink = teamCopyInviteLink;
 window.teamRevokeCode = teamRevokeCode;
 window.renderTeamPendingJoins = renderTeamPendingJoins;
 window.renderTeamPendingStatus = renderTeamPendingStatus;
+window.teamRefreshJoinStatus = teamRefreshJoinStatus;
 window.formatExpiresAt = formatExpiresAt;

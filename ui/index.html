@@ -277,17 +277,18 @@
   <!-- Mobile Overlay -->
   <div id="mobile-overlay" class="fixed inset-0 bg-black/50 z-20" onclick="closeMobileSidebar()" style="display: none;"></div>
 
-  <!-- Custom Title Bar (for frameless window) -->
-  <div class="fixed top-0 left-0 right-0 h-8 bg-[#0d1117] z-50 flex items-center justify-between px-2" data-tauri-drag-region>
-    <span class="text-xs text-[#c9d1d9] font-bold ml-2" data-tauri-drag-region>Kastrix</span>
-    <div class="flex items-center gap-1" data-tauri-drag-region>
-      <button id="btn-minimize" class="w-10 h-6 flex items-center justify-center text-[#8b949e] hover:bg-[#30363d] rounded">
+  <!-- Custom Title Bar（ドラッグ領域にボタンを含めない。含めると Tauri v2 でクリックが効かない） -->
+  <div class="fixed top-0 left-0 right-0 h-8 bg-[#0d1117] z-50 flex items-stretch px-2">
+    <span class="text-xs text-[#c9d1d9] font-bold ml-2 flex items-center shrink-0 select-none pr-2" data-tauri-drag-region>Kastrix</span>
+    <div class="flex-1 min-w-0 min-h-0" data-tauri-drag-region aria-hidden="true"></div>
+    <div class="flex items-center gap-1 shrink-0" style="app-region: no-drag; -webkit-app-region: no-drag;">
+      <button type="button" id="btn-minimize" class="w-10 h-6 flex items-center justify-center text-[#8b949e] hover:bg-[#30363d] rounded">
         <i data-lucide="minus" class="w-5 h-6"></i>
       </button>
-      <button id="btn-maximize" class="w-10 h-6 flex items-center justify-center text-[#8b949e] hover:bg-[#30363d] rounded">
+      <button type="button" id="btn-maximize" class="w-10 h-6 flex items-center justify-center text-[#8b949e] hover:bg-[#30363d] rounded">
         <i id="maximize-icon" data-lucide="square" class="w-4 h-6"></i>
       </button>
-      <button id="btn-close" class="w-10 h-6 flex items-center justify-center text-[#8b949e] hover:bg-red-600 rounded">
+      <button type="button" id="btn-close" class="w-10 h-6 flex items-center justify-center text-[#8b949e] hover:bg-red-600 rounded">
         <i data-lucide="x" class="w-5 h-6"></i>
       </button>
     </div>
