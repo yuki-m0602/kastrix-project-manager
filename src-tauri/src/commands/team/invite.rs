@@ -2,8 +2,10 @@
 
 use crate::db::DbState;
 use crate::team::{
-    am_i_pending_guest, broadcast_join_request, generate_invite_code, get_my_endpoint_id,
-    normalize_code, spawn_topic_listener, topic_id_to_hex, IrohState, JoinRequestPayload,
+    am_i_pending_guest, broadcast_join_request, broadcast_member_sync_need,
+    generate_invite_code, get_my_endpoint_id, normalize_code, normalize_endpoint_id,
+    spawn_topic_listener, topic_id_to_hex, IrohState, JoinRequestPayload,
+    MemberSyncNeedPayload,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -448,6 +450,19 @@ pub async fn restore_team_subscriptions(app: &tauri::AppHandle) -> Result<(), St
         if let Err(e) = broadcast_join_request(&iroh, &tid, &payload).await {
             eprintln!(
                 "restore_team_subscriptions: broadcast_join_request failed: {}",
+                e
+            );
+        }
+        // ホストが既に承認済みだが gossip が届かなかったケースの救済: member_sync_need も自動送信
+        tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+        let sync_payload = MemberSyncNeedPayload {
+            r#type: "member_sync_need".to_string(),
+            endpoint_id: normalize_endpoint_id(&my_ep),
+            topic_id: tid.clone(),
+        };
+        if let Err(e) = broadcast_member_sync_need(&iroh, &tid, &sync_payload).await {
+            eprintln!(
+                "restore_team_subscriptions: broadcast_member_sync_need failed: {}",
                 e
             );
         }

@@ -53,6 +53,8 @@ function registerTauriTeamEventListeners() {
     await refreshTeamUiFromBackend();
   });
   listen('team-members-updated', async () => {
+    // DB 書き込み直後の emit ではまだ読み取りに反映されない場合があるため小ディレイ
+    await new Promise(r => setTimeout(r, 80));
     await refreshTeamUiFromBackend();
   });
   listen('team-member-join-broadcast-failed', (e) => {
@@ -89,6 +91,12 @@ function registerTauriTeamEventListeners() {
   });
   listen('team-update-required', () => {
     showAlert('アプリのアップデートが必要です。最新版をインストールしてください。', 'error');
+  });
+  listen('team-sync-check-needed', async () => {
+    console.warn('team gossip: Lagged 検出 — 再同期を実行します');
+    await refreshTeamUiFromBackend();
+    await loadData();
+    if (typeof filterTasks === 'function') filterTasks();
   });
 }
 

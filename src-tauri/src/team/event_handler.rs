@@ -146,25 +146,31 @@ pub async fn spawn_topic_listener(
                                 let ep = normalize_endpoint_id(ep_raw);
                                 let ver = v.get("version").and_then(|x| x.as_str()).unwrap_or("1.0");
                                 if ver == "1.0" && !ep.is_empty() {
-                                    if let Some(state) = app.try_state::<DbState>() {
+                                    // デッドロック防止: Mutex を解放してから emit する
+                                    let upsert_ok = if let Some(state) = app.try_state::<DbState>() {
                                         match state.0.lock() {
                                             Ok(db) => {
                                                 match upsert_member_joined_active(&db, &ep) {
-                                                    Ok(()) => {
-                                                        let _ = app.emit("team-members-updated", ());
-                                                    }
+                                                    Ok(()) => true,
                                                     Err(e) => {
                                                         eprintln!(
                                                             "member_join upsert failed (ep={}): {}",
                                                             ep, e
                                                         );
+                                                        false
                                                     }
                                                 }
                                             }
                                             Err(e) => {
                                                 eprintln!("member_join db lock: {}", e);
+                                                false
                                             }
                                         }
+                                    } else {
+                                        false
+                                    };
+                                    if upsert_ok {
+                                        let _ = app.emit("team-members-updated", ());
                                     }
                                 }
                             }
@@ -436,6 +442,8 @@ pub async fn spawn_topic_listener(
                     "team gossip: 受信バッファが詰まり一部メッセージを取りこぼした可能性があります (topic {})",
                     topic_id
                 );
+                // Lagged リカバリ: フロントへ通知して再同期を促す
+                let _ = app.emit("team-sync-check-needed", ());
             }
             _ => {}
         }

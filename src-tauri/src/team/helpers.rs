@@ -98,8 +98,7 @@ pub fn upsert_member_joined_active(
     let n = conn.execute(
         "UPDATE members SET
            endpoint_id = ?1,
-           status = CASE WHEN status = 'blocked' THEN status ELSE 'active' END,
-           role = CASE WHEN status = 'blocked' THEN role ELSE 'member' END
+           status = CASE WHEN status = 'blocked' THEN status ELSE 'active' END
          WHERE lower(endpoint_id) = lower(?1)",
         [&ep],
     )?;
@@ -153,7 +152,7 @@ pub fn am_i_pending_guest(conn: &rusqlite::Connection, my_endpoint_id: &str) -> 
     true
 }
 
-/// ローカル削除を許可するか: チーム未参加なら常に可。参加中はホスト端末、または作成者本人。
+/// ローカル削除を許可するか: チーム未参加なら常に可。参加中はホスト・CO-HOST端末、または作成者本人。
 pub fn can_delete_task_for_user(
     conn: &rusqlite::Connection,
     task: &Task,
@@ -165,6 +164,18 @@ pub fn can_delete_task_for_user(
     if is_current_user_host(conn) {
         return true;
     }
+    // CO-HOST もタスク削除可
+    if !my_endpoint_id.is_empty()
+        && conn
+            .query_row(
+                "SELECT 1 FROM members WHERE lower(endpoint_id) = lower(?1) AND role = 'co_host' AND status = 'active'",
+                [my_endpoint_id],
+                |_| Ok(()),
+            )
+            .is_ok()
+    {
+        return true;
+    }
     if my_endpoint_id.is_empty() {
         return false;
     }
@@ -172,7 +183,7 @@ pub fn can_delete_task_for_user(
 }
 
 /// 同期で受信した task_update delete を適用してよいか。actor_endpoint_id 必須。
-/// ホスト（members.role = host）またはタスク作成者のみ。
+/// ホスト・CO-HOST（members.role IN host, co_host）またはタスク作成者のみ。
 pub fn can_apply_remote_task_delete(
     conn: &rusqlite::Connection,
     task: &Task,
@@ -186,7 +197,7 @@ pub fn can_apply_remote_task_delete(
     }
     if conn
         .query_row(
-            "SELECT 1 FROM members WHERE endpoint_id = ?1 AND role = 'host' AND status = 'active'",
+            "SELECT 1 FROM members WHERE endpoint_id = ?1 AND role IN ('host','co_host') AND status = 'active'",
             [actor],
             |_| Ok(()),
         )

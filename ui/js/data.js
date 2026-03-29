@@ -45,21 +45,28 @@ async function loadData() {
 /**
  * チーム関連イベント後に Team 画面・メンバー一覧・サイドバー・Inbox を整合
  */
+let _refreshTeamUiBusy = false;
 async function refreshTeamUiFromBackend() {
-  if (typeof window.renderTeamView === 'function') {
-    try {
-      await window.renderTeamView();
-    } catch (e) {
-      console.error('renderTeamView failed:', e);
+  if (_refreshTeamUiBusy) return;          // 排他: 並行実行を防ぐ
+  _refreshTeamUiBusy = true;
+  try {
+    if (typeof window.renderTeamView === 'function') {
+      try {
+        await window.renderTeamView();
+      } catch (e) {
+        console.error('renderTeamView failed:', e);
+      }
     }
+    if (typeof renderTeamMembers === 'function') await renderTeamMembers();
+    if (typeof renderTeamPendingJoins === 'function') await renderTeamPendingJoins();
+    if (typeof renderTeamPendingStatus === 'function') await renderTeamPendingStatus();
+    if (typeof renderTeamBlocked === 'function') await renderTeamBlocked();
+    if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
+    if (typeof updateSidebarUnsyncedBadge === 'function') await updateSidebarUnsyncedBadge();
+    if (typeof renderInbox === 'function') await renderInbox();
+  } finally {
+    _refreshTeamUiBusy = false;
   }
-  if (typeof renderTeamMembers === 'function') await renderTeamMembers();
-  if (typeof renderTeamPendingJoins === 'function') await renderTeamPendingJoins();
-  if (typeof renderTeamPendingStatus === 'function') await renderTeamPendingStatus();
-  if (typeof renderTeamBlocked === 'function') await renderTeamBlocked();
-  if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
-  if (typeof updateSidebarUnsyncedBadge === 'function') await updateSidebarUnsyncedBadge();
-  if (typeof renderInbox === 'function') await renderInbox();
 }
 
 window.reloadTasks = reloadTasks;

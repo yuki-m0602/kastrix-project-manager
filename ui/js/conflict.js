@@ -3,7 +3,8 @@
 
 let _pendingConflict = null;
 let _resolvedConflictTaskIds = new Set();
-let _conflictDebounceUntil = 0;
+/** タスクIDごとのデバウンスマップ（別タスクの競合は即表示する） */
+let _conflictDebounceMap = new Map();
 
 /**
  * 競合ダイアログを表示
@@ -12,7 +13,8 @@ function showConflictDialog(payload) {
   if (!payload) return;
   const tid = payload.task?.id || payload.task_id;
   if (!tid) return;
-  if (Date.now() < _conflictDebounceUntil) return;
+  const debounceUntil = _conflictDebounceMap.get(tid) || 0;
+  if (Date.now() < debounceUntil) return;
   if (_resolvedConflictTaskIds.has(tid)) return;
   if (_pendingConflict) return;
 
@@ -49,9 +51,11 @@ function closeConflictModal() {
     modal.classList.remove('hidden');
   }
   const tid = _pendingConflict?.task?.id || _pendingConflict?.task_id;
-  if (tid) _resolvedConflictTaskIds.add(tid);
+  if (tid) {
+    _resolvedConflictTaskIds.add(tid);
+    _conflictDebounceMap.set(tid, Date.now() + CONFLICT_DEBOUNCE_MS);
+  }
   _pendingConflict = null;
-  _conflictDebounceUntil = Date.now() + CONFLICT_DEBOUNCE_MS;
 }
 
 /**

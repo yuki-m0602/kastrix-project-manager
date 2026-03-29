@@ -2,9 +2,20 @@
 // チーム画面メイン表示
 
 /**
- * チーム画面を表示
+ * チーム画面を表示（排他制御付き — 並行実行を防止）
  */
+let _renderTeamViewBusy = false;
 async function renderTeamView() {
+  if (_renderTeamViewBusy) return;        // 既に実行中ならスキップ
+  _renderTeamViewBusy = true;
+  try {
+    await _renderTeamViewInner();
+  } finally {
+    _renderTeamViewBusy = false;
+  }
+}
+
+async function _renderTeamViewInner() {
   console.log('renderTeamView called');
   const container = document.getElementById('team-content');
   if (!container) {
