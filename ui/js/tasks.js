@@ -303,7 +303,7 @@ async function submitTaskForm() {
 
 async function deleteCurrentTask() {
   if (!_currentTaskId) return;
-  if (!confirm('このタスクを削除しますか？')) return;
+  if (!(await confirmAsync('このタスクを削除しますか？'))) return;
   try {
     await apiDeleteTask(_currentTaskId);
     if (_isTauri) await reloadTasks();

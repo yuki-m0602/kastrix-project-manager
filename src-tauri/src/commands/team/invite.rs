@@ -3,7 +3,7 @@
 use crate::db::DbState;
 use crate::team::{
     am_i_pending_guest, broadcast_join_request, generate_invite_code, get_my_endpoint_id,
-    normalize_code, spawn_topic_listener, topic_id_to_hex, JoinRequestPayload, IrohState,
+    normalize_code, spawn_topic_listener, topic_id_to_hex, IrohState, JoinRequestPayload,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -446,7 +446,10 @@ pub async fn restore_team_subscriptions(app: &tauri::AppHandle) -> Result<(), St
             requested_at,
         };
         if let Err(e) = broadcast_join_request(&iroh, &tid, &payload).await {
-            eprintln!("restore_team_subscriptions: broadcast_join_request failed: {}", e);
+            eprintln!(
+                "restore_team_subscriptions: broadcast_join_request failed: {}",
+                e
+            );
         }
     }
 

@@ -50,7 +50,11 @@ async fn maybe_broadcast_task_update(
     let should_broadcast = {
         let db = state.0.lock().map_err(|e| e.to_string())?;
         let sync_mode: String = db
-            .query_row("SELECT value FROM settings WHERE key = 'sync_mode'", [], |r| r.get(0))
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'sync_mode'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap_or_else(|_| "auto".to_string());
         let is_manual = sync_mode == "manual";
         record_operation(&db, &mut payload, &timestamp, &ts_source, !is_manual)?;
@@ -161,11 +165,7 @@ pub async fn create_task(
     app: AppHandle,
 ) -> Result<Task, String> {
     let my_id = get_my_endpoint_id(&iroh).await;
-    let created_by = if my_id.is_empty() {
-        None
-    } else {
-        Some(my_id)
-    };
+    let created_by = if my_id.is_empty() { None } else { Some(my_id) };
     let task = {
         let db = state.0.lock().map_err(|e| e.to_string())?;
         let id = Uuid::new_v4().to_string();
@@ -286,8 +286,7 @@ pub async fn delete_task(
     let my_id = get_my_endpoint_id(&iroh).await;
     let was_public = {
         let db = state.0.lock().map_err(|e| e.to_string())?;
-        let task = query_task(&db, &id)
-            .map_err(|_| "タスクが見つかりません".to_string())?;
+        let task = query_task(&db, &id).map_err(|_| "タスクが見つかりません".to_string())?;
         if !can_delete_task_for_user(&db, &task, &my_id) {
             return Err(
                 "このタスクを削除する権限がありません（ホストまたは作成者のみ削除できます）"
@@ -308,11 +307,7 @@ pub async fn delete_task(
             ts_source: None,
             seq: None,
             prev_id: None,
-            actor_endpoint_id: if my_id.is_empty() {
-                None
-            } else {
-                Some(my_id)
-            },
+            actor_endpoint_id: if my_id.is_empty() { None } else { Some(my_id) },
         };
         maybe_broadcast_task_update(&state, &iroh, &app, payload).await?;
     }

@@ -154,14 +154,26 @@ fn column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool, r
 
 /// マイグレーション定義: (テーブル, カラム, SQL)
 const MIGRATIONS: &[(&str, &str, &str)] = &[
-    ("invite_codes", "host_ticket", "ALTER TABLE invite_codes ADD COLUMN host_ticket TEXT"),
-    ("tasks", "is_public", "ALTER TABLE tasks ADD COLUMN is_public INTEGER DEFAULT 1"),
+    (
+        "invite_codes",
+        "host_ticket",
+        "ALTER TABLE invite_codes ADD COLUMN host_ticket TEXT",
+    ),
+    (
+        "tasks",
+        "is_public",
+        "ALTER TABLE tasks ADD COLUMN is_public INTEGER DEFAULT 1",
+    ),
     (
         "tasks",
         "last_update_source",
         "ALTER TABLE tasks ADD COLUMN last_update_source TEXT DEFAULT 'local'",
     ),
-    ("members", "display_name", "ALTER TABLE members ADD COLUMN display_name TEXT"),
+    (
+        "members",
+        "display_name",
+        "ALTER TABLE members ADD COLUMN display_name TEXT",
+    ),
     (
         "tasks",
         "created_by",
@@ -176,7 +188,8 @@ fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         }
     }
     // 退出後に他メンバー行だけ残ると UI が「参加中」のままになるため、購読 0 件なら members を掃除
-    let n_subs: i64 = conn.query_row("SELECT COUNT(*) FROM team_subscriptions", [], |r| r.get(0))?;
+    let n_subs: i64 =
+        conn.query_row("SELECT COUNT(*) FROM team_subscriptions", [], |r| r.get(0))?;
     if n_subs == 0 {
         conn.execute("DELETE FROM members", [])?;
         let _ = conn.execute("DELETE FROM team_pending_joins", []);

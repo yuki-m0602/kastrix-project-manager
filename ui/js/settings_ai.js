@@ -40,7 +40,7 @@ async function saveKey(provider) {
 }
 
 async function deleteKey(provider) {
-  if (!confirm(`${provider} の API キーを削除しますか？`)) return;
+  if (!(await confirmAsync(`${provider} の API キーを削除しますか？`))) return;
   await apiDeleteApiKey(provider);
   renderSettings();
 }

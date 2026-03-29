@@ -64,3 +64,12 @@ pub struct TeamDisbandPayload {
     #[serde(default)]
     pub version: Option<String>,
 }
+
+/// team_name_update（チーム名の全員同期）
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct TeamNamePayload {
+    pub r#type: String,
+    #[serde(default)]
+    pub version: Option<String>,
+    pub name: String,
+}

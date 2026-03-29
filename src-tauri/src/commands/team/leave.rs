@@ -16,11 +16,9 @@ pub async fn team_leave(
 ) -> Result<(), String> {
     let topic_id: Option<String> = {
         let db = state.0.lock().map_err(|e| e.to_string())?;
-        db.query_row(
-            "SELECT topic_id FROM team_subscriptions LIMIT 1",
-            [],
-            |r| r.get(0),
-        )
+        db.query_row("SELECT topic_id FROM team_subscriptions LIMIT 1", [], |r| {
+            r.get(0)
+        })
         .ok()
     };
     let topic_id = topic_id.ok_or_else(|| "参加中のチームがありません".to_string())?;
@@ -66,8 +64,11 @@ pub async fn team_leave(
 
     {
         let db = state.0.lock().map_err(|e| e.to_string())?;
-        db.execute("DELETE FROM team_subscriptions WHERE topic_id = ?1", [&topic_id])
-            .map_err(|e| e.to_string())?;
+        db.execute(
+            "DELETE FROM team_subscriptions WHERE topic_id = ?1",
+            [&topic_id],
+        )
+        .map_err(|e| e.to_string())?;
         pending_db::delete_pending_for_topic(&db, &topic_id).map_err(|e| e.to_string())?;
         db.execute("DELETE FROM members WHERE endpoint_id = ?1", [&my_id])
             .map_err(|e| e.to_string())?;

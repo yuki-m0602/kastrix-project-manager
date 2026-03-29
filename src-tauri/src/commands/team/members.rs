@@ -4,7 +4,8 @@ use crate::db::DbState;
 use crate::team::{
     am_i_pending_guest, broadcast_member_display_name, broadcast_member_join, broadcast_member_op,
     can_approve_or_reject, clear_members_if_no_team, get_my_endpoint_id, in_team,
-    is_current_user_host, normalize_endpoint_id, pending_db, upsert_member_joined_active, IrohState,
+    is_current_user_host, normalize_endpoint_id, pending_db, upsert_member_joined_active,
+    IrohState,
 };
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
@@ -192,7 +193,8 @@ pub async fn team_cancel_join(
         let rows = stmt
             .query_map([], |row| row.get::<_, String>(0))
             .map_err(|e| e.to_string())?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?
     };
 
     if !guest_topics.is_empty() {
@@ -218,11 +220,8 @@ pub async fn team_cancel_join(
         }
         {
             let db = state.0.lock().map_err(|e| e.to_string())?;
-            db.execute(
-                "DELETE FROM team_subscriptions WHERE is_host = 0",
-                [],
-            )
-            .map_err(|e| e.to_string())?;
+            db.execute("DELETE FROM team_subscriptions WHERE is_host = 0", [])
+                .map_err(|e| e.to_string())?;
             for tid in &guest_topics {
                 let _ = pending_db::delete_pending_join(&db, &my_id, tid);
             }
@@ -339,6 +338,18 @@ pub async fn team_approve_join(
             let _ = app.emit("team-member-join-broadcast-failed", e);
         }
     }
+    // 参加側が初回 member_join を取りこぼしやすいため、遅延で数回再送（冪等）
+    let iroh_retry = iroh.inner().clone();
+    let ep_retry = endpoint_id.clone();
+    let tid_retry = topic_id.clone();
+    tauri::async_runtime::spawn(async move {
+        for ms in [2500_u64, 8000, 16000] {
+            tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+            if let Err(e) = broadcast_member_join(&iroh_retry, &ep_retry, &tid_retry).await {
+                eprintln!("broadcast_member_join (approve retry): {}", e);
+            }
+        }
+    });
     let _ = app.emit("team-members-updated", ());
     Ok(())
 }

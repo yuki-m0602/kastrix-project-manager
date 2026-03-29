@@ -1,92 +1,21 @@
 // ── Lucide Icons ──────────────────────────────────────────
 lucide.createIcons();
 
-// ── Window Controls (for frameless window) ───────────────────────
-async function initWindowControls() {
-  if (!window.__TAURI__) return;
-  const { getCurrentWindow } = window.__TAURI__.window;
-  const win = getCurrentWindow();
-  
-  // 最大化アイコンの更新
-  async function updateMaximizeIcon() {
-    const icon = document.getElementById('maximize-icon');
-    if (!icon) return;
-    const isMaximized = await win.isMaximized();
-    // アイコンを切り替え
-    icon.setAttribute('data-lucide', isMaximized ? 'copy' : 'square');
-    // Lucideアイコンを再生成
-    if (typeof lucide !== 'undefined') {
-      lucide.createIcons();
-    }
-  }
-  
-  // 初期状態を設定
-  updateMaximizeIcon();
-  
-  document.getElementById('btn-minimize')?.addEventListener('click', () => win.minimize());
-  document.getElementById('btn-maximize')?.addEventListener('click', async () => {
-    const isMaximized = await win.isMaximized();
-    if (isMaximized) {
-      win.unmaximize();
-    } else {
-      win.maximize();
-    }
-    // アイコンを更新
-    setTimeout(updateMaximizeIcon, 100);
-  });
-  document.getElementById('btn-close')?.addEventListener('click', () => win.close());
-  
-  // ウィンドウのリサイズイベントでアイコンを更新
-  win.onResized(() => {
-    updateMaximizeIcon();
-  });
-}
-initWindowControls();
-
-function fixFilterIconSizes() {
-  ['task-filter', 'project-filter'].forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.querySelectorAll('svg').forEach(svg => {
-      svg.setAttribute('width', '16');
-      svg.setAttribute('height', '16');
-    });
-  });
-}
-setTimeout(fixFilterIconSizes, 0);
-
+// ── Responsive ─────────────────────────────────────────────
 if (window.innerWidth <= 768) {
   document.documentElement.style.setProperty('--tw-min-w-0', '0');
 }
 
-// ── Custom Dropdown ───────────────────────────────────────
-// Tailwind の .hidden は display:none。style.display だけでは開閉できないため class で制御する。
-function closeAllDropdowns() {
-  document.querySelectorAll('[id^="dd-"]').forEach((el) => {
-    el.classList.add('hidden');
-    el.style.removeProperty('display');
-  });
-}
+// init / loadData / refreshTeamUiFromBackend / Tauri listen → data.js, init.js, events.js
 
-function toggleDropdown(id) {
-  const dd = document.getElementById(id);
-  if (!dd) return;
-  const opening = dd.classList.contains('hidden');
-  closeAllDropdowns();
-  if (opening) dd.classList.remove('hidden');
-}
-
+// Click handler to close dropdowns on outside click
 document.addEventListener('click', (e) => {
   if (!e.target.closest('[onclick^="toggleDropdown"]')) {
-    closeAllDropdowns();
+    if (typeof closeAllDropdowns === 'function') {
+      closeAllDropdowns();
+    }
   }
 });
-
-// ── History API: モバイルの「戻る」でモーダルを閉じる ────────
-function _pushModalHistory(type) {
-  _modalHistory = type;
-  history.pushState({ modal: type }, '');
-}
 
 window.addEventListener('popstate', () => {
   if (_modalHistory === 'task') {
@@ -128,114 +57,6 @@ document.addEventListener('click', e => {
     searchResults.style.removeProperty('display');
   }
 });
-
-// ── 衝突ダイアログ (local vs local) ───────────────────────
-let _pendingConflict = null;
-const _resolvedConflictTaskIds = new Set();
-let _conflictDebounceUntil = 0;
-
-function showConflictDialog(payload) {
-  if (!payload) return;
-  const tid = payload.taskId || payload.task_id;
-  if (!tid) return;
-  if (Date.now() < _conflictDebounceUntil) return;
-  if (_resolvedConflictTaskIds.has(tid)) return;
-  if (_pendingConflict) return;
-
-  _pendingConflict = payload;
-  const modal = document.getElementById('conflict-modal');
-  if (!modal) return;
-  const local = payload.local || {};
-  const incoming = payload.incoming || {};
-  const el = (id) => document.getElementById(id);
-  const lt = el('conflict-local-title');
-  const ls = el('conflict-local-status');
-  const it = el('conflict-incoming-title');
-  const is2 = el('conflict-incoming-status');
-  if (lt) lt.textContent = local.title || '-';
-  if (ls) ls.textContent = [local.status, local.priority].filter(Boolean).join(' / ') || '-';
-  if (it) it.textContent = incoming.title || '-';
-  if (is2) is2.textContent = [incoming.status, incoming.priority].filter(Boolean).join(' / ') || '-';
-  modal.style.display = 'flex';
-  try {
-    lucide.createIcons();
-  } catch (err) {
-    void err;
-  }
-}
-
-function closeConflictModal() {
-  const modal = document.getElementById('conflict-modal');
-  if (modal) modal.style.display = 'none';
-  if (_pendingConflict) {
-    const tid = _pendingConflict.taskId || _pendingConflict.task_id;
-    if (tid) _resolvedConflictTaskIds.add(tid);
-  }
-  _pendingConflict = null;
-  _conflictDebounceUntil = Date.now() + 3000;
-}
-
-async function resolveConflict(choice) {
-  const saved = _pendingConflict;
-  closeConflictModal();
-  if (!saved) return;
-  try {
-    if (_isTauri && saved.incoming) {
-      const seq = saved.conflictSeq || saved.conflict_seq || null;
-      await apiTeamResolveConflict(choice, saved.incoming, seq);
-    }
-  } catch (e) {
-    console.error('Conflict resolve failed:', e);
-  }
-  try {
-    await loadData();
-    if (typeof filterTasks === 'function') filterTasks();
-  } catch (err) {
-    void err;
-  }
-}
-
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && _pendingConflict) {
-    closeConflictModal();
-  }
-});
-
-// ── Data Loading ─────────────────────────────────────────
-async function reloadTasks() {
-  const tasksData = await apiGetTasks();
-  tasks.length = 0;
-  tasks.push(...tasksData);
-}
-
-async function loadData() {
-  try {
-    // 起動時に全 watched directories をスキャンして最新化
-    if (_isTauri) await apiScanAllWatchedDirs();
-    const [projectsData, tasksData] = await Promise.all([
-      apiGetProjects(),
-      apiGetTasks()
-    ]);
-    const safeProjects = Array.isArray(projectsData) ? projectsData : [];
-    const safeTasks = Array.isArray(tasksData) ? tasksData : [];
-    localProjects.length = 0;
-    localProjects.push(...safeProjects);
-    tasks.length = 0;
-    tasks.push(...safeTasks);
-    // Rebuild projects array for tabs/picker
-    projects.length = 0;
-    localProjects.forEach(p => {
-      projects.push({ id: p.id, name: p.name, color: 'indigo', icon: (p.name[0] || '?').toUpperCase() });
-    });
-    openTabs = ['all'];
-    activeTabId = 'all';
-    if (typeof renderProjectPicker === 'function') renderProjectPicker();
-    if (typeof filterTasks === 'function') filterTasks();
-    if (typeof renderProjects === 'function') renderProjects();
-  } catch (e) {
-    console.error('Failed to load data:', e);
-  }
-}
 
 // ── Search ───────────────────────────────────────────────
 function _hideSearchResults() {
@@ -333,112 +154,4 @@ async function exportLogs() {
   a.download = 'activity-logs.csv';
   a.click();
   URL.revokeObjectURL(url);
-}
-
-// ── Initialize ────────────────────────────────────────────
-async function init() {
-  try {
-    await loadData();
-  } catch (e) {
-    console.error('loadData failed:', e);
-  }
-  setTaskView('list');
-  setProjectViewMode('grid');
-  switchMainTab('projects');
-  lucide.createIcons();
-  fixFilterIconSizes();
-  if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
-  if (typeof updateSidebarUnsyncedBadge === 'function') await updateSidebarUnsyncedBadge();
-  // iroh 復元が遅い場合のリトライ（1s, 2s, 3s 後）
-  if (_isTauri && typeof updateSidebarRoomInfo === 'function') {
-    [1000, 2000, 3000].forEach((ms) => {
-      setTimeout(() => updateSidebarRoomInfo(), ms);
-    });
-  }
-  if (_isTauri && typeof updateSidebarUnsyncedBadge === 'function') {
-    [500, 2000].forEach((ms) => {
-      setTimeout(() => updateSidebarUnsyncedBadge(), ms);
-    });
-  }
-}
-
-/** チーム関連イベント受信時: Team 画面・サイドバー・Inbox をまとめて整合させる */
-async function refreshTeamUiFromBackend() {
-  if (typeof window.renderTeamView === 'function') {
-    try {
-      await window.renderTeamView();
-    } catch (e) {
-      console.error('renderTeamView failed:', e);
-    }
-  }
-  if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
-  if (typeof updateSidebarUnsyncedBadge === 'function') await updateSidebarUnsyncedBadge();
-  if (typeof renderInbox === 'function') await renderInbox();
-}
-
-// チーム同期でタスクが更新されたら再読み込み
-if (_isTauri && window.__TAURI__?.event?.listen) {
-  window.__TAURI__.event.listen('team-task-updated', async () => {
-    await loadData();
-    if (typeof filterTasks === 'function') filterTasks();
-    if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
-  });
-  window.__TAURI__.event.listen('team-unsynced-updated', async () => {
-    if (typeof updateSidebarUnsyncedBadge === 'function') await updateSidebarUnsyncedBadge();
-  });
-  window.__TAURI__.event.listen('team-conflict', (e) => {
-    if (typeof showConflictDialog === 'function') showConflictDialog(e.payload);
-  });
-  window.__TAURI__.event.listen('team-subscriptions-restored', async () => {
-    await refreshTeamUiFromBackend();
-  });
-  window.__TAURI__.event.listen('team-blocked', async () => {
-    showAlert('このチームからブロックされました。', 'error');
-    await refreshTeamUiFromBackend();
-  });
-  window.__TAURI__.event.listen('team-members-updated', async () => {
-    await refreshTeamUiFromBackend();
-  });
-  window.__TAURI__.event.listen('team-member-join-broadcast-failed', (e) => {
-    const msg = typeof e?.payload === 'string' ? e.payload : '';
-    showAlert(
-      '承認は保存済みですが、相手端末への gossip 通知に失敗しました。ネットワークを確認し、必要なら再度「承認」を試すか、参加側で再読み込みしてください。 ' +
-        (msg || ''),
-      'warning',
-    );
-  });
-  window.__TAURI__.event.listen('team-pending-join-cancelled', async () => {
-    await refreshTeamUiFromBackend();
-  });
-  window.__TAURI__.event.listen('team-pending-join', async () => {
-    await refreshTeamUiFromBackend();
-  });
-  window.__TAURI__.event.listen('team-cancelled', async () => {
-    await refreshTeamUiFromBackend();
-  });
-  window.__TAURI__.event.listen('team-disbanded', async () => {
-    showAlert('チームが解散しました。', 'info');
-    await refreshTeamUiFromBackend();
-  });
-  window.__TAURI__.event.listen('team-left', async () => {
-    await refreshTeamUiFromBackend();
-  });
-  window.__TAURI__.event.listen('team-iroh-ready', async (e) => {
-    if (typeof updateTeamButtonsState === 'function') {
-      updateTeamButtonsState(e.payload === true, e.payload === false);
-    }
-    // iroh 準備前は endpoint が空のため team_am_i_pending が常に false になる。準備完了後に再描画する。
-    if (e.payload === true) {
-      await refreshTeamUiFromBackend();
-    }
-  });
-  window.__TAURI__.event.listen('team-update-required', () => {
-    showAlert('アプリのアップデートが必要です。最新版をインストールしてください。', 'error');
-  });
-}
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
 }

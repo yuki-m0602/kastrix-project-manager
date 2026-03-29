@@ -30,7 +30,8 @@ pub fn generate_invite_code() -> (String, [u8; 32]) {
     (code, topic_id)
 }
 
-/// 招待コードの形式を検証
+#[allow(dead_code)]
+/// 招待コードの形式を検証（将来の使用のため保持）
 pub fn validate_code_format(code: &str) -> Result<(), String> {
     let code = code.trim().to_uppercase();
     if !code.starts_with(PREFIX) {

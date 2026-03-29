@@ -45,11 +45,9 @@ pub async fn analyze_logs(
     let model: Option<String> = {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         let key = format!("ai_model_{}", provider);
-        conn.query_row(
-            "SELECT value FROM settings WHERE key = ?1",
-            [&key],
-            |row| row.get::<_, String>(0),
-        )
+        conn.query_row("SELECT value FROM settings WHERE key = ?1", [&key], |row| {
+            row.get::<_, String>(0)
+        })
         .ok()
     };
 
@@ -92,7 +90,11 @@ pub fn ai_create_chat(db: State<'_, DbState>) -> Result<serde_json::Value, Strin
     )
     .map_err(|e| e.to_string())?;
     let created_at: String = conn
-        .query_row("SELECT created_at FROM ai_chats WHERE id = ?1", [&id], |r| r.get(0))
+        .query_row(
+            "SELECT created_at FROM ai_chats WHERE id = ?1",
+            [&id],
+            |r| r.get(0),
+        )
         .map_err(|e| e.to_string())?;
     Ok(serde_json::json!({ "id": id, "title": "New Chat", "created_at": created_at }))
 }
@@ -112,14 +114,20 @@ pub fn ai_list_chats(db: State<'_, DbState>) -> Result<Vec<serde_json::Value>, S
             }))
         })
         .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn ai_get_chat_messages(chat_id: String, db: State<'_, DbState>) -> Result<Vec<serde_json::Value>, String> {
+pub fn ai_get_chat_messages(
+    chat_id: String,
+    db: State<'_, DbState>,
+) -> Result<Vec<serde_json::Value>, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
-        .prepare("SELECT role, content FROM ai_chat_messages WHERE chat_id = ?1 ORDER BY created_at ASC")
+        .prepare(
+            "SELECT role, content FROM ai_chat_messages WHERE chat_id = ?1 ORDER BY created_at ASC",
+        )
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map([&chat_id], |row| {
@@ -129,11 +137,17 @@ pub fn ai_get_chat_messages(chat_id: String, db: State<'_, DbState>) -> Result<V
             }))
         })
         .map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn ai_add_chat_message(chat_id: String, role: String, content: String, db: State<'_, DbState>) -> Result<(), String> {
+pub fn ai_add_chat_message(
+    chat_id: String,
+    role: String,
+    content: String,
+    db: State<'_, DbState>,
+) -> Result<(), String> {
     let id = Uuid::new_v4().to_string();
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     conn.execute(
@@ -147,8 +161,11 @@ pub fn ai_add_chat_message(chat_id: String, role: String, content: String, db: S
         } else {
             content.clone()
         };
-        conn.execute("UPDATE ai_chats SET title = ?1 WHERE id = ?2 AND title = 'New Chat'", [&title, &chat_id])
-            .map_err(|e| e.to_string())?;
+        conn.execute(
+            "UPDATE ai_chats SET title = ?1 WHERE id = ?2 AND title = 'New Chat'",
+            [&title, &chat_id],
+        )
+        .map_err(|e| e.to_string())?;
     }
     Ok(())
 }

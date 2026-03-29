@@ -24,7 +24,6 @@ pub struct TeamResolveConflictInput {
 
 pub use crate::team::{PendingJoinInfo, PendingJoinsState};
 
-
 #[derive(serde::Serialize)]
 pub struct TeamCreateResult {
     pub code: String,

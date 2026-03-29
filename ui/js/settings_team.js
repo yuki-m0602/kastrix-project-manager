@@ -212,8 +212,8 @@ async function renderTeamView() {
         <div id="team-name-edit-form" class="hidden mt-4 pt-4 border-t border-[#30363d]">
           <div class="flex gap-2">
             <input id="team-name-input" type="text" value="${escapeHtml(teamInfo?.name || 'My Team')}" class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-sm text-white outline-none focus:border-indigo-500" maxlength="50">
-            <button onclick="saveTeamName()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white">保存</button>
-            <button onclick="cancelTeamNameEdit()" class="px-3 py-2 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-xs font-bold text-white">キャンセル</button>
+            <button type="button" onclick="saveTeamName()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white">確定</button>
+            <button type="button" onclick="cancelTeamNameEdit()" class="px-3 py-2 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-xs font-bold text-white">キャンセル</button>
           </div>
         </div>
       </div>
@@ -261,9 +261,13 @@ async function renderTeamView() {
                 <option value="manual" ${syncMode === 'manual' ? 'selected' : ''}>手動同期</option>
               </select>
             </div>
-            <div>
+            <div id="team-display-name-section" class="hidden">
               <label class="block text-sm font-medium text-white mb-2">自分の表示名</label>
-              <input id="team-display-name-input" type="text" placeholder="表示名を入力" class="w-full bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-sm text-white">
+              <div class="flex gap-2 flex-wrap items-stretch sm:items-center">
+                <input id="team-display-name-input" type="text" placeholder="表示名を入力" maxlength="64" class="flex-1 min-w-[8rem] bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-sm text-white outline-none focus:border-indigo-500">
+                <button type="button" onclick="teamSaveDisplayName()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white shrink-0">確定</button>
+                <button type="button" onclick="cancelTeamDisplayNameEdit()" class="px-3 py-2 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-xs font-bold text-white shrink-0">キャンセル</button>
+              </div>
             </div>
             ${syncMode === SYNC_MODE_MANUAL || syncMode === 'manual' ? `
             <div class="pt-2 border-t border-[#30363d] space-y-2">
@@ -274,7 +278,7 @@ async function renderTeamView() {
               </button>
             </div>
             ` : ''}
-            <button onclick="teamLeave()" class="w-full px-4 py-2 bg-red-600 hover:bg-red-500 rounded-xl text-sm font-bold text-white">
+            <button onclick="teamLeave()" type="button" class="w-full px-4 py-2 bg-red-600 hover:bg-red-500 rounded-xl text-sm font-bold text-white">
               チームを抜ける
             </button>
           </div>
@@ -379,17 +383,30 @@ async function renderTeamDisplayNameSection() {
   }
 }
 
+async function cancelTeamDisplayNameEdit() {
+  if (!_isTauri) return;
+  const input = document.getElementById('team-display-name-input');
+  if (!input) return;
+  try {
+    const displayName = await apiTeamGetMyDisplayName();
+    input.value = displayName || '';
+  } catch (_) {
+    input.value = '';
+  }
+}
+
 async function teamSaveDisplayName() {
   if (!_isTauri) return;
   const input = document.getElementById('team-display-name-input');
   const name = input?.value?.trim() ?? '';
   try {
     await apiTeamSetMyDisplayName(name);
+    if (typeof window.renderTeamView === 'function') await window.renderTeamView();
     await renderTeamMembers();
     if (typeof renderInbox === 'function') await renderInbox();
-    showAlert('表示名を保存しました。', 'success');
+    showAlert('表示名を更新しました。', 'success');
   } catch (e) {
-    showAlert('保存に失敗しました: ' + (e?.message || e), 'error');
+    showAlert('表示名の更新に失敗しました: ' + (e?.message || e), 'error');
   }
 }
 
@@ -444,14 +461,15 @@ async function renderTeamMembers() {
     list.innerHTML = members.map((m) => {
       let actions = '';
       if (m.role !== 'host') {
+        const ep = escapeHtml(m.endpoint_id);
         if (amIHost && m.role === 'member') {
-          actions += `<button onclick="teamPromoteToCoHost('${escapeHtml(m.endpoint_id)}')" class="px-2 py-1 text-[9px] font-bold text-amber-400 hover:bg-amber-500/10 rounded-lg">CO-HOSTに昇格</button>`;
+          actions += `<button type="button" data-endpoint="${ep}" onclick="teamPromoteToCoHost(this.dataset.endpoint)" class="px-2 py-1 text-[9px] font-bold text-amber-400 hover:bg-amber-500/10 rounded-lg">CO-HOSTに昇格</button>`;
         }
         if (canKick) {
-          actions += `<button onclick="teamKick('${escapeHtml(m.endpoint_id)}')" class="px-2 py-1 text-[9px] font-bold text-amber-400 hover:bg-amber-500/10 rounded-lg">キック</button>`;
+          actions += `<button type="button" data-endpoint="${ep}" onclick="teamKick(this.dataset.endpoint)" class="px-2 py-1 text-[9px] font-bold text-amber-400 hover:bg-amber-500/10 rounded-lg">キック</button>`;
         }
         if (amIHost) {
-          actions += `<button onclick="teamBlock('${escapeHtml(m.endpoint_id)}')" class="px-2 py-1 text-[9px] font-bold text-red-400 hover:bg-red-500/10 rounded-lg">ブロック</button>`;
+          actions += `<button type="button" data-endpoint="${ep}" onclick="teamBlock(this.dataset.endpoint)" class="px-2 py-1 text-[9px] font-bold text-red-400 hover:bg-red-500/10 rounded-lg">ブロック</button>`;
         }
       }
       const label = m.display_name || m.endpoint_id.slice(0, 20) + '...';
@@ -520,6 +538,7 @@ async function teamPromoteToCoHost(endpointId) {
   if (!_isTauri || !endpointId) return;
   try {
     await apiTeamPromoteToCoHost(endpointId);
+    if (typeof window.renderTeamView === 'function') await window.renderTeamView();
     await renderTeamMembers();
   } catch (e) {
     console.error('Promote failed:', e);
@@ -529,9 +548,10 @@ async function teamPromoteToCoHost(endpointId) {
 
 async function teamKick(endpointId) {
   if (!_isTauri || !endpointId) return;
-  if (!confirm('このメンバーをキックしますか？')) return;
+  if (!(await confirmAsync('このメンバーをキックしますか？'))) return;
   try {
     await apiTeamKick(endpointId);
+    if (typeof window.renderTeamView === 'function') await window.renderTeamView();
     await renderTeamMembers();
     await renderTeamBlocked();
   } catch (e) {
@@ -542,9 +562,10 @@ async function teamKick(endpointId) {
 
 async function teamBlock(endpointId) {
   if (!_isTauri || !endpointId) return;
-  if (!confirm('このメンバーをブロックしますか？ブロックされたメンバーは新規招待コードでも参加できなくなります。')) return;
+  if (!(await confirmAsync('このメンバーをブロックしますか？ブロックされたメンバーは新規招待コードでも参加できなくなります。'))) return;
   try {
     await apiTeamBlock(endpointId);
+    if (typeof window.renderTeamView === 'function') await window.renderTeamView();
     await renderTeamMembers();
     await renderTeamBlocked();
   } catch (e) {
@@ -707,7 +728,7 @@ async function teamJoin() {
 
 async function teamCancelJoin() {
   if (!_isTauri) return;
-  if (!confirm('参加申請をキャンセルしますか？')) return;
+  if (!(await confirmAsync('参加申請をキャンセルしますか？'))) return;
   try {
     await apiTeamCancelJoin();
     await renderTeamPendingStatus();
@@ -758,7 +779,7 @@ async function teamCopyInviteLink(btn) {
 async function teamRevokeCode(btn) {
   if (!_isTauri || !btn?.dataset?.code) return;
   const code = btn.dataset.code;
-  if (!confirm(`招待コード ${code} を無効化（削除）しますか？`)) return;
+  if (!(await confirmAsync(`招待コード ${code} を無効化（削除）しますか？`))) return;
   try {
     await apiTeamRevokeInviteCode(code);
     if (typeof showAlert === 'function') showAlert('招待コードを無効化しました。', 'success');
@@ -950,10 +971,10 @@ function showTeamSettingsModal() {
           </div>
 
           <div class="flex gap-3 mt-6">
-            <button onclick="saveTeamSettings()" class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-sm font-bold text-white">
-              保存
+            <button type="button" onclick="saveTeamSettings()" class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-sm font-bold text-white">
+              確定
             </button>
-            <button onclick="closeTeamSettingsModal()" class="px-4 py-2 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-sm font-bold text-white">
+            <button type="button" onclick="closeTeamSettingsModal()" class="px-4 py-2 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-sm font-bold text-white">
               キャンセル
             </button>
           </div>
@@ -1063,22 +1084,29 @@ function cancelTeamNameEdit() {
   if (formEl) formEl.classList.add('hidden');
 }
 
-function confirmTeamLeave() {
-  if (confirm('チームを抜けますか？ この操作は取り消せません。')) {
-    teamLeave();
-    closeTeamSettingsModal();
-  }
+async function confirmTeamLeave() {
+  const ok = await teamLeave();
+  if (ok) closeTeamSettingsModal();
 }
 
+/** 確認ダイアログ1回のあと API で脱退。成功時 true */
 async function teamLeave() {
-  if (!_isTauri || !confirm('チームを抜けますか？ この操作は取り消せません。')) return;
+  if (!(await confirmAsync('チームを抜けますか？ この操作は取り消せません。'))) {
+    return false;
+  }
+  if (!_isTauri) {
+    showAlert('Tauri 環境でのみチームを抜けます。', 'info');
+    return false;
+  }
   try {
     await apiTeamLeave();
-    alert('チームを抜けました。');
-    renderTeamView(); // UI更新
+    showAlert('チームを抜けました。', 'success');
+    await renderTeamView();
+    return true;
   } catch (e) {
     console.error('Failed to leave team:', e);
-    alert('チームを抜けるのに失敗しました。');
+    showAlert('チームを抜けるのに失敗しました。', 'error');
+    return false;
   }
 }
 

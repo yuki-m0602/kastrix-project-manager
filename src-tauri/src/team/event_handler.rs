@@ -9,14 +9,16 @@ use crate::db::DbState;
 use crate::team::task_sync::{apply_task_update, TaskUpdatePayload};
 
 use super::broadcast::{
-    broadcast_blocked_notify, broadcast_join_request, broadcast_permission_change, broadcast_team_disband,
+    broadcast_blocked_notify, broadcast_join_request, broadcast_member_join,
+    broadcast_permission_change, broadcast_team_disband,
 };
 use super::helpers::{
-    clear_members_if_no_team, get_my_endpoint_id, normalize_endpoint_id, upsert_member_joined_active,
+    clear_members_if_no_team, get_my_endpoint_id, normalize_endpoint_id,
+    upsert_member_joined_active,
 };
 use super::payloads::{
     JoinRequestPayload, MemberBlockedNotifyPayload, MemberDisplayNamePayload, MemberJoinPayload,
-    MemberOpPayload, PermissionChangePayload, TeamDisbandPayload,
+    MemberOpPayload, PermissionChangePayload, TeamDisbandPayload, TeamNamePayload,
 };
 use super::pending::{PendingJoinInfo, PendingJoinsState};
 use super::pending_db;
@@ -38,7 +40,10 @@ async fn handle_team_disband(app: &AppHandle, topic_id: &str, pending_joins: &Pe
     if let Some(state) = app.try_state::<DbState>() {
         let _ = state.0.lock().map(|db| {
             let _ = pending_db::delete_pending_for_topic(&db, topic_id);
-            let _ = db.execute("DELETE FROM team_subscriptions WHERE topic_id = ?1", rusqlite::params![topic_id]);
+            let _ = db.execute(
+                "DELETE FROM team_subscriptions WHERE topic_id = ?1",
+                rusqlite::params![topic_id],
+            );
             let _ = db.execute("DELETE FROM members", []);
         });
     }
@@ -62,25 +67,38 @@ pub async fn spawn_topic_listener(
         match event {
             Ok(Event::NeighborUp(node_id)) if is_host => {
                 let endpoint_id = normalize_endpoint_id(&node_id.to_string());
-                let is_blocked = if let Some(state) = app.try_state::<DbState>() {
-                    state.0.lock().map_or(false, |db| {
-                        db.query_row(
-                            "SELECT 1 FROM members WHERE lower(endpoint_id) = lower(?1) AND status = 'blocked'",
-                            [&endpoint_id],
-                            |_| Ok(()),
-                        )
-                        .is_ok()
+                let (is_blocked, already_active) = if let Some(state) = app.try_state::<DbState>() {
+                    state.0.lock().map_or((false, false), |db| {
+                        let blocked = db
+                            .query_row(
+                                "SELECT 1 FROM members WHERE lower(endpoint_id) = lower(?1) AND status = 'blocked'",
+                                [&endpoint_id],
+                                |_| Ok(()),
+                            )
+                            .is_ok();
+                        let active = db
+                            .query_row(
+                                "SELECT 1 FROM members WHERE lower(endpoint_id) = lower(?1) AND status = 'active'",
+                                [&endpoint_id],
+                                |_| Ok(()),
+                            )
+                            .is_ok();
+                        (blocked, active)
                     })
                 } else {
-                    false
+                    (false, false)
                 };
                 if is_blocked {
                     if let Some(iroh) = app.try_state::<IrohState>() {
                         let _ = broadcast_blocked_notify(&iroh, &endpoint_id).await;
                     }
+                } else if already_active {
+                    // 承認済みメンバーが再接続したとき、取りこぼした member_join を補填する
+                    if let Some(iroh) = app.try_state::<IrohState>() {
+                        let _ = broadcast_member_join(&iroh, &endpoint_id, &topic_id).await;
+                    }
                 } else {
-                    let requested_at =
-                        chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+                    let requested_at = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
                     let info = PendingJoinInfo {
                         endpoint_id: endpoint_id.clone(),
                         topic_id: topic_id.clone(),
@@ -94,9 +112,10 @@ pub async fn spawn_topic_listener(
                         }) {
                             guard.push(info.clone());
                             if let Some(state) = app.try_state::<DbState>() {
-                                let _ = state.0.lock().map(|db| {
-                                    pending_db::upsert_pending_join(&db, &info)
-                                });
+                                let _ = state
+                                    .0
+                                    .lock()
+                                    .map(|db| pending_db::upsert_pending_join(&db, &info));
                             }
                         }
                     }
@@ -129,9 +148,10 @@ pub async fn spawn_topic_listener(
                                 if ver == "1.0" {
                                     if let Some(state) = app.try_state::<DbState>() {
                                         let ep = normalize_endpoint_id(&mj.endpoint_id);
-                                        let _ = state.0.lock().map(|db| {
-                                            upsert_member_joined_active(&db, &ep)
-                                        });
+                                        let _ = state
+                                            .0
+                                            .lock()
+                                            .map(|db| upsert_member_joined_active(&db, &ep));
                                         let _ = app.emit("team-members-updated", ());
                                     }
                                 }
@@ -172,9 +192,10 @@ pub async fn spawn_topic_listener(
                             }) {
                                 guard.push(info.clone());
                                 if let Some(state) = app.try_state::<DbState>() {
-                                    let _ = state.0.lock().map(|db| {
-                                        pending_db::upsert_pending_join(&db, &info)
-                                    });
+                                    let _ = state
+                                        .0
+                                        .lock()
+                                        .map(|db| pending_db::upsert_pending_join(&db, &info));
                                 }
                             }
                             let _ = app.emit("team-pending-join", &info);
@@ -188,10 +209,9 @@ pub async fn spawn_topic_listener(
                         let mut guard = pending_joins.write().await;
                         guard.retain(|p| p.endpoint_id != mop.target_id);
                         if let Some(state) = app.try_state::<DbState>() {
-                            let _ = state
-                                .0
-                                .lock()
-                                .map(|db| pending_db::delete_pending_for_endpoint(&db, &mop.target_id));
+                            let _ = state.0.lock().map(|db| {
+                                pending_db::delete_pending_for_endpoint(&db, &mop.target_id)
+                            });
                         }
                         let _ = app.emit("team-pending-join-cancelled", ());
                     } else if (mop.r#type == "member_kick" || mop.r#type == "member_block")
@@ -267,8 +287,29 @@ pub async fn spawn_topic_listener(
                             }
                         }
                     }
+                } else if let Ok(tn) = serde_json::from_slice::<TeamNamePayload>(slice) {
+                    if tn.r#type == "team_name_update" {
+                        let ver = tn.version.as_deref().unwrap_or("1.0");
+                        if ver == "1.0" {
+                            let name = tn.name.trim();
+                            if !name.is_empty() && name.len() <= 50 {
+                                if let Some(state) = app.try_state::<DbState>() {
+                                    let _ = state.0.lock().map(|db| {
+                                        db.execute(
+                                            "INSERT INTO settings (key, value) VALUES ('team_name', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1",
+                                            [name],
+                                        )
+                                    });
+                                    let _ = app.emit("team-members-updated", ());
+                                }
+                            }
+                        }
+                    }
                 } else if let Ok(pc) = serde_json::from_slice::<PermissionChangePayload>(slice) {
-                    if pc.r#type == "permission_change" && pc.old_host_endpoint_id != "" && pc.new_host_endpoint_id != "" {
+                    if pc.r#type == "permission_change"
+                        && pc.old_host_endpoint_id != ""
+                        && pc.new_host_endpoint_id != ""
+                    {
                         let ver = pc.version.as_deref().unwrap_or("1.0");
                         if ver == "1.0" {
                             let my_id = if let Some(iroh) = app.try_state::<IrohState>() {
@@ -299,7 +340,9 @@ pub async fn spawn_topic_listener(
             }
             Ok(Event::NeighborDown(node_id)) => {
                 let departed_id = node_id.to_string();
-                let action: Option<(bool, String, String)> = if let Some(state) = app.try_state::<DbState>() {
+                let action: Option<(bool, String, String)> = if let Some(state) =
+                    app.try_state::<DbState>()
+                {
                     state.0.lock().map_or(None, |db| {
                         let is_host = db.query_row(
                             "SELECT 1 FROM members WHERE endpoint_id = ?1 AND role = 'host'",
@@ -334,7 +377,8 @@ pub async fn spawn_topic_listener(
                         let my_id = get_my_endpoint_id(&iroh).await;
                         if my_id == new_host {
                             if is_pc {
-                                let _ = broadcast_permission_change(&iroh, &old_host, &new_host).await;
+                                let _ =
+                                    broadcast_permission_change(&iroh, &old_host, &new_host).await;
                             } else {
                                 let _ = broadcast_team_disband(&iroh).await;
                             }

@@ -172,12 +172,7 @@ fn task_equal_for_conflict(a: &Task, b: &Task) -> bool {
 /// 環境変数 `KASTRIX_DEBUG_TEAM_CONFLICT=1`（または true/yes）で有効。`team-conflict` emit 直前の JSON と差分理由を stderr に出す。
 fn team_conflict_debug_logs_enabled() -> bool {
     std::env::var("KASTRIX_DEBUG_TEAM_CONFLICT")
-        .map(|v| {
-            matches!(
-                v.to_lowercase().as_str(),
-                "1" | "true" | "yes"
-            )
-        })
+        .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
         .unwrap_or(false)
 }
 
@@ -266,7 +261,11 @@ fn log_conflict_mismatch_detail(
     ));
 }
 
-fn is_conflict_seq_skipped(db: &rusqlite::Connection, task_id: &str, seq: i64) -> Result<bool, String> {
+fn is_conflict_seq_skipped(
+    db: &rusqlite::Connection,
+    task_id: &str,
+    seq: i64,
+) -> Result<bool, String> {
     let n: i32 = db
         .query_row(
             "SELECT COUNT(*) FROM team_conflict_skip_seq WHERE task_id = ?1 AND seq = ?2",
@@ -293,7 +292,11 @@ pub fn apply_task_update(
         payload.action,
         payload.ts_source,
         payload.seq,
-        payload.task.as_ref().map(|t| &t.id).or(payload.task_id.as_ref()),
+        payload
+            .task
+            .as_ref()
+            .map(|t| &t.id)
+            .or(payload.task_id.as_ref()),
     ));
     let mut emit_conflict: Option<ConflictInfo> = None;
     let mut emit_task_updated = false;
@@ -308,7 +311,10 @@ pub fn apply_task_update(
                 // 意味的に同一なら ts_source に関係なくスキップ（重複メッセージ・再起動時バックログ対策）
                 if let Ok(local) = query_local_task(&db, &task.id) {
                     if task_equal_for_conflict(&local, task) {
-                        _trace_to_file(&format!("[apply_task_update] SKIP equal task_id={}", task.id));
+                        _trace_to_file(&format!(
+                            "[apply_task_update] SKIP equal task_id={}",
+                            task.id
+                        ));
                         return Ok(());
                     }
                 }
@@ -320,7 +326,8 @@ pub fn apply_task_update(
                         |r| r.get(0),
                     )
                     .ok();
-                let is_local_vs_local = incoming_ts_local && local_source.as_deref() == Some("local");
+                let is_local_vs_local =
+                    incoming_ts_local && local_source.as_deref() == Some("local");
                 _trace_to_file(&format!(
                     "[apply_task_update] task_id={} incoming_ts_local={} db_last_update_source={:?} is_local_vs_local={}",
                     task.id, incoming_ts_local, local_source, is_local_vs_local
@@ -397,7 +404,11 @@ pub fn apply_task_update(
                     .as_ref()
                     .ok_or_else(|| "task_update: task_id is required for delete".to_string())?;
                 if let Ok(task) = query_local_task(&db, id) {
-                    if !can_apply_remote_task_delete(&db, &task, payload.actor_endpoint_id.as_deref()) {
+                    if !can_apply_remote_task_delete(
+                        &db,
+                        &task,
+                        payload.actor_endpoint_id.as_deref(),
+                    ) {
                         return Ok(());
                     }
                 }

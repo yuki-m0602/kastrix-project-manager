@@ -88,7 +88,8 @@ async function switchAiChat(chatId) {
 }
 
 async function deleteAiChat(chatId) {
-  if (!_isTauri || !confirm('このチャットを削除しますか？')) return;
+  if (!_isTauri) return;
+  if (!(await confirmAsync('このチャットを削除しますか？'))) return;
   await apiAiDeleteChat(chatId);
   const chats = await apiAiListChats();
   if (chatId === _aiCurrentChatId) {

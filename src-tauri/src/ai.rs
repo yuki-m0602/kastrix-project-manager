@@ -132,14 +132,12 @@ pub async fn list_models(provider: &str, api_key: &str) -> Result<Vec<String>, S
             ids.sort();
             Ok(ids)
         }
-        "anthropic" => {
-            Ok(vec![
-                "claude-sonnet-4-20250514".to_string(),
-                "claude-3-5-sonnet-20241022".to_string(),
-                "claude-3-opus-20240229".to_string(),
-                "claude-3-haiku-20240307".to_string(),
-            ])
-        }
+        "anthropic" => Ok(vec![
+            "claude-sonnet-4-20250514".to_string(),
+            "claude-3-5-sonnet-20241022".to_string(),
+            "claude-3-opus-20240229".to_string(),
+            "claude-3-haiku-20240307".to_string(),
+        ]),
         _ => Err(format!("Unsupported provider: {provider}")),
     }
 }
@@ -151,7 +149,10 @@ pub struct AiModelInfo {
     pub is_free: bool,
 }
 
-pub async fn list_models_extended(provider: &str, api_key: &str) -> Result<Vec<AiModelInfo>, String> {
+pub async fn list_models_extended(
+    provider: &str,
+    api_key: &str,
+) -> Result<Vec<AiModelInfo>, String> {
     match provider {
         "openrouter" => {
             #[derive(Deserialize)]

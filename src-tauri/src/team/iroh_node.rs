@@ -126,13 +126,11 @@ impl IrohNodeState {
     pub async fn get_sender(&self, topic_id_hex: &str) -> Option<GossipSender> {
         let map = self.subscriptions.read().await;
         let lower = topic_id_hex.to_ascii_lowercase();
-        map.get(&lower)
-            .cloned()
-            .or_else(|| {
-                map.iter()
-                    .find(|(k, _)| k.eq_ignore_ascii_case(topic_id_hex))
-                    .map(|(_, v)| v.clone())
-            })
+        map.get(&lower).cloned().or_else(|| {
+            map.iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case(topic_id_hex))
+                .map(|(_, v)| v.clone())
+        })
     }
 
     /// topic hex（大文字小文字無視）に対応する送信ハンドル（member_join 等で正しいトピックへ送る）
