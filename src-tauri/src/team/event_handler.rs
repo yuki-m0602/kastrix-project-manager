@@ -17,8 +17,8 @@ use super::helpers::{
     upsert_member_joined_active,
 };
 use super::payloads::{
-    JoinRequestPayload, MemberBlockedNotifyPayload, MemberDisplayNamePayload, MemberJoinPayload,
-    MemberOpPayload, MemberSyncNeedPayload, PermissionChangePayload, TeamDisbandPayload,
+    JoinRequestPayload, MemberBlockedNotifyPayload, MemberDisplayNamePayload, MemberOpPayload,
+    MemberSyncNeedPayload, PermissionChangePayload, TeamDisbandPayload,
     TeamNamePayload,
 };
 use super::pending::{PendingJoinInfo, PendingJoinsState};
@@ -139,20 +139,32 @@ pub async fn spawn_topic_listener(
                 if let Ok(v) = serde_json::from_slice::<serde_json::Value>(slice) {
                     if v.get("type").and_then(|x| x.as_str()) == Some("member_join") {
                         member_join_handled = true;
-                        if let Ok(mj) = serde_json::from_value::<MemberJoinPayload>(v) {
-                            if mj.r#type == "member_join"
-                                && gossip_topic_matches(&mj.topic_id, &topic_id)
-                                && !mj.endpoint_id.is_empty()
-                            {
-                                let ver = mj.version.as_deref().unwrap_or("1.0");
-                                if ver == "1.0" {
+                        // Value から直接取る（serde の struct 変換失敗で黙って捨てるのを防ぐ）
+                        let tid_msg = v.get("topic_id").and_then(|x| x.as_str()).unwrap_or("");
+                        if gossip_topic_matches(tid_msg, &topic_id) {
+                            if let Some(ep_raw) = v.get("endpoint_id").and_then(|x| x.as_str()) {
+                                let ep = normalize_endpoint_id(ep_raw);
+                                let ver = v.get("version").and_then(|x| x.as_str()).unwrap_or("1.0");
+                                if ver == "1.0" && !ep.is_empty() {
                                     if let Some(state) = app.try_state::<DbState>() {
-                                        let ep = normalize_endpoint_id(&mj.endpoint_id);
-                                        let _ = state
-                                            .0
-                                            .lock()
-                                            .map(|db| upsert_member_joined_active(&db, &ep));
-                                        let _ = app.emit("team-members-updated", ());
+                                        match state.0.lock() {
+                                            Ok(db) => {
+                                                match upsert_member_joined_active(&db, &ep) {
+                                                    Ok(()) => {
+                                                        let _ = app.emit("team-members-updated", ());
+                                                    }
+                                                    Err(e) => {
+                                                        eprintln!(
+                                                            "member_join upsert failed (ep={}): {}",
+                                                            ep, e
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                eprintln!("member_join db lock: {}", e);
+                                            }
+                                        }
                                     }
                                 }
                             }

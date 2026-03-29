@@ -212,6 +212,31 @@ pub async fn team_request_member_sync(
     Ok(true)
 }
 
+/// ホストは承認済みだが `member_join` gossip が届かず画面が切り替わらないときの救済。
+/// **参加申請中**（`am_i_pending_guest`）のときだけ、ローカル DB に自分を active メンバーとして書き込む。
+#[tauri::command]
+pub async fn team_guest_apply_local_membership_if_pending(
+    app: AppHandle,
+    state: State<'_, DbState>,
+    iroh: State<'_, IrohState>,
+) -> Result<(), String> {
+    let my_id = get_my_endpoint_id(&iroh).await;
+    if my_id.is_empty() {
+        return Err(
+            "エンドポイントIDを取得できません。しばらく待ってから再度お試しください。".to_string(),
+        );
+    }
+    let ep = normalize_endpoint_id(&my_id);
+    let db = state.0.lock().map_err(|e| e.to_string())?;
+    if !am_i_pending_guest(&db, &ep) {
+        return Err("参加申請中ではないか、すでにメンバーとして同期済みです。".to_string());
+    }
+    upsert_member_joined_active(&db, &ep).map_err(|e| e.to_string())?;
+    drop(db);
+    let _ = app.emit("team-members-updated", ());
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn team_cancel_join(
     state: State<'_, DbState>,

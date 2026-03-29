@@ -38,7 +38,7 @@ pub fn can_approve_or_reject(
 ) -> bool {
     let is_host: bool = db
         .query_row(
-            "SELECT 1 FROM team_subscriptions WHERE topic_id = ?1 AND is_host = 1",
+            "SELECT 1 FROM team_subscriptions WHERE lower(topic_id) = lower(?1) AND is_host = 1",
             [topic_id],
             |r| r.get(0),
         )

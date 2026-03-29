@@ -282,6 +282,33 @@ function clearTeamPendingApprovalPoll() {
 /**
  * ゲスト: 承認同期（member_join）が届いたかを再確認し、届いていればチーム画面へ
  */
+/**
+ * ホスト承認済みなのに member_join が届かないとき、ローカル DB だけ参加済みにする（要確認）
+ */
+async function teamGuestApplyLocalMembershipIfPending() {
+  if (!_isTauri) return;
+  if (
+    !(await confirmAsync(
+      'ホストで「承認」済みであることを確認してください。未承認のまま実行すると、表示だけ参加済みになり同期が不整合になることがあります。続行しますか？'
+    ))
+  ) {
+    return;
+  }
+  try {
+    await apiTeamGuestApplyLocalMembershipIfPending();
+    clearTeamPendingApprovalPoll();
+    if (typeof showAlert === 'function') {
+      showAlert('参加状態をこの端末に反映しました。', 'success');
+    }
+    if (typeof refreshTeamUiFromBackend === 'function') await refreshTeamUiFromBackend();
+    else if (typeof window.renderTeamView === 'function') await window.renderTeamView();
+  } catch (e) {
+    if (typeof showAlert === 'function') {
+      showAlert('反映に失敗しました: ' + (e?.toString?.() || e), 'error');
+    }
+  }
+}
+
 async function teamRefreshJoinStatus() {
   if (!_isTauri) return;
   try {
@@ -380,4 +407,5 @@ window.teamRevokeCode = teamRevokeCode;
 window.renderTeamPendingJoins = renderTeamPendingJoins;
 window.renderTeamPendingStatus = renderTeamPendingStatus;
 window.teamRefreshJoinStatus = teamRefreshJoinStatus;
+window.teamGuestApplyLocalMembershipIfPending = teamGuestApplyLocalMembershipIfPending;
 window.formatExpiresAt = formatExpiresAt;

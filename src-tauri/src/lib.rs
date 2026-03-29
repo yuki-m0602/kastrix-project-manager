@@ -125,6 +125,7 @@ pub fn run() {
             commands::team::members::team_list_pending_joins,
             commands::team::members::team_am_i_pending,
             commands::team::members::team_request_member_sync,
+            commands::team::members::team_guest_apply_local_membership_if_pending,
             commands::team::members::team_is_in_team,
             commands::team::members::team_is_active_member,
             commands::team::members::team_repair_orphan_if_needed,

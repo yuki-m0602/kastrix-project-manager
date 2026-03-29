@@ -119,10 +119,11 @@ async function renderTeamView() {
           <div id="team-pending-status" class="flex flex-col gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl mt-3" style="display:none;">
             <div class="flex flex-col gap-1 min-w-0">
               <span class="text-xs text-amber-400 font-bold">参加申請を送信済み</span>
-              <span class="text-[11px] text-[#8b949e] leading-snug">ホストが承認すると、同期メッセージを受け取り次第チーム画面に切り替わります。すぐに切り替わらない場合は「状態を更新」を試してください。</span>
+              <span class="text-[11px] text-[#8b949e] leading-snug">ホストが承認すると、同期メッセージを受け取り次第チーム画面に切り替わります。「状態を更新」で再取得を試し、承認済みなのに変わらないときは「承認済みとして画面を切替」を使ってください。</span>
             </div>
             <div class="flex flex-wrap items-center gap-2">
               <button type="button" onclick="teamRefreshJoinStatus()" class="px-2 py-1 text-[10px] font-bold text-indigo-300 hover:bg-indigo-500/10 rounded-lg border border-indigo-500/30">状態を更新</button>
+              <button type="button" onclick="teamGuestApplyLocalMembershipIfPending()" class="px-2 py-1 text-[10px] font-bold text-emerald-300 hover:bg-emerald-500/10 rounded-lg border border-emerald-500/30">承認済みとして画面を切替</button>
               <button type="button" onclick="teamCancelJoin()" class="px-2 py-1 text-[10px] font-bold text-red-400 hover:bg-red-500/10 rounded-lg">キャンセル</button>
             </div>
           </div>

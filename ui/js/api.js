@@ -228,6 +228,11 @@ async function apiTeamRequestMemberSync() {
   return await _invoke('team_request_member_sync') ?? false;
 }
 
+/** 承認済みだが gossip 未着のとき、参加申請中ならローカルだけ active にする救済 */
+async function apiTeamGuestApplyLocalMembershipIfPending() {
+  return await _invoke('team_guest_apply_local_membership_if_pending');
+}
+
 async function apiTeamCancelJoin() {
   return await _invoke('team_cancel_join');
 }
