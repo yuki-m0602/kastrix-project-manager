@@ -286,6 +286,7 @@ async function teamRefreshJoinStatus() {
   if (!_isTauri) return;
   try {
     await apiTeamRepairOrphanIfNeeded().catch(() => false);
+    await apiTeamRequestMemberSync().catch(() => false);
     const active = await apiTeamIsActiveMember();
     if (active) {
       clearTeamPendingApprovalPoll();
@@ -327,6 +328,7 @@ async function renderTeamPendingStatus() {
     status.style.display = 'flex';
     window._teamPendingApprovalPollId = setInterval(async () => {
       try {
+        await apiTeamRequestMemberSync().catch(() => false);
         const active = await apiTeamIsActiveMember();
         if (!active) return;
         clearTeamPendingApprovalPoll();

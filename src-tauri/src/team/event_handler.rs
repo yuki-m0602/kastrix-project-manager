@@ -9,16 +9,17 @@ use crate::db::DbState;
 use crate::team::task_sync::{apply_task_update, TaskUpdatePayload};
 
 use super::broadcast::{
-    broadcast_blocked_notify, broadcast_join_request, broadcast_permission_change,
-    broadcast_team_disband,
+    broadcast_blocked_notify, broadcast_join_request, broadcast_member_join,
+    broadcast_permission_change, broadcast_team_disband,
 };
 use super::helpers::{
-    clear_members_if_no_team, get_my_endpoint_id, normalize_endpoint_id,
+    can_approve_or_reject, clear_members_if_no_team, get_my_endpoint_id, normalize_endpoint_id,
     upsert_member_joined_active,
 };
 use super::payloads::{
     JoinRequestPayload, MemberBlockedNotifyPayload, MemberDisplayNamePayload, MemberJoinPayload,
-    MemberOpPayload, PermissionChangePayload, TeamDisbandPayload, TeamNamePayload,
+    MemberOpPayload, MemberSyncNeedPayload, PermissionChangePayload, TeamDisbandPayload,
+    TeamNamePayload,
 };
 use super::pending::{PendingJoinInfo, PendingJoinsState};
 use super::pending_db;
@@ -198,6 +199,39 @@ pub async fn spawn_topic_listener(
                                 }
                             }
                             let _ = app.emit("team-pending-join", &info);
+                        }
+                    }
+                } else if let Ok(sync) = serde_json::from_slice::<MemberSyncNeedPayload>(slice) {
+                    if sync.r#type == "member_sync_need"
+                        && gossip_topic_matches(&sync.topic_id, &topic_id)
+                    {
+                        let my_id = if let Some(iroh) = app.try_state::<IrohState>() {
+                            get_my_endpoint_id(&iroh).await
+                        } else {
+                            String::new()
+                        };
+                        let need_ep = normalize_endpoint_id(&sync.endpoint_id);
+                        let my_norm = normalize_endpoint_id(&my_id);
+                        if need_ep.is_empty() || need_ep == my_norm {
+                            // 送信者自身の echo は無視
+                        } else if let Some(state) = app.try_state::<DbState>() {
+                            let should_resend = state.0.lock().map_or(false, |db| {
+                                if !can_approve_or_reject(&db, &topic_id, &my_id) {
+                                    return false;
+                                }
+                                db.query_row(
+                                    "SELECT 1 FROM members WHERE lower(endpoint_id) = lower(?1) AND status = 'active'",
+                                    [&need_ep],
+                                    |_| Ok(()),
+                                )
+                                .is_ok()
+                            });
+                            if should_resend {
+                                if let Some(iroh) = app.try_state::<IrohState>() {
+                                    let _ =
+                                        broadcast_member_join(&iroh, &need_ep, &topic_id).await;
+                                }
+                            }
                         }
                     }
                 } else if let Ok(mop) = serde_json::from_slice::<MemberOpPayload>(slice) {

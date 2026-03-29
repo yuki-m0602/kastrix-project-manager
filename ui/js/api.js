@@ -223,6 +223,11 @@ async function apiTeamAmIPending() {
   return await _invoke('team_am_i_pending') ?? false;
 }
 
+/** ゲスト: 承認済みだが member_join 未着のときホストへ再送依頼（gossip） */
+async function apiTeamRequestMemberSync() {
+  return await _invoke('team_request_member_sync') ?? false;
+}
+
 async function apiTeamCancelJoin() {
   return await _invoke('team_cancel_join');
 }

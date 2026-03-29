@@ -124,6 +124,7 @@ pub fn run() {
             commands::team::invite::team_revoke_invite_code,
             commands::team::members::team_list_pending_joins,
             commands::team::members::team_am_i_pending,
+            commands::team::members::team_request_member_sync,
             commands::team::members::team_is_in_team,
             commands::team::members::team_is_active_member,
             commands::team::members::team_repair_orphan_if_needed,

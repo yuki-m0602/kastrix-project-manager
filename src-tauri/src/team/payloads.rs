@@ -19,6 +19,14 @@ pub struct JoinRequestPayload {
     pub requested_at: String,
 }
 
+/// 承認済みだが member_join を取りこぼしたゲストが、ホスト側に再送を依頼する
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct MemberSyncNeedPayload {
+    pub r#type: String,
+    pub endpoint_id: String,
+    pub topic_id: String,
+}
+
 /// member_kick / member_block / member_cancel のペイロード
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct MemberOpPayload {

@@ -3,9 +3,9 @@
 use crate::db::DbState;
 use crate::team::{
     am_i_pending_guest, broadcast_member_display_name, broadcast_member_join, broadcast_member_op,
-    can_approve_or_reject, clear_members_if_no_team, get_my_endpoint_id, in_team,
-    is_current_user_host, normalize_endpoint_id, pending_db, upsert_member_joined_active,
-    IrohState,
+    broadcast_member_sync_need, can_approve_or_reject, clear_members_if_no_team,
+    get_my_endpoint_id, in_team, is_current_user_host, normalize_endpoint_id, pending_db,
+    upsert_member_joined_active, MemberSyncNeedPayload, IrohState,
 };
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
@@ -174,6 +174,42 @@ pub async fn team_am_i_pending(
     let my_id = get_my_endpoint_id(&iroh).await;
     let db = state.0.lock().map_err(|e| e.to_string())?;
     Ok(am_i_pending_guest(&db, &my_id))
+}
+
+/// 承認済みだが `member_join` が届いていないゲストが、gossip でホスト/CO-HOST に再送を依頼する。
+#[tauri::command]
+pub async fn team_request_member_sync(
+    iroh: State<'_, IrohState>,
+    state: State<'_, DbState>,
+) -> Result<bool, String> {
+    let my_id = get_my_endpoint_id(&iroh).await;
+    if my_id.is_empty() {
+        return Ok(false);
+    }
+    let topic_id: String = {
+        let db = state.0.lock().map_err(|e| e.to_string())?;
+        if !am_i_pending_guest(&db, &my_id) {
+            return Ok(false);
+        }
+        match db.query_row(
+            "SELECT topic_id FROM team_subscriptions WHERE is_host = 0 LIMIT 1",
+            [],
+            |r| r.get::<_, String>(0),
+        ) {
+            Ok(t) => t,
+            Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(false),
+            Err(e) => return Err(e.to_string()),
+        }
+    };
+    let tid = topic_id.to_ascii_lowercase();
+    let ep = normalize_endpoint_id(&my_id);
+    let payload = MemberSyncNeedPayload {
+        r#type: "member_sync_need".to_string(),
+        endpoint_id: ep,
+        topic_id: tid.clone(),
+    };
+    broadcast_member_sync_need(&iroh, &tid, &payload).await?;
+    Ok(true)
 }
 
 #[tauri::command]

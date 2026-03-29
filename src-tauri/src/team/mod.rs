@@ -14,7 +14,8 @@ mod task_sync;
 
 pub use broadcast::{
     broadcast_join_request, broadcast_json_payload, broadcast_member_display_name,
-    broadcast_member_join, broadcast_member_op, broadcast_permission_change, broadcast_team_disband,
+    broadcast_member_join, broadcast_member_op, broadcast_member_sync_need,
+    broadcast_permission_change, broadcast_team_disband,
 };
 pub use event_handler::spawn_topic_listener;
 pub use helpers::{
@@ -24,7 +25,7 @@ pub use helpers::{
 };
 pub use invite_code::{generate_invite_code, normalize_code};
 pub use iroh_node::{IrohNodeState, IrohState};
-pub use payloads::{JoinRequestPayload, TeamNamePayload};
+pub use payloads::{JoinRequestPayload, MemberSyncNeedPayload, TeamNamePayload};
 pub use pending::{PendingJoinInfo, PendingJoinsState};
 pub use task_sync::{
     apply_task_update, broadcast_task_update, record_operation, TaskUpdatePayload,

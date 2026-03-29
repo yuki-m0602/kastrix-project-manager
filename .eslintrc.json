@@ -75,6 +75,7 @@
     "apiTeamSetMyDisplayName": "readonly",
     "apiTeamGetMyDisplayName": "readonly",
     "apiTeamAmIPending": "readonly",
+    "apiTeamRequestMemberSync": "readonly",
     "apiTeamIsActiveMember": "readonly",
     "apiTeamRepairOrphanIfNeeded": "readonly",
     "apiTeamCancelJoin": "readonly",
