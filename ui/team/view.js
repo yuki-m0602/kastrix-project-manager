@@ -107,15 +107,10 @@ async function _renderTeamViewInner() {
                 <i data-lucide="plus" size="16"></i>
                 チーム作成
               </button>
-              <button id="btn-team-join-modal" onclick="document.getElementById('team-join-form').scrollIntoView({ behavior: 'smooth', block: 'center' })" class="px-6 py-3 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-sm font-bold text-white flex items-center gap-2">
+              <button id="btn-team-join-modal" onclick="document.getElementById('team-join-form').scrollIntoView()" class="px-6 py-3 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-xl text-sm font-bold text-white flex items-center gap-2">
                 <i data-lucide="user-plus" size="16"></i>
                 チームに参加
               </button>
-            </div>
-            <!-- 画面上部で進捗が分かるように Welcome 内に配置 -->
-            <div id="team-unjoined-flow-status" class="mt-6 w-full p-4 bg-[#0d1117] border border-indigo-500/25 rounded-xl text-left">
-              <p class="text-[10px] font-bold text-indigo-300/90 uppercase tracking-wide mb-2">参加ステータス</p>
-              <div id="team-unjoined-flow-status-body" class="text-xs text-[#c9d1d9] leading-relaxed">読み込み中…</div>
             </div>
           </div>
         </div>
@@ -130,7 +125,7 @@ async function _renderTeamViewInner() {
           <p class="text-xs text-[#8b949e] mb-4">招待コードを入力してチームに参加します。</p>
           <div id="team-join-form" class="flex gap-2">
             <input id="team-join-code" type="text" placeholder="KASTRIX-..." class="flex-1 bg-[#0d1117] border border-[#30363d] rounded-xl py-2 px-3 text-xs text-white outline-none focus:border-indigo-500">
-            <button type="button" id="btn-team-join-submit" onclick="teamJoin()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white shrink-0 disabled:opacity-60 disabled:cursor-not-allowed">参加</button>
+            <button type="button" onclick="teamJoin()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white">参加</button>
           </div>
           <div id="team-pending-status" class="flex flex-col gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl mt-3" style="display:none;">
             <div class="flex flex-col gap-1 min-w-0">
@@ -356,11 +351,9 @@ async function _renderTeamViewInner() {
 
   lucide.createIcons();
   if (!isJoined) {
-    // 未参加時はボタン状態更新 + 参加申請中バナー（team_am_i_pending）+ 参加ステータス文言
     const readyForButtons = _isTauri ? await apiTeamIsReady().catch(() => false) : false;
     updateTeamButtonsState(readyForButtons, false);
     await renderTeamPendingStatus();
-    if (typeof refreshTeamUnjoinedFlowStatus === 'function') await refreshTeamUnjoinedFlowStatus();
   } else {
     // 参加時は個別レンダリング（ダッシュボードに統合済み）
     renderTeamDisplayNameSection();

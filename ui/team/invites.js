@@ -131,22 +131,6 @@ async function teamIssueInvite() {
 }
 
 /**
- * 参加成功直後に承認待ち UI を出す（apiTeamAmIPending が一瞬遅れても表示が空にならないように）
- */
-function applyTeamJoinSuccessUi(result) {
-  const form = document.getElementById('team-join-form');
-  const pendingEl = document.getElementById('team-pending-status');
-  if (!form || !pendingEl) return;
-  const st = result && result.status;
-  const treatAsPending =
-    result == null || st === 'pending' || st === undefined || String(st) === 'pending';
-  if (treatAsPending) {
-    form.style.display = 'none';
-    pendingEl.style.display = 'flex';
-  }
-}
-
-/**
  * チームに参加
  */
 async function teamJoin() {
@@ -160,32 +144,16 @@ async function teamJoin() {
     showAlert('招待コードを入力してください', 'info');
     return;
   }
-  const btn = document.getElementById('btn-team-join-submit');
-  const prevLabel = btn ? btn.textContent : '';
   try {
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = '送信中…';
-    }
     const result = await apiTeamJoin(code);
-    if (typeof showAlert === 'function' && result && result.message) {
+    if (result && result.message) {
       showAlert(result.message, 'info');
-    } else if (typeof showAlert === 'function' && result && !result.message) {
-      showAlert('参加処理が完了しました。承認待ちの状態を確認してください。', 'info');
+      if (input) input.value = '';
+      await renderTeamPendingStatus();
+      if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
     }
-    if (input) input.value = '';
-    applyTeamJoinSuccessUi(result);
-    await renderTeamPendingStatus();
-    if (typeof refreshTeamUnjoinedFlowStatus === 'function') await refreshTeamUnjoinedFlowStatus();
-    if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
-    document.getElementById('team-unjoined-flow-status')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (e) {
     showAlert('エラー: ' + (e?.toString?.() || e), 'error');
-  } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = prevLabel || '参加';
-    }
   }
 }
 
@@ -304,23 +272,6 @@ async function renderTeamPendingJoins() {
 
 const TEAM_PENDING_APPROVAL_POLL_MS = 5000;
 
-/**
- * 承認待ちバナーを出すか。endpoint 未取得で team_am_i_pending が false になり得るため、購読だけ見て補完する。
- */
-async function shouldShowGuestPendingBanner() {
-  if (!_isTauri) return false;
-  try {
-    if (await apiTeamAmIPending()) return true;
-    if (await apiTeamIsActiveMember()) return false;
-    const dbg = await apiTeamDebugStatus();
-    const subs = dbg?.team_subscriptions || [];
-    if (subs.some((s) => !s.is_host)) return true;
-  } catch (_) {
-    /* ignore */
-  }
-  return false;
-}
-
 function clearTeamPendingApprovalPoll() {
   if (window._teamPendingApprovalPollId) {
     clearInterval(window._teamPendingApprovalPollId);
@@ -379,7 +330,6 @@ async function teamRefreshJoinStatus() {
         'info'
       );
     }
-    if (typeof refreshTeamUnjoinedFlowStatus === 'function') await refreshTeamUnjoinedFlowStatus();
   } catch (e) {
     if (typeof showAlert === 'function') showAlert('更新に失敗しました: ' + (e?.message || e), 'error');
   }
@@ -395,11 +345,10 @@ async function renderTeamPendingStatus() {
   const status = document.getElementById('team-pending-status');
   if (!form || !status) return;
   try {
-    const pending = await shouldShowGuestPendingBanner();
+    const pending = await apiTeamAmIPending();
     if (!pending) {
       form.style.display = '';
       status.style.display = 'none';
-      if (typeof refreshTeamUnjoinedFlowStatus === 'function') await refreshTeamUnjoinedFlowStatus();
       return;
     }
     form.style.display = 'none';
@@ -419,11 +368,9 @@ async function renderTeamPendingStatus() {
         /* ignore */
       }
     }, TEAM_PENDING_APPROVAL_POLL_MS);
-    if (typeof refreshTeamUnjoinedFlowStatus === 'function') await refreshTeamUnjoinedFlowStatus();
   } catch (e) {
     form.style.display = '';
     status.style.display = 'none';
-    if (typeof refreshTeamUnjoinedFlowStatus === 'function') await refreshTeamUnjoinedFlowStatus();
   }
 }
 
@@ -459,7 +406,6 @@ window.teamCopyInviteLink = teamCopyInviteLink;
 window.teamRevokeCode = teamRevokeCode;
 window.renderTeamPendingJoins = renderTeamPendingJoins;
 window.renderTeamPendingStatus = renderTeamPendingStatus;
-window.shouldShowGuestPendingBanner = shouldShowGuestPendingBanner;
 window.teamRefreshJoinStatus = teamRefreshJoinStatus;
 window.teamGuestApplyLocalMembershipIfPending = teamGuestApplyLocalMembershipIfPending;
 window.formatExpiresAt = formatExpiresAt;

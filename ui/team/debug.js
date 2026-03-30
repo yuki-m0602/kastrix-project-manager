@@ -29,7 +29,7 @@ function getTeamDevDebugSectionHtml() {
   return `
       <div class="bg-[#161b22] border border-amber-500/25 rounded-2xl p-6 mt-6">
         <h3 class="text-xs font-bold text-amber-400/90 mb-1">開発者向けチームデバッグ</h3>
-        <p class="text-[10px] text-[#484f58] mb-2">未参加画面では「参加ステータス」と併用。iroh・DB・イベント。イベントログはパネル表示中のみ追記。</p>
+        <p class="text-[10px] text-[#484f58] mb-2">iroh・DB・チーム系イベントの確認。イベントログはパネル表示中のみ追記。</p>
         <button type="button" onclick="toggleTeamDebug()" class="text-[10px] text-[#8b949e] hover:text-amber-400 font-bold">デバッグパネルを開く / 閉じる</button>
         <div id="team-debug-panel" class="hidden mt-3 p-3 bg-[#0d1117] border border-[#30363d] rounded-xl text-[10px] font-mono text-[#8b949e] space-y-3">
           <div id="team-debug-content">読み込み中...</div>
@@ -103,57 +103,6 @@ function _stopTeamDevEventLog() {
     } catch (_) {}
   });
   _teamDevUnlisteners = [];
-}
-
-/**
- * チーム未参加ページ用: 招待入力〜承認の段階を日本語で表示
- */
-async function refreshTeamUnjoinedFlowStatus() {
-  const body = document.getElementById('team-unjoined-flow-status-body');
-  if (!body) return;
-  if (!_isTauri) {
-    body.innerHTML =
-      '<p class="text-[#484f58]">Tauri で起動すると、参加申請の送信状況・承認待ちがここに表示されます。</p>';
-    return;
-  }
-  try {
-    const [active, inTeam, ready] = await Promise.all([
-      apiTeamIsActiveMember(),
-      apiTeamIsInTeam(),
-      apiTeamIsReady(),
-    ]);
-    const pending =
-      typeof shouldShowGuestPendingBanner === 'function'
-        ? await shouldShowGuestPendingBanner()
-        : await apiTeamAmIPending();
-    if (active) {
-      body.innerHTML =
-        '<p class="text-emerald-400 font-bold">承認済み（メンバーとして登録済み）</p>' +
-        '<p class="text-[11px] text-[#8b949e] mt-1">通常はこのあとチームダッシュボードに切り替わります。切り替わらない場合はページを再表示するか、下の「状態を更新」を試してください。</p>';
-      return;
-    }
-    if (pending) {
-      body.innerHTML =
-        '<p class="text-amber-400 font-bold">参加申請を送信済み（ホストの承認待ち）</p>' +
-        '<p class="text-[11px] text-[#8b949e] mt-1">招待コードは受け取り、<span class="text-[#c9d1d9]">参加申請</span>まで完了しています。ホストが承認すると <span class="text-[#c9d1d9]">member_join</span> が届き、自動で参加済み画面に切り替わります（数十秒かかることがあります）。</p>' +
-        '<p class="text-[10px] text-[#484f58] mt-2">承認されたのに変わらない → 「状態を更新」または開発者向けの <span class="text-[#8b949e]">member_sync</span> / <span class="text-[#8b949e]">apply_local</span></p>';
-      return;
-    }
-    if (inTeam) {
-      body.innerHTML =
-        '<p class="text-cyan-400 font-bold">チーム購読はあるが、メンバー未登録の可能性</p>' +
-        '<p class="text-[11px] text-[#8b949e] mt-1">不整合のときは下の「開発者向けチームデバッグ」で <span class="text-[#c9d1d9]">repair_orphan</span> を試すか、招待からやり直してください。</p>';
-      return;
-    }
-    body.innerHTML =
-      '<p class="text-[#c9d1d9] font-bold">未参加</p>' +
-      '<p class="text-[11px] text-[#8b949e] mt-1">招待コードを入力して「参加」を押すと、ホストへ参加申請が送られます。</p>' +
-      '<p class="text-[10px] text-[#484f58] mt-2">iroh: ' +
-      (ready ? '<span class="text-emerald-400">準備OK</span>' : '<span class="text-amber-400">準備中（しばらく待ってから再度お試しください）</span>') +
-      '</p>';
-  } catch (e) {
-    body.innerHTML = '<p class="text-red-400">' + escapeHtml(String(e)) + '</p>';
-  }
 }
 
 function toggleTeamDebug() {
@@ -280,9 +229,6 @@ async function refreshTeamDebug() {
 
     if (updated) updated.textContent = new Date().toLocaleTimeString('ja-JP');
     if (epFull) window._teamDevEndpointFull = epFull;
-    if (document.getElementById('team-unjoined-flow-status-body') && typeof refreshTeamUnjoinedFlowStatus === 'function') {
-      await refreshTeamUnjoinedFlowStatus();
-    }
   } catch (e) {
     content.innerHTML = '<span class="text-red-400">' + escapeHtml(e?.toString?.() || String(e)) + '</span>';
   }
@@ -307,9 +253,8 @@ async function teamDevCopyEndpoint() {
   }
 }
 
-async function teamDevRefresh() {
-  await refreshTeamDebug();
-  if (typeof refreshTeamUnjoinedFlowStatus === 'function') await refreshTeamUnjoinedFlowStatus();
+function teamDevRefresh() {
+  refreshTeamDebug();
 }
 
 async function teamDevRequestSync() {
@@ -404,7 +349,6 @@ function updateTeamButtonsState(ready, failed) {
 }
 
 window.getTeamDevDebugSectionHtml = getTeamDevDebugSectionHtml;
-window.refreshTeamUnjoinedFlowStatus = refreshTeamUnjoinedFlowStatus;
 window.toggleTeamDebug = toggleTeamDebug;
 window.refreshTeamDebug = refreshTeamDebug;
 window.updateTeamButtonsState = updateTeamButtonsState;
