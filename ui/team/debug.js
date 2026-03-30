@@ -117,12 +117,15 @@ async function refreshTeamUnjoinedFlowStatus() {
     return;
   }
   try {
-    const [pending, inTeam, active, ready] = await Promise.all([
-      apiTeamAmIPending(),
-      apiTeamIsInTeam(),
+    const [active, inTeam, ready] = await Promise.all([
       apiTeamIsActiveMember(),
+      apiTeamIsInTeam(),
       apiTeamIsReady(),
     ]);
+    const pending =
+      typeof shouldShowGuestPendingBanner === 'function'
+        ? await shouldShowGuestPendingBanner()
+        : await apiTeamAmIPending();
     if (active) {
       body.innerHTML =
         '<p class="text-emerald-400 font-bold">承認済み（メンバーとして登録済み）</p>' +
