@@ -1,6 +1,7 @@
 # Kastrix
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![GitHub Release](https://img.shields.io/github/v/release/yuki-m0602/kastrix-project-manager?logo=github&label=release)](https://github.com/yuki-m0602/kastrix-project-manager/releases/latest)
 
 デスクトップ向けのプロジェクト管理アプリです。バックエンドは [Tauri](https://tauri.app/)（Rust）、フロントは HTML / CSS / JavaScript で構成しています。
 
@@ -14,6 +15,17 @@
 - **リアルタイム更新** — 変更内容の反映
 
 詳細な仕様は [`specs/`](specs/) を参照してください。
+
+## ダウンロード（Windows）
+
+**[Releases（最新版）](https://github.com/yuki-m0602/kastrix-project-manager/releases/latest)** の **Assets** から **単体の実行ファイル（`.exe`）** を取得してください。MSI などのインストーラは配布していません（配置したフォルダでそのまま起動できます）。
+
+- **`main` または `master` へ push するたび**、GitHub Actions（`.github/workflows/release.yml`）が Windows 用 exe をビルドし、リリース **`continuous`** を更新します。`/releases/latest` はビルド成功後、この rolling リリースを「最新」として指すようにしています（その後に `v*` タグで版付きリリースを公開した場合は、一時的にそちらが「最新」になることがあります。次に `main` / `master` へ push すると再び `continuous` が最新になります）。
+- 版付きのリリースが欲しいときは、`src-tauri/tauri.conf.json` の `version` に合わせて **`v0.1.0` 形式のタグ** を push してください（同じワークフローが版付きリリースも作成します）。
+- ローカルビルド時は `npx tauri build` のあと、`src-tauri/target/release/kastrix.exe` が生成されます。
+- 実行には **WebView2** が必要です。[ランタイムの入手先（Microsoft）](https://developer.microsoft.com/ja-jp/microsoft-edge/webview2/) を参照してください。Windows 10 / 11 の多くの環境では既に入っています。
+
+> 初回だけ Actions の権限に注意: リポジトリの **Settings → Actions → General → Workflow permissions** で **Read and write** が有効になっている必要がある場合があります（組織リポジトリでは管理者設定次第です）。
 
 ## 必要な環境
 
@@ -49,7 +61,7 @@ Windows では [`scripts/windows/dev.bat`](scripts/windows/dev.bat) から、Tai
 
 ## ビルド（本番用）
 
-`beforeBuildCommand` で CSS がビルドされたうえで、インストーラ／バンドルを生成します。
+`beforeBuildCommand` で CSS をビルドしたうえで、**単体 exe**（インストーラなし）を生成します。成果物は `src-tauri/target/release/kastrix.exe` です。
 
 ```bash
 npx tauri build
@@ -57,7 +69,7 @@ npx tauri build
 
 （`cargo install tauri-cli` 等で CLI を入れている場合は `cargo tauri build` でも可。）
 
-UI の CSS ビルドと Rust の `release` コンパイルのみ行う場合は `npm run build:exe` を参照してください（`package.json` の定義どおり）。
+UI の CSS ビルドと Rust の `release` コンパイルのみ行う場合は `npm run build:exe` を参照してください（バンドルは行わず exe のみのビルドに近い用途向け）。
 
 
 ## テスト

@@ -1,0 +1,124 @@
+name: Release
+
+# Windows 向けの単体 exe（インストーラなし）をビルドして GitHub Releases に載せます。
+#
+# - main / master へ push するたび → タグ `continuous` のリリースを更新し、既定の「最新」にします（/releases/latest から取得可）
+# - タグ v* を push → 版付きリリース（tauri.conf の version と整合したタグ推奨）
+# - 手動 → main と同じ「rolling」ビルド
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  # main / master の各 push（および手動）で常に同じリリースを差し替え
+  rolling-release-windows:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref_type == 'branch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (Tauri, portable exe)
+        run: npx tauri build --no-bundle
+
+      - name: Publish rolling release (tag continuous)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $exe = "src-tauri/target/release/kastrix.exe"
+          if (-not (Test-Path $exe)) { throw "Build output missing: $exe" }
+          $repo = "${{ github.repository }}"
+          $sha = "${{ github.sha }}"
+          $ref = "${{ github.ref_name }}"
+          @"
+          **`main` / `master` の最新コミット**を GitHub Actions でビルドした単体 exe です。
+
+          - コミット: ``$sha``
+          - 参照: ``$ref``
+          - WebView2 が必要です（Windows 10 / 11 で多くの環境に同梱）。
+          "@ | Out-File -Encoding utf8 $env:RUNNER_TEMP/rolling_notes.md
+
+          gh release view continuous -R $repo 2>$null | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create continuous $exe `
+              -R $repo `
+              --title "Kastrix (main 最新ビルド)" `
+              --notes-file $env:RUNNER_TEMP/rolling_notes.md `
+              --latest
+          } else {
+            gh release upload continuous $exe -R $repo --clobber
+            gh release edit continuous -R $repo --notes-file $env:RUNNER_TEMP/rolling_notes.md --latest
+          }
+
+  # セマンティック版タグ用（インストーラなし・単体 exe）
+  tagged-release-windows:
+    if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build app and publish versioned release
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: src-tauri
+          args: '--no-bundle'
+          uploadPlainBinary: true
+          uploadUpdaterJson: false
+          tagName: v__VERSION__
+          releaseName: 'Kastrix v__VERSION__'
+          releaseBody: |
+            **ポータブル版（単体 exe）** を **Assets** からダウンロードしてください。インストーラは含みません。
+
+            - 実行には [WebView2 ランタイム](https://developer.microsoft.com/ja-jp/microsoft-edge/webview2/) が必要です（Windows 10 / 11 では多くの環境で既に入っています）。
+            - 詳細は [README](https://github.com/yuki-m0602/kastrix-project-manager/blob/main/README.md) を参照してください。
+          releaseDraft: false
+          prerelease: false
