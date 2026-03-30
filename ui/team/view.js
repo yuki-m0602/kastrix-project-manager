@@ -162,6 +162,7 @@ async function _renderTeamViewInner() {
           </div>
         </div>
       </div>
+      ${typeof getTeamDevDebugSectionHtml === 'function' ? getTeamDevDebugSectionHtml() : ''}
     `;
   } else {
     // チーム参加時のダッシュボードUI
@@ -344,14 +345,7 @@ async function _renderTeamViewInner() {
         </div>
       ` : ''}
 
-      <!-- Debug -->
-      <div class="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 mt-6">
-        <button onclick="toggleTeamDebug()" class="text-[10px] text-[#484f58] hover:text-[#8b949e] font-bold">デバッグ情報を表示</button>
-        <div id="team-debug-panel" class="hidden mt-3 p-3 bg-[#0d1117] border border-[#30363d] rounded-xl text-[10px] font-mono text-[#8b949e]">
-          <div id="team-debug-content">...</div>
-          <div class="mt-2 text-[8px] text-[#484f58]">最終更新: <span id="team-debug-updated">-</span></div>
-        </div>
-      </div>
+      ${typeof getTeamDevDebugSectionHtml === 'function' ? getTeamDevDebugSectionHtml() : ''}
     `;
   }
 

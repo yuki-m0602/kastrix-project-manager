@@ -179,6 +179,14 @@ async function apiTeamDebugStatus() {
   return await _invoke('team_debug_status');
 }
 
+async function apiTeamGetCurrentRoom() {
+  return await _invoke('team_get_current_room');
+}
+
+async function apiTeamGetEndpointId() {
+  return await _invoke('team_get_endpoint_id');
+}
+
 async function apiTeamCreate(expiresMinutes) {
   return await _invoke('team_create', { expiresMinutes: expiresMinutes ?? null });
 }
