@@ -38,8 +38,17 @@ function registerTauriTeamEventListeners() {
   if (!_isTauri || !window.__TAURI__?.event?.listen) return;
   const { listen } = window.__TAURI__.event;
   listen('team-task-updated', async () => {
-    await loadData();
-    if (typeof filterTasks === 'function') filterTasks();
+    // DB 反映直後の読み取り・描画ずれを避ける（team-members-updated と同程度）
+    await new Promise((r) => setTimeout(r, 80));
+    if (typeof reloadTasksAndProjects === 'function') {
+      await reloadTasksAndProjects();
+    } else if (typeof reloadTasks === 'function') {
+      await reloadTasks();
+    } else {
+      await loadData();
+      if (typeof filterTasks === 'function') filterTasks();
+    }
+    if (typeof renderInbox === 'function') await renderInbox();
     if (typeof updateSidebarRoomInfo === 'function') await updateSidebarRoomInfo();
   });
   listen('team-unsynced-updated', async () => {
@@ -95,8 +104,12 @@ function registerTauriTeamEventListeners() {
   listen('team-sync-check-needed', async () => {
     console.warn('team gossip: Lagged 検出 — 再同期を実行します');
     await refreshTeamUiFromBackend();
-    await loadData();
-    if (typeof filterTasks === 'function') filterTasks();
+    if (typeof reloadTasksAndProjects === 'function') {
+      await reloadTasksAndProjects();
+    } else {
+      await loadData();
+      if (typeof filterTasks === 'function') filterTasks();
+    }
   });
 }
 

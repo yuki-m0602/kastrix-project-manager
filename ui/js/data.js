@@ -13,6 +13,34 @@ async function reloadTasks() {
 }
 
 /**
+ * プロジェクト＋タスクを DB から再取得（ディレクトリスキャンなし）
+ * チーム同期の task_update 後に使用。loadData 先頭の scan が失敗・遅延すると一覧が更新されないのを避ける。
+ */
+async function reloadTasksAndProjects() {
+  try {
+    const [projectsData, tasksData] = await Promise.all([
+      apiGetProjects(),
+      apiGetTasks()
+    ]);
+    const safeProjects = Array.isArray(projectsData) ? projectsData : [];
+    const safeTasks = Array.isArray(tasksData) ? tasksData : [];
+    localProjects.length = 0;
+    localProjects.push(...safeProjects);
+    tasks.length = 0;
+    tasks.push(...safeTasks);
+    projects.length = 0;
+    localProjects.forEach(p => {
+      projects.push({ id: p.id, name: p.name, color: 'indigo', icon: (p.name[0] || '?').toUpperCase() });
+    });
+    if (typeof renderProjectPicker === 'function') renderProjectPicker();
+    if (typeof filterTasks === 'function') filterTasks();
+    if (typeof renderProjects === 'function') renderProjects();
+  } catch (e) {
+    console.error('reloadTasksAndProjects failed:', e);
+  }
+}
+
+/**
  * プロジェクト・タスクを読み込み、タブ用 projects を再構築
  */
 async function loadData() {
@@ -70,5 +98,6 @@ async function refreshTeamUiFromBackend() {
 }
 
 window.reloadTasks = reloadTasks;
+window.reloadTasksAndProjects = reloadTasksAndProjects;
 window.loadData = loadData;
 window.refreshTeamUiFromBackend = refreshTeamUiFromBackend;

@@ -158,6 +158,7 @@
     "closeConflictModal": "readonly",
     "resolveConflict": "readonly",
     "reloadTasks": "readonly",
+    "reloadTasksAndProjects": "readonly",
     "loadData": "readonly",
     "refreshTeamUiFromBackend": "readonly",
     "renderTeamView": "readonly",
