@@ -10,16 +10,17 @@ use crate::team::task_sync::{apply_task_update, TaskUpdatePayload};
 
 use super::broadcast::{
     broadcast_blocked_notify, broadcast_join_request, broadcast_member_join,
-    broadcast_permission_change, broadcast_team_disband,
+    broadcast_member_roster, broadcast_permission_change, broadcast_team_disband,
 };
 use super::helpers::{
-    can_approve_or_reject, clear_members_if_no_team, get_my_endpoint_id, normalize_endpoint_id,
+    apply_member_roster, can_approve_or_reject, clear_members_if_no_team,
+    collect_active_member_roster, get_my_endpoint_id, normalize_endpoint_id,
     upsert_member_joined_active,
 };
 use super::pending_invite_preview::clear_pending_invite_preview;
 use super::payloads::{
     JoinRequestPayload, MemberBlockedNotifyPayload, MemberDisplayNamePayload, MemberOpPayload,
-    MemberSyncNeedPayload, PermissionChangePayload, TeamDisbandPayload,
+    MemberRosterPayload, MemberSyncNeedPayload, PermissionChangePayload, TeamDisbandPayload,
     TeamNamePayload,
 };
 use super::pending::{PendingJoinInfo, PendingJoinsState};
@@ -196,6 +197,28 @@ pub async fn spawn_topic_listener(
                 }
                 if member_join_handled {
                     // 上で member_join として解釈済み（task_update に流さない）
+                } else if let Ok(roster_p) = serde_json::from_slice::<MemberRosterPayload>(slice) {
+                    if roster_p.r#type == "member_roster" {
+                        let ver = roster_p.version.as_deref().unwrap_or("1.0");
+                        if ver == "1.0" && gossip_topic_matches(&roster_p.topic_id, &topic_id) {
+                            let mut applied = false;
+                            if let Some(state) = app.try_state::<DbState>() {
+                                if let Ok(db) = state.0.lock() {
+                                    match apply_member_roster(
+                                        &db,
+                                        roster_p.topic_id.as_str(),
+                                        &roster_p.members,
+                                    ) {
+                                        Ok(()) => applied = true,
+                                        Err(e) => eprintln!("apply_member_roster: {}", e),
+                                    }
+                                }
+                            }
+                            if applied {
+                                let _ = app.emit("team-members-updated", ());
+                            }
+                        }
+                    }
                 } else if let Ok(payload) = serde_json::from_slice::<TaskUpdatePayload>(slice) {
                     let version = payload.version.as_deref().unwrap_or("1.0");
                     if version != "1.0" {
@@ -250,17 +273,30 @@ pub async fn spawn_topic_listener(
                         if need_ep.is_empty() || need_ep == my_norm {
                             // 送信者自身の echo は無視
                         } else if let Some(state) = app.try_state::<DbState>() {
-                            let should_resend = state.0.lock().map_or(false, |db| {
+                            let (should_resend, roster_opt) = state.0.lock().map_or((false, None), |db| {
                                 if !can_approve_or_reject(&db, &topic_id, &my_id) {
-                                    return false;
+                                    return (false, None);
                                 }
-                                db.query_row(
-                                    "SELECT 1 FROM members WHERE lower(endpoint_id) = lower(?1) AND status = 'active'",
-                                    [&need_ep],
-                                    |_| Ok(()),
-                                )
-                                .is_ok()
+                                let roster = collect_active_member_roster(&db).ok();
+                                let guest_active_on_host = db
+                                    .query_row(
+                                        "SELECT 1 FROM members WHERE lower(endpoint_id) = lower(?1) AND status = 'active'",
+                                        [&need_ep],
+                                        |_| Ok(()),
+                                    )
+                                    .is_ok();
+                                (guest_active_on_host, roster)
                             });
+                            if let Some(roster) = roster_opt {
+                                if !roster.is_empty() {
+                                    if let Some(iroh) = app.try_state::<IrohState>() {
+                                        let _ = broadcast_member_roster(
+                                            &iroh, &topic_id, &roster,
+                                        )
+                                        .await;
+                                    }
+                                }
+                            }
                             if should_resend {
                                 if let Some(iroh) = app.try_state::<IrohState>() {
                                     let _ =

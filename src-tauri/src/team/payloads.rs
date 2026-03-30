@@ -1,5 +1,24 @@
 //! チーム機能で使用するペイロード定義（gossip 送受信用）
 
+/// 1 人分（`member_roster` の要素）
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub struct MemberRosterEntry {
+    pub endpoint_id: String,
+    pub role: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+}
+
+/// 全員分の active メンバー一覧（ゲストがホスト等を表示できるように同期）
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct MemberRosterPayload {
+    pub r#type: String,
+    #[serde(default)]
+    pub version: Option<String>,
+    pub topic_id: String,
+    pub members: Vec<MemberRosterEntry>,
+}
+
 /// 承認後に全員がローカル members を揃えるための gossip ペイロード
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct MemberJoinPayload {

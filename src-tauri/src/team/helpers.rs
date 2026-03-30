@@ -3,6 +3,7 @@
 use crate::models::Task;
 use uuid::Uuid;
 
+use super::payloads::MemberRosterEntry;
 use super::IrohState;
 
 /// iroh NodeId 文字列の表記を揃える（DB 比較・gossip 受信の取り違え防止）
@@ -110,6 +111,110 @@ pub fn upsert_member_joined_active(
         "INSERT INTO members (id, endpoint_id, role, status) VALUES (?1, ?2, 'member', 'active')",
         rusqlite::params![id, ep],
     )?;
+    Ok(())
+}
+
+/// ローカル DB の active メンバーを収集（`member_roster` 送信用）
+pub fn collect_active_member_roster(
+    conn: &rusqlite::Connection,
+) -> rusqlite::Result<Vec<MemberRosterEntry>> {
+    let mut stmt = conn.prepare(
+        "SELECT endpoint_id, role, display_name FROM members WHERE status = 'active' \
+         ORDER BY (CASE role WHEN 'host' THEN 0 WHEN 'co_host' THEN 1 ELSE 2 END), joined_at ASC",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        let endpoint_id: String = row.get(0)?;
+        let role: String = row.get(1)?;
+        let dn: Option<String> = row.get(2)?;
+        Ok(MemberRosterEntry {
+            endpoint_id: normalize_endpoint_id(&endpoint_id),
+            role,
+            display_name: dn.filter(|s| !s.trim().is_empty()),
+        })
+    })?;
+    rows.collect()
+}
+
+/// gossip `member_roster` を適用。該当 `topic_id` を購読中の端末だけ更新する。
+pub fn apply_member_roster(
+    conn: &rusqlite::Connection,
+    topic_id_msg: &str,
+    entries: &[MemberRosterEntry],
+) -> rusqlite::Result<()> {
+    let tid = topic_id_msg.to_ascii_lowercase();
+    if tid.is_empty() || entries.is_empty() {
+        return Ok(());
+    }
+    let subscribed = conn
+        .query_row(
+            "SELECT 1 FROM team_subscriptions WHERE lower(topic_id) = lower(?1) LIMIT 1",
+            [&tid],
+            |_| Ok(()),
+        )
+        .is_ok();
+    if !subscribed {
+        return Ok(());
+    }
+
+    let tx = conn.unchecked_transaction()?;
+    let mut norm_ids: Vec<String> = Vec::new();
+
+    for e in entries {
+        let ep = normalize_endpoint_id(&e.endpoint_id);
+        if ep.is_empty() {
+            continue;
+        }
+        let role = e.role.trim();
+        if role != "host" && role != "co_host" && role != "member" {
+            continue;
+        }
+        if tx
+            .query_row(
+                "SELECT status FROM members WHERE lower(endpoint_id) = lower(?1)",
+                [&ep],
+                |r| r.get::<_, String>(0),
+            )
+            .unwrap_or_default()
+            == "blocked"
+        {
+            continue;
+        }
+        let disp: Option<String> = e
+            .display_name
+            .as_ref()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
+        let n = tx.execute(
+            "UPDATE members SET role = ?1, status = 'active', display_name = COALESCE(?2, display_name) \
+             WHERE lower(endpoint_id) = lower(?3)",
+            rusqlite::params![role, disp, ep],
+        )?;
+        if n == 0 {
+            let id = Uuid::new_v4().to_string();
+            tx.execute(
+                "INSERT INTO members (id, endpoint_id, role, status, display_name) VALUES (?1, ?2, ?3, 'active', ?4)",
+                rusqlite::params![id, ep, role, disp],
+            )?;
+        }
+        norm_ids.push(ep);
+    }
+
+    if norm_ids.is_empty() {
+        tx.commit()?;
+        return Ok(());
+    }
+
+    let placeholders = norm_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+    let sql = format!(
+        "DELETE FROM members WHERE status = 'active' AND lower(endpoint_id) NOT IN ({})",
+        placeholders
+    );
+    tx.execute(
+        &sql,
+        rusqlite::params_from_iter(norm_ids.iter().map(|s| s.as_str())),
+    )?;
+    tx.commit()?;
     Ok(())
 }
 

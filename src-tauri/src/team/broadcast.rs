@@ -5,7 +5,8 @@ use bytes::Bytes;
 use super::helpers::normalize_endpoint_id;
 use super::payloads::{
     JoinRequestPayload, MemberBlockedNotifyPayload, MemberDisplayNamePayload, MemberJoinPayload,
-    MemberOpPayload, MemberSyncNeedPayload, PermissionChangePayload, TeamDisbandPayload,
+    MemberOpPayload, MemberRosterEntry, MemberRosterPayload, MemberSyncNeedPayload,
+    PermissionChangePayload, TeamDisbandPayload,
 };
 use super::IrohState;
 
@@ -104,6 +105,75 @@ pub async fn broadcast_member_join(
         }
     }
     Err("member_join の gossip 送信が繰り返し失敗しました".to_string())
+}
+
+/// active メンバー一覧を全員のローカル DB に揃えるためブロードキャスト
+pub async fn broadcast_member_roster(
+    iroh: &IrohState,
+    topic_id: &str,
+    members: &[MemberRosterEntry],
+) -> Result<(), String> {
+    let topic_norm = topic_id.to_ascii_lowercase();
+    let payload = MemberRosterPayload {
+        r#type: "member_roster".to_string(),
+        version: Some("1.0".to_string()),
+        topic_id: topic_norm.clone(),
+        members: members.to_vec(),
+    };
+    let json = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
+    let bytes = Bytes::from(json.into_bytes());
+
+    async fn send_once(iroh: &IrohState, topic_id: &str, bytes: &Bytes) -> Result<(), String> {
+        let guard = iroh.read().await;
+        let node = guard
+            .as_ref()
+            .ok_or_else(|| "iroh が初期化されていません".to_string())?;
+
+        let mut senders = node.get_senders_for_topic_hex(topic_id).await;
+        if senders.is_empty() {
+            senders = node.get_all_senders().await;
+        }
+        if senders.is_empty() {
+            return Err(
+                "gossip の購読がありません（チームに接続してから再度お試しください）".to_string(),
+            );
+        }
+
+        let mut any_ok = false;
+        let mut last_err: Option<String> = None;
+        for sender in senders {
+            match sender.broadcast_neighbors(bytes.clone()).await {
+                Ok(()) => any_ok = true,
+                Err(e) => last_err = Some(format!("broadcast_neighbors: {:?}", e)),
+            }
+            match sender.broadcast(bytes.clone()).await {
+                Ok(()) => any_ok = true,
+                Err(e) => last_err = Some(format!("broadcast: {:?}", e)),
+            }
+        }
+        if !any_ok {
+            return Err(last_err.unwrap_or_else(|| "gossip 送信に失敗".to_string()));
+        }
+        Ok(())
+    }
+
+    const ATTEMPTS: u32 = 6;
+    const PAUSE_MS: u64 = 450;
+    for attempt in 0..ATTEMPTS {
+        match send_once(iroh, &topic_norm, &bytes).await {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                if e.contains("購読がありません") {
+                    return Err(e);
+                }
+                if attempt + 1 == ATTEMPTS {
+                    return Err(e);
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(PAUSE_MS)).await;
+            }
+        }
+    }
+    Err("member_roster の gossip 送信が繰り返し失敗しました".to_string())
 }
 
 /// 参加申請を該当トピックへ送信（`broadcast_member_join` と同様に neighbor 優先・再試行）

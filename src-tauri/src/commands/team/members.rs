@@ -3,8 +3,8 @@
 use crate::db::DbState;
 use crate::team::{
     am_i_pending_guest, broadcast_member_display_name, broadcast_member_join, broadcast_member_op,
-    clear_pending_invite_preview,
-    broadcast_member_sync_need, can_approve_or_reject, clear_members_if_no_team,
+    broadcast_member_roster, broadcast_member_sync_need, can_approve_or_reject,
+    clear_members_if_no_team, clear_pending_invite_preview, collect_active_member_roster,
     get_my_endpoint_id, in_team, is_current_user_host, normalize_endpoint_id, pending_db,
     upsert_member_joined_active, MemberSyncNeedPayload, IrohState,
 };
@@ -401,6 +401,13 @@ pub async fn team_approve_join(
             eprintln!("broadcast_member_join: {}", e);
             let _ = app.emit("team-member-join-broadcast-failed", e);
         }
+    }
+    let roster = {
+        let db = state.0.lock().map_err(|e| e.to_string())?;
+        collect_active_member_roster(&db).map_err(|e| e.to_string())?
+    };
+    if let Err(e) = broadcast_member_roster(&iroh, &topic_id, &roster).await {
+        eprintln!("broadcast_member_roster: {}", e);
     }
     // 参加側が初回 member_join を取りこぼしやすいため、遅延で数回再送（冪等）
     let iroh_retry = iroh.inner().clone();
