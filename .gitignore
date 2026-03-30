@@ -16,8 +16,15 @@ Thumbs.db
 
 # Log files
 *.log
-node_modules
-node_modules
+
+# Local / accidental captures
+stderr.txt
+stdout.txt
+screenshot_before.png
+
+# Distribution artifacts (use GitHub Releases etc.)
+releases/
+*.msi
 
 # Syncthing
 .stfolder/

@@ -1,6 +1,0 @@
-@echo off
-cd /d %~dp0
-echo Starting Tailwind CSS watch...
-start "Tailwind" cmd /k "npm run css:watch"
-echo Starting Tauri...
-npx tauri dev

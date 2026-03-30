@@ -1,0 +1,6 @@
+@echo off
+cd /d "%~dp0..\.."
+echo Starting Tailwind CSS watch...
+start "Tailwind" cmd /k "cd /d %CD% && npm run css:watch"
+echo Starting Tauri...
+npx tauri dev
