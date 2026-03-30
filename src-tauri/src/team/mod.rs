@@ -10,6 +10,7 @@ mod iroh_node;
 mod payloads;
 mod pending;
 pub mod pending_db;
+mod pending_invite_preview;
 mod task_sync;
 
 pub use broadcast::{
@@ -27,6 +28,9 @@ pub use invite_code::{generate_invite_code, normalize_code};
 pub use iroh_node::{IrohNodeState, IrohState};
 pub use payloads::{JoinRequestPayload, MemberSyncNeedPayload, TeamNamePayload};
 pub use pending::{PendingJoinInfo, PendingJoinsState};
+pub use pending_invite_preview::{
+    clear_pending_invite_preview, get_pending_invite_preview_json, set_pending_invite_preview,
+};
 pub use task_sync::{
     apply_task_update, broadcast_task_update, record_operation, TaskUpdatePayload,
 };

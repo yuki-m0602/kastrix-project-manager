@@ -199,6 +199,10 @@ async function apiTeamJoin(code) {
   return await _invoke('team_join', { code });
 }
 
+async function apiTeamGetPendingInvitePreview() {
+  return await _invoke('team_get_pending_invite_preview');
+}
+
 async function apiTeamLeave() {
   return await _invoke('team_leave');
 }

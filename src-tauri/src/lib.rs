@@ -32,6 +32,7 @@ pub fn run() {
                     format!("Failed to initialize database: {}", e),
                 )
             })?;
+            let _ = commands::team::invite::purge_expired_invite_codes(&conn);
             app.manage(db::DbState(Mutex::new(conn)));
 
             let iroh_state: team::IrohState = Arc::new(RwLock::new(None));
@@ -122,6 +123,7 @@ pub fn run() {
             commands::team::invite::team_join,
             commands::team::invite::team_list_invite_codes,
             commands::team::invite::team_revoke_invite_code,
+            commands::team::invite::team_get_pending_invite_preview,
             commands::team::members::team_list_pending_joins,
             commands::team::members::team_am_i_pending,
             commands::team::members::team_request_member_sync,

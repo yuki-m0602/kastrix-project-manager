@@ -346,6 +346,30 @@ async function renderTeamPendingStatus() {
   if (!form || !status) return;
   try {
     const pending = await apiTeamAmIPending();
+    const previewEl = document.getElementById('team-pending-invite-preview');
+    if (previewEl) {
+      if (pending) {
+        try {
+          const preview = await apiTeamGetPendingInvitePreview();
+          const parts = [];
+          if (preview?.teamName) parts.push(`チーム: ${preview.teamName}`);
+          if (preview?.hostDisplayName) parts.push(`ホスト: ${preview.hostDisplayName}`);
+          if (parts.length) {
+            previewEl.textContent = parts.join(' · ');
+            previewEl.classList.remove('hidden');
+          } else {
+            previewEl.textContent = '';
+            previewEl.classList.add('hidden');
+          }
+        } catch (_) {
+          previewEl.textContent = '';
+          previewEl.classList.add('hidden');
+        }
+      } else {
+        previewEl.textContent = '';
+        previewEl.classList.add('hidden');
+      }
+    }
     if (!pending) {
       form.style.display = '';
       status.style.display = 'none';

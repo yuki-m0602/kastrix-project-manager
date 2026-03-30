@@ -3,6 +3,7 @@
 use crate::db::DbState;
 use crate::team::{
     broadcast_permission_change, broadcast_team_disband, clear_members_if_no_team,
+    clear_pending_invite_preview,
     get_my_endpoint_id, is_current_user_host, pending_db, IrohState,
 };
 use tauri::{AppHandle, Emitter, State};
@@ -73,6 +74,7 @@ pub async fn team_leave(
         db.execute("DELETE FROM members WHERE endpoint_id = ?1", [&my_id])
             .map_err(|e| e.to_string())?;
         clear_members_if_no_team(&db).map_err(|e| e.to_string())?;
+        let _ = clear_pending_invite_preview(&db);
     }
 
     let _ = app.emit("team-left", ());

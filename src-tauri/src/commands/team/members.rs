@@ -3,6 +3,7 @@
 use crate::db::DbState;
 use crate::team::{
     am_i_pending_guest, broadcast_member_display_name, broadcast_member_join, broadcast_member_op,
+    clear_pending_invite_preview,
     broadcast_member_sync_need, can_approve_or_reject, clear_members_if_no_team,
     get_my_endpoint_id, in_team, is_current_user_host, normalize_endpoint_id, pending_db,
     upsert_member_joined_active, MemberSyncNeedPayload, IrohState,
@@ -232,6 +233,7 @@ pub async fn team_guest_apply_local_membership_if_pending(
         return Err("参加申請中ではないか、すでにメンバーとして同期済みです。".to_string());
     }
     upsert_member_joined_active(&db, &ep).map_err(|e| e.to_string())?;
+    let _ = clear_pending_invite_preview(&db);
     drop(db);
     let _ = app.emit("team-members-updated", ());
     Ok(())
@@ -286,6 +288,7 @@ pub async fn team_cancel_join(
                 let _ = pending_db::delete_pending_join(&db, &my_id, tid);
             }
             clear_members_if_no_team(&db).map_err(|e| e.to_string())?;
+            let _ = clear_pending_invite_preview(&db);
         }
         {
             let guard = iroh.read().await;
@@ -336,6 +339,7 @@ pub async fn team_cancel_join(
         .map_err(|e| e.to_string())?;
         let _ = pending_db::delete_pending_join(&db, &my_id, &topic_id);
         clear_members_if_no_team(&db).map_err(|e| e.to_string())?;
+        let _ = clear_pending_invite_preview(&db);
     }
     {
         let guard = iroh.read().await;

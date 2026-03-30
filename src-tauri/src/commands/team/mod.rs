@@ -40,11 +40,22 @@ pub struct TeamInviteResult {
     pub invite_string: Option<String>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingInvitePreview {
+    pub host_display_name: String,
+    pub team_name: String,
+}
+
 #[derive(serde::Serialize)]
 pub struct TeamJoinResult {
     pub topic_id: String,
     pub status: String,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub team_name: Option<String>,
 }
 
 #[derive(serde::Serialize)]

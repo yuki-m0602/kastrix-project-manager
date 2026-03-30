@@ -130,6 +130,7 @@ async function _renderTeamViewInner() {
           <div id="team-pending-status" class="flex flex-col gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl mt-3" style="display:none;">
             <div class="flex flex-col gap-1 min-w-0">
               <span class="text-xs text-amber-400 font-bold">参加申請を送信済み</span>
+              <div id="team-pending-invite-preview" class="text-[11px] text-[#c9d1d9] hidden mt-0.5 leading-snug"></div>
               <span class="text-[11px] text-[#8b949e] leading-snug">ホストが承認すると、同期メッセージを受け取り次第チーム画面に切り替わります。「状態を更新」で再取得を試し、承認済みなのに変わらないときは「承認済みとして画面を切替」を使ってください。</span>
             </div>
             <div class="flex flex-wrap items-center gap-2">

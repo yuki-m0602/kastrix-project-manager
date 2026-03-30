@@ -16,6 +16,7 @@ use super::helpers::{
     can_approve_or_reject, clear_members_if_no_team, get_my_endpoint_id, normalize_endpoint_id,
     upsert_member_joined_active,
 };
+use super::pending_invite_preview::clear_pending_invite_preview;
 use super::payloads::{
     JoinRequestPayload, MemberBlockedNotifyPayload, MemberDisplayNamePayload, MemberOpPayload,
     MemberSyncNeedPayload, PermissionChangePayload, TeamDisbandPayload,
@@ -170,6 +171,22 @@ pub async fn spawn_topic_listener(
                                         false
                                     };
                                     if upsert_ok {
+                                        if let Some(iroh) = app.try_state::<IrohState>() {
+                                            let my_id =
+                                                get_my_endpoint_id(&iroh).await;
+                                            if !my_id.is_empty()
+                                                && normalize_endpoint_id(&my_id) == ep
+                                            {
+                                                if let Some(state) =
+                                                    app.try_state::<DbState>()
+                                                {
+                                                    let _ = state.0.lock().map(|db| {
+                                                        let _ =
+                                                            clear_pending_invite_preview(&db);
+                                                    });
+                                                }
+                                            }
+                                        }
                                         let _ = app.emit("team-members-updated", ());
                                     }
                                 }
