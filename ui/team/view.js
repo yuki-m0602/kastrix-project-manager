@@ -115,6 +115,12 @@ async function _renderTeamViewInner() {
           </div>
         </div>
 
+      <!-- 未参加時: 招待〜承認のどこまで進んだか -->
+      <div id="team-unjoined-flow-status" class="mt-6 p-4 bg-[#0d1117] border border-indigo-500/25 rounded-2xl">
+        <p class="text-[10px] font-bold text-indigo-300/90 uppercase tracking-wide mb-2">参加ステータス</p>
+        <div id="team-unjoined-flow-status-body" class="text-xs text-[#c9d1d9] leading-relaxed">読み込み中…</div>
+      </div>
+
       <!-- Quick Actions -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
         <div class="bg-[#161b22] border border-[#30363d] rounded-2xl p-6">
@@ -351,10 +357,11 @@ async function _renderTeamViewInner() {
 
   lucide.createIcons();
   if (!isJoined) {
-    // 未参加時はボタン状態更新 + 参加申請中バナー（team_am_i_pending）
+    // 未参加時はボタン状態更新 + 参加申請中バナー（team_am_i_pending）+ 参加ステータス文言
     const readyForButtons = _isTauri ? await apiTeamIsReady().catch(() => false) : false;
     updateTeamButtonsState(readyForButtons, false);
     await renderTeamPendingStatus();
+    if (typeof refreshTeamUnjoinedFlowStatus === 'function') await refreshTeamUnjoinedFlowStatus();
   } else {
     // 参加時は個別レンダリング（ダッシュボードに統合済み）
     renderTeamDisplayNameSection();

@@ -330,6 +330,7 @@ async function teamRefreshJoinStatus() {
         'info'
       );
     }
+    if (typeof refreshTeamUnjoinedFlowStatus === 'function') await refreshTeamUnjoinedFlowStatus();
   } catch (e) {
     if (typeof showAlert === 'function') showAlert('更新に失敗しました: ' + (e?.message || e), 'error');
   }
@@ -349,6 +350,7 @@ async function renderTeamPendingStatus() {
     if (!pending) {
       form.style.display = '';
       status.style.display = 'none';
+      if (typeof refreshTeamUnjoinedFlowStatus === 'function') await refreshTeamUnjoinedFlowStatus();
       return;
     }
     form.style.display = 'none';
@@ -368,9 +370,11 @@ async function renderTeamPendingStatus() {
         /* ignore */
       }
     }, TEAM_PENDING_APPROVAL_POLL_MS);
+    if (typeof refreshTeamUnjoinedFlowStatus === 'function') await refreshTeamUnjoinedFlowStatus();
   } catch (e) {
     form.style.display = '';
     status.style.display = 'none';
+    if (typeof refreshTeamUnjoinedFlowStatus === 'function') await refreshTeamUnjoinedFlowStatus();
   }
 }
 
