@@ -20,17 +20,12 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let app_data_dir = app.path().app_data_dir().map_err(|e| {
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to get app data dir: {}", e),
-                )
-            })?;
+            let app_data_dir = app
+                .path()
+                .app_data_dir()
+                .map_err(|e| std::io::Error::other(format!("Failed to get app data dir: {}", e)))?;
             let conn = db::init_db(&app_data_dir).map_err(|e| {
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to initialize database: {}", e),
-                )
+                std::io::Error::other(format!("Failed to initialize database: {}", e))
             })?;
             let _ = commands::team::invite::purge_expired_invite_codes(&conn);
             app.manage(db::DbState(Mutex::new(conn)));

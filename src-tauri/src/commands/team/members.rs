@@ -6,7 +6,7 @@ use crate::team::{
     broadcast_member_roster, broadcast_member_sync_need, can_approve_or_reject,
     clear_members_if_no_team, clear_pending_invite_preview, collect_active_member_roster,
     get_my_endpoint_id, in_team, is_current_user_host, normalize_endpoint_id, pending_db,
-    upsert_member_joined_active, MemberSyncNeedPayload, IrohState,
+    upsert_member_joined_active, IrohState, MemberSyncNeedPayload,
 };
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;

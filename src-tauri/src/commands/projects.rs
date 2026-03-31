@@ -63,9 +63,9 @@ pub fn scan_directory(path: String, state: State<DbState>) -> Result<Vec<Project
         let local_modified = fs::metadata(&entry_path)
             .and_then(|m| m.modified())
             .ok()
-            .and_then(|t| {
+            .map(|t| {
                 let dt: chrono::DateTime<chrono::Utc> = t.into();
-                Some(dt.format("%Y-%m-%dT%H:%M:%S").to_string())
+                dt.format("%Y-%m-%dT%H:%M:%S").to_string()
             });
 
         let path_str = entry_path.to_string_lossy().to_string();

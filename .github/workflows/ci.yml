@@ -33,6 +33,13 @@ jobs:
       - name: Build UI
         run: npm run build:ui
 
+      - name: Install Linux dependencies (Tauri)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential curl wget file libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev libwebkit2gtk-4.1-dev
+
       - name: Cache Cargo (registry + target)
         uses: actions/cache@v4
         with:
@@ -45,11 +52,9 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Setup Rust toolchain + components
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          components: clippy, rustfmt
-          override: true
+          components: rustfmt, clippy
 
       - name: Cargo fmt (check)
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check

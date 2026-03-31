@@ -2,11 +2,10 @@
 
 use crate::db::DbState;
 use crate::team::{
-    am_i_pending_guest, broadcast_join_request, broadcast_member_sync_need,
-    generate_invite_code, get_my_endpoint_id, get_pending_invite_preview_json,
-    normalize_code, normalize_endpoint_id, set_pending_invite_preview,
-    spawn_topic_listener, topic_id_to_hex, IrohState, JoinRequestPayload,
-    MemberSyncNeedPayload,
+    am_i_pending_guest, broadcast_join_request, broadcast_member_sync_need, generate_invite_code,
+    get_my_endpoint_id, get_pending_invite_preview_json, normalize_code, normalize_endpoint_id,
+    set_pending_invite_preview, spawn_topic_listener, topic_id_to_hex, IrohState,
+    JoinRequestPayload, MemberSyncNeedPayload,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::{Deserialize, Serialize};
@@ -14,6 +13,10 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
 
 use super::PendingJoinsState;
+
+/// topic_id, host_ticket, expires_at, optional (host_name, team_name)
+type ParsedInviteCore = (String, String, String, Option<(String, String)>);
+type DbInviteLookupRow = (String, Option<String>, Option<(String, String)>);
 
 fn is_expired(expires_at: &str) -> bool {
     chrono::NaiveDateTime::parse_from_str(expires_at, "%Y-%m-%d %H:%M:%S")
@@ -60,7 +63,8 @@ fn encode_invite_meta_segment(hn: &str, tn: &str) -> String {
         hn: hn.to_string(),
         tn: tn.to_string(),
     };
-    let json = serde_json::to_string(&wire).unwrap_or_else(|_| "{\"hn\":\"\",\"tn\":\"\"}".to_string());
+    let json =
+        serde_json::to_string(&wire).unwrap_or_else(|_| "{\"hn\":\"\",\"tn\":\"\"}".to_string());
     URL_SAFE_NO_PAD.encode(json.as_bytes())
 }
 
@@ -77,7 +81,7 @@ fn build_invite_payload(topic: &str, ticket: &str, expires: &str, hn: &str, tn: 
     format!("{topic}::{ticket}::{expires}::{meta}")
 }
 
-fn parse_kastrix_inner(s: &str) -> Result<(String, String, String, Option<(String, String)>), String> {
+fn parse_kastrix_inner(s: &str) -> Result<ParsedInviteCore, String> {
     let parts: Vec<&str> = s.split("::").collect();
     if parts.len() < 3 {
         return Err("招待データの形式が不正です".to_string());
@@ -85,16 +89,11 @@ fn parse_kastrix_inner(s: &str) -> Result<(String, String, String, Option<(Strin
     let topic_id = parts[0].to_string();
     let host_ticket = parts[1].to_string();
     let expires_at = parts[2].to_string();
-    let meta = parts
-        .get(3)
-        .and_then(|seg| decode_invite_meta_segment(seg));
+    let meta = parts.get(3).and_then(|seg| decode_invite_meta_segment(seg));
     Ok((topic_id, host_ticket, expires_at, meta))
 }
 
-fn try_db_lookup(
-    state: &State<'_, DbState>,
-    code: &str,
-) -> Result<(String, Option<String>, Option<(String, String)>), String> {
+fn try_db_lookup(state: &State<'_, DbState>, code: &str) -> Result<DbInviteLookupRow, String> {
     let db = state.0.lock().map_err(|e| e.to_string())?;
     let (topic_id, host_ticket) = db
         .query_row(
@@ -189,7 +188,8 @@ pub async fn team_create(
         expires_at.format("%Y-%m-%d %H:%M:%S").to_string()
     };
     let (hn, tn) = host_and_team_labels(&db);
-    let invite_payload = build_invite_payload(&topic_id_hex, &host_ticket, &expires_at_str, &hn, &tn);
+    let invite_payload =
+        build_invite_payload(&topic_id_hex, &host_ticket, &expires_at_str, &hn, &tn);
     let invite_string = format!(
         "KASTRIX-{}",
         URL_SAFE_NO_PAD.encode(invite_payload.as_bytes())
@@ -586,13 +586,10 @@ pub async fn team_list_invite_codes(
             let host_ticket: Option<String> = row.get(3)?;
             let expires_at: Option<String> = row.get(4)?;
             let created_at: Option<String> = row.get(5)?;
-            let invite_string = host_ticket.as_ref().and_then(|ht| {
+            let invite_string = host_ticket.as_ref().map(|ht| {
                 let exp = expires_at.as_deref().unwrap_or("");
                 let payload = build_invite_payload(&topic_id, ht, exp, &hn, &tn);
-                Some(format!(
-                    "KASTRIX-{}",
-                    URL_SAFE_NO_PAD.encode(payload.as_bytes())
-                ))
+                format!("KASTRIX-{}", URL_SAFE_NO_PAD.encode(payload.as_bytes()))
             });
             Ok(super::InviteCodeInfo {
                 id,
@@ -641,5 +638,7 @@ pub fn team_get_pending_invite_preview(
         Some(j) => j,
         None => return Ok(None),
     };
-    serde_json::from_str(&json).map(Some).map_err(|e| e.to_string())
+    serde_json::from_str(&json)
+        .map(Some)
+        .map_err(|e| e.to_string())
 }

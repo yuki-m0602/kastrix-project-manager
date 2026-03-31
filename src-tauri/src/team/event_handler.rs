@@ -17,7 +17,6 @@ use super::helpers::{
     collect_active_member_roster, get_my_endpoint_id, normalize_endpoint_id,
     upsert_member_joined_active,
 };
-use super::pending_invite_preview::clear_pending_invite_preview;
 use super::payloads::{
     JoinRequestPayload, MemberBlockedNotifyPayload, MemberDisplayNamePayload, MemberOpPayload,
     MemberRosterPayload, MemberSyncNeedPayload, PermissionChangePayload, TeamDisbandPayload,
@@ -25,6 +24,7 @@ use super::payloads::{
 };
 use super::pending::{PendingJoinInfo, PendingJoinsState};
 use super::pending_db;
+use super::pending_invite_preview::clear_pending_invite_preview;
 use super::IrohState;
 
 #[inline]
@@ -146,23 +146,23 @@ pub async fn spawn_topic_listener(
                         if gossip_topic_matches(tid_msg, &topic_id) {
                             if let Some(ep_raw) = v.get("endpoint_id").and_then(|x| x.as_str()) {
                                 let ep = normalize_endpoint_id(ep_raw);
-                                let ver = v.get("version").and_then(|x| x.as_str()).unwrap_or("1.0");
+                                let ver =
+                                    v.get("version").and_then(|x| x.as_str()).unwrap_or("1.0");
                                 if ver == "1.0" && !ep.is_empty() {
                                     // デッドロック防止: Mutex を解放してから emit する
-                                    let upsert_ok = if let Some(state) = app.try_state::<DbState>() {
+                                    let upsert_ok = if let Some(state) = app.try_state::<DbState>()
+                                    {
                                         match state.0.lock() {
-                                            Ok(db) => {
-                                                match upsert_member_joined_active(&db, &ep) {
-                                                    Ok(()) => true,
-                                                    Err(e) => {
-                                                        eprintln!(
-                                                            "member_join upsert failed (ep={}): {}",
-                                                            ep, e
-                                                        );
-                                                        false
-                                                    }
+                                            Ok(db) => match upsert_member_joined_active(&db, &ep) {
+                                                Ok(()) => true,
+                                                Err(e) => {
+                                                    eprintln!(
+                                                        "member_join upsert failed (ep={}): {}",
+                                                        ep, e
+                                                    );
+                                                    false
                                                 }
-                                            }
+                                            },
                                             Err(e) => {
                                                 eprintln!("member_join db lock: {}", e);
                                                 false
@@ -173,17 +173,13 @@ pub async fn spawn_topic_listener(
                                     };
                                     if upsert_ok {
                                         if let Some(iroh) = app.try_state::<IrohState>() {
-                                            let my_id =
-                                                get_my_endpoint_id(&iroh).await;
+                                            let my_id = get_my_endpoint_id(&iroh).await;
                                             if !my_id.is_empty()
                                                 && normalize_endpoint_id(&my_id) == ep
                                             {
-                                                if let Some(state) =
-                                                    app.try_state::<DbState>()
-                                                {
+                                                if let Some(state) = app.try_state::<DbState>() {
                                                     let _ = state.0.lock().map(|db| {
-                                                        let _ =
-                                                            clear_pending_invite_preview(&db);
+                                                        let _ = clear_pending_invite_preview(&db);
                                                     });
                                                 }
                                             }
@@ -290,17 +286,14 @@ pub async fn spawn_topic_listener(
                             if let Some(roster) = roster_opt {
                                 if !roster.is_empty() {
                                     if let Some(iroh) = app.try_state::<IrohState>() {
-                                        let _ = broadcast_member_roster(
-                                            &iroh, &topic_id, &roster,
-                                        )
-                                        .await;
+                                        let _ = broadcast_member_roster(&iroh, &topic_id, &roster)
+                                            .await;
                                     }
                                 }
                             }
                             if should_resend {
                                 if let Some(iroh) = app.try_state::<IrohState>() {
-                                    let _ =
-                                        broadcast_member_join(&iroh, &need_ep, &topic_id).await;
+                                    let _ = broadcast_member_join(&iroh, &need_ep, &topic_id).await;
                                 }
                             }
                         }
@@ -309,7 +302,7 @@ pub async fn spawn_topic_listener(
                     let ver = mop.version.as_deref().unwrap_or("1.0");
                     if ver != "1.0" {
                         let _ = app.emit("team-update-required", ());
-                    } else if mop.r#type == "member_cancel" && mop.target_id != "" {
+                    } else if mop.r#type == "member_cancel" && !mop.target_id.is_empty() {
                         let mut guard = pending_joins.write().await;
                         guard.retain(|p| p.endpoint_id != mop.target_id);
                         if let Some(state) = app.try_state::<DbState>() {
@@ -319,7 +312,7 @@ pub async fn spawn_topic_listener(
                         }
                         let _ = app.emit("team-pending-join-cancelled", ());
                     } else if (mop.r#type == "member_kick" || mop.r#type == "member_block")
-                        && mop.target_id != ""
+                        && !mop.target_id.is_empty()
                     {
                         if let Some(state) = app.try_state::<DbState>() {
                             let status = if mop.r#type == "member_block" {
@@ -377,7 +370,7 @@ pub async fn spawn_topic_listener(
                         }
                     }
                 } else if let Ok(dn) = serde_json::from_slice::<MemberDisplayNamePayload>(slice) {
-                    if dn.r#type == "member_display_name" && dn.endpoint_id != "" {
+                    if dn.r#type == "member_display_name" && !dn.endpoint_id.is_empty() {
                         let ver = dn.version.as_deref().unwrap_or("1.0");
                         if ver == "1.0" {
                             if let Some(state) = app.try_state::<DbState>() {
@@ -411,8 +404,8 @@ pub async fn spawn_topic_listener(
                     }
                 } else if let Ok(pc) = serde_json::from_slice::<PermissionChangePayload>(slice) {
                     if pc.r#type == "permission_change"
-                        && pc.old_host_endpoint_id != ""
-                        && pc.new_host_endpoint_id != ""
+                        && !pc.old_host_endpoint_id.is_empty()
+                        && !pc.new_host_endpoint_id.is_empty()
                     {
                         let ver = pc.version.as_deref().unwrap_or("1.0");
                         if ver == "1.0" {

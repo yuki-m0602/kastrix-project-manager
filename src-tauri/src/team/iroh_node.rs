@@ -43,7 +43,7 @@ impl IrohNodeState {
             let mut bytes = [0u8; 32];
             getrandom::getrandom(&mut bytes).map_err(|e| format!("random bytes failed: {}", e))?;
             let key = SecretKey::from_bytes(&bytes);
-            std::fs::write(&path, &bytes)
+            std::fs::write(&path, bytes)
                 .map_err(|e| format!("iroh secret key save failed: {}", e))?;
             Ok(key)
         }

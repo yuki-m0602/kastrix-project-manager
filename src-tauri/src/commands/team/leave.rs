@@ -3,8 +3,7 @@
 use crate::db::DbState;
 use crate::team::{
     broadcast_permission_change, broadcast_team_disband, clear_members_if_no_team,
-    clear_pending_invite_preview,
-    get_my_endpoint_id, is_current_user_host, pending_db, IrohState,
+    clear_pending_invite_preview, get_my_endpoint_id, is_current_user_host, pending_db, IrohState,
 };
 use tauri::{AppHandle, Emitter, State};
 

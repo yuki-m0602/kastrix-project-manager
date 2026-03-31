@@ -39,11 +39,9 @@ pub fn clear_pending_invite_preview(conn: &rusqlite::Connection) -> rusqlite::Re
 pub fn get_pending_invite_preview_json(
     conn: &rusqlite::Connection,
 ) -> Result<Option<String>, rusqlite::Error> {
-    match conn.query_row(
-        "SELECT value FROM settings WHERE key = ?1",
-        [KEY],
-        |r| r.get::<_, String>(0),
-    ) {
+    match conn.query_row("SELECT value FROM settings WHERE key = ?1", [KEY], |r| {
+        r.get::<_, String>(0)
+    }) {
         Ok(s) => Ok(Some(s)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(e) => Err(e),

@@ -54,10 +54,8 @@ fn has_only_extension(dir: &Path, ext: &str) -> bool {
     let mut found = false;
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.is_file() {
-            if path.extension().and_then(|e| e.to_str()) == Some(ext) {
-                found = true;
-            }
+        if path.is_file() && path.extension().and_then(|e| e.to_str()) == Some(ext) {
+            found = true;
         }
     }
     found
