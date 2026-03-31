@@ -194,12 +194,14 @@ AI機能（Log Analyzer）で使用するAPIキーの管理方式：
 
 ## 7. 今後の拡張（アイデア）
 
+チーム機能の**同期方式・アーキテクチャ**（サーバーレス P2P、[iroh](https://github.com/n0-computer/iroh)、QUIC/TLS、NAT 越えなど）は、本書では詳述せず **[`kastrix_team_design.md`](kastrix_team_design.md)** に集約する。
+
 - [ ] Inbox機能（通知センター）
 - [ ] Analytics機能（統計グラフ）
 - [ ] Settings画面（設定）
 - [ ] 複数ディレクトリ監視
 - [ ] タスクの追加・編集機能
-- [ ] チーム共有機能
+- [ ] チーム共有機能（方式・詳細は上記チーム設計ドキュメントを参照）
 
 ---
 

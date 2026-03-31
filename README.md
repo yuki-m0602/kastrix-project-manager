@@ -12,7 +12,8 @@
 - **ダッシュボード** — プロジェクト全体の俯瞰
 - **IDE 連携** — VS Code / Cursor / OpenCode などでの作業との連携
 - **AI アシスタント** — ログの参照やプロジェクトに関する問い合わせへの対応
-- **リアルタイム更新** — 変更内容の反映
+- **チーム／同期（設計の核は P2P）** — 中央に業務用の同期サーバーを置かず、**P2P** でメンバー間をつなぐ前提です（Rust の [iroh](https://github.com/n0-computer/iroh)、QUIC / TLS、NAT 越えの経路を想定）。
+- **チーム機能の実装** — 招待・参加などはアプリから利用できます。同期の境界と詳細は **[`specs/kastrix_team_design.md`](specs/kastrix_team_design.md)** に集約しています（仕様の二重管理を避けるため、本 README では要約のみとします）。
 
 詳細な仕様は [`specs/`](specs/) を参照してください。
 
@@ -22,7 +23,7 @@
 
 - **`main` または `master` へ push するたび**、GitHub Actions（`.github/workflows/release.yml`）が Windows 用 exe をビルドし、リリース **`continuous`** を更新します。`/releases/latest` はビルド成功後、この rolling リリースを「最新」として指すようにしています（その後に `v*` タグで版付きリリースを公開した場合は、一時的にそちらが「最新」になることがあります。次に `main` / `master` へ push すると再び `continuous` が最新になります）。
 - 版付きのリリースが欲しいときは、`src-tauri/tauri.conf.json` の `version` に合わせて **`v0.1.0` 形式のタグ** を push してください（同じワークフローが版付きリリースも作成します）。
-- ローカルビルド時は `npx tauri build` のあと、`src-tauri/target/release/kastrix.exe` が生成されます。
+- ローカルビルド時は `npx tauri build` のあと、ワークスペースルートの `target/release/kastrix.exe` が生成されます（`src-tauri/target/` ではありません）。
 - 実行には **WebView2** が必要です。[ランタイムの入手先（Microsoft）](https://developer.microsoft.com/ja-jp/microsoft-edge/webview2/) を参照してください。Windows 10 / 11 の多くの環境では既に入っています。
 
 > 初回だけ Actions の権限に注意: リポジトリの **Settings → Actions → General → Workflow permissions** で **Read and write** が有効になっている必要がある場合があります（組織リポジトリでは管理者設定次第です）。
@@ -61,7 +62,7 @@ Windows では [`scripts/windows/dev.bat`](scripts/windows/dev.bat) から、Tai
 
 ## ビルド（本番用）
 
-`beforeBuildCommand` で CSS をビルドしたうえで、**単体 exe**（インストーラなし）を生成します。成果物は `src-tauri/target/release/kastrix.exe` です。
+`beforeBuildCommand` で CSS をビルドしたうえで、**単体 exe**（インストーラなし）を生成します。成果物はリポジトリルートの `target/release/kastrix.exe` です。
 
 ```bash
 npx tauri build
