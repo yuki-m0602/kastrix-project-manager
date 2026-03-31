@@ -16,12 +16,12 @@ jobs:
         shell: bash
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '18'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install JS dependencies
@@ -41,7 +41,7 @@ jobs:
             libayatana-appindicator3-dev librsvg2-dev libwebkit2gtk-4.1-dev
 
       - name: Cache Cargo (registry + target)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry

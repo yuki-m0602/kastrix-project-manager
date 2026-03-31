@@ -1,7 +1,7 @@
 {
   "scripts": {
-    "lint": "eslint ui/js/*.js ui/data/*.js",
-    "lint:fix": "eslint ui/js/*.js ui/data/*.js --fix",
+    "lint": "eslint \"ui/js/**/*.js\" \"ui/data/**/*.js\"",
+    "lint:fix": "eslint \"ui/js/**/*.js\" \"ui/data/**/*.js\" --fix",
     "rustfmt": "cargo fmt --manifest-path src-tauri/Cargo.toml",
     "clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml",
     "tauri": "tauri",

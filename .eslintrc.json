@@ -185,7 +185,7 @@
   },
   "overrides": [
     {
-      "files": ["ui/js/api.js"],
+      "files": ["ui/js/**/*.js", "ui/data/**/*.js"],
       "rules": {
         "no-unused-vars": "off"
       }
