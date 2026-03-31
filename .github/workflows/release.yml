@@ -38,10 +38,9 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
+      # ルートが仮想ワークスペースのため target は repo 直下（src-tauri/target ではない）
       - name: Rust cache
         uses: swatinem/rust-cache@v2
-        with:
-          workspaces: ./src-tauri -> target
 
       - name: Install dependencies
         run: npm ci
@@ -54,7 +53,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          $exe = "src-tauri/target/release/kastrix.exe"
+          $exe = "target/release/kastrix.exe"
           if (-not (Test-Path $exe)) { throw "Build output missing: $exe" }
           $repo = "${{ github.repository }}"
           $sha = "${{ github.sha }}"
@@ -98,8 +97,6 @@ jobs:
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
-        with:
-          workspaces: ./src-tauri -> target
 
       - name: Install dependencies
         run: npm ci
